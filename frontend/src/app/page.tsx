@@ -6,6 +6,7 @@ import OutcomeCard from "@/components/engagement/OutcomeCard";
 import ChangeImpactCard from "@/components/intelligence/ChangeImpactCard";
 import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
+import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
 import { CheckCircle, Sparkles, Building2, Clock, RefreshCw } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -227,6 +228,13 @@ export default function Home() {
             <KnowledgePanel
               engagementId={activeCustomer.id}
               customerName={activeCustomer.customerName}
+            />
+
+            {/* DELIVER Agent Executive Customer Update Studio */}
+            <CustomerUpdatePanel
+              engagementId={activeCustomer.id}
+              customerName={activeCustomer.customerName}
+              engagementName={activeCustomer.engagementName}
             />
           </div>
 

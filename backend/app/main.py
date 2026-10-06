@@ -10,7 +10,12 @@ from app.db.database import get_db, init_db
 from app.models import Engagement, Outcome, TimelineEvent, Approval
 from app.privacy import PrivacyPolicyEngine
 from app.services import OutcomeService
-from app.agents import UnderstandAgent, ChangeImpactAnalysis, KnowAgent, GroundedAnswer, MoveAgent, NextBestActionRecommendation
+from app.agents import (
+    UnderstandAgent, ChangeImpactAnalysis,
+    KnowAgent, GroundedAnswer,
+    MoveAgent, NextBestActionRecommendation,
+    DeliverAgent, CustomerUpdateDraft
+)
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -40,6 +45,7 @@ privacy_engine = PrivacyPolicyEngine(
 understand_agent = UnderstandAgent(privacy_engine=privacy_engine)
 know_agent = KnowAgent(privacy_engine=privacy_engine)
 move_agent = MoveAgent(privacy_engine=privacy_engine)
+deliver_agent = DeliverAgent(privacy_engine=privacy_engine)
 
 
 class ChangeAnalysisRequest(BaseModel):
@@ -68,6 +74,40 @@ class IngestDocumentRequest(BaseModel):
 class KnowledgeQueryRequest(BaseModel):
     question: str
     top_k: int = 3
+
+
+class GenerateCustomerUpdateRequest(BaseModel):
+    raw_notes: Optional[str] = None
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/customer-updates/generate", tags=["Delivery"])
+async def generate_customer_update(engagement_id: str, payload: GenerateCustomerUpdateRequest, db: Session = Depends(get_db)):
+    """
+    DELIVER Agent Endpoint: Translates technical progress and DoD items into executive business language.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    statement = current_outcome.statement if current_outcome else ""
+    criteria = current_outcome.success_criteria if current_outcome else []
+
+    draft = deliver_agent.generate_customer_update(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        engagement_name=eng.name,
+        outcome_statement=statement,
+        success_criteria=criteria,
+        current_work_cycle=eng.current_work_cycle,
+        raw_notes=payload.raw_notes
+    )
+
+    return {
+        "success": True,
+        "data": draft.model_dump(),
+        "message": "DELIVER Agent executive customer update draft generated successfully."
+    }
 
 
 @app.on_event("startup")
