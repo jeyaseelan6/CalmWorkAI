@@ -7,6 +7,7 @@ import ChangeImpactCard from "@/components/intelligence/ChangeImpactCard";
 import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
+import SupervisorCard from "@/components/supervisor/SupervisorCard";
 import { CheckCircle, Sparkles, Building2, Clock, RefreshCw } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -137,6 +138,12 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {/* Supervisor Coordinator Card */}
+        <SupervisorCard
+          engagementId={activeCustomer.id}
+          customerName={activeCustomer.customerName}
+        />
 
         {/* 6 FDE Engagement Work Cycles Stepper */}
         <WorkCycleStepper

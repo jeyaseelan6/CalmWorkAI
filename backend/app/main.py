@@ -16,6 +16,7 @@ from app.agents import (
     MoveAgent, NextBestActionRecommendation,
     DeliverAgent, CustomerUpdateDraft
 )
+from app.supervisor import SupervisorCoordinator, SupervisorSummary, EngagementEvent
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -46,6 +47,7 @@ understand_agent = UnderstandAgent(privacy_engine=privacy_engine)
 know_agent = KnowAgent(privacy_engine=privacy_engine)
 move_agent = MoveAgent(privacy_engine=privacy_engine)
 deliver_agent = DeliverAgent(privacy_engine=privacy_engine)
+supervisor_coordinator = SupervisorCoordinator(privacy_engine=privacy_engine)
 
 
 class ChangeAnalysisRequest(BaseModel):
@@ -392,4 +394,39 @@ async def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)
         "success": True,
         "data": recommendation.model_dump(),
         "message": "MOVE Agent Next Best Action evaluated successfully."
+    }
+
+
+@app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/supervisor/summary", tags=["Supervisor"])
+async def get_supervisor_summary(engagement_id: str, db: Session = Depends(get_db)):
+    """
+    Supervisor Endpoint: Returns 360-degree multi-agent status summary coordinating
+    UNDERSTAND, KNOW, MOVE, and DELIVER agents across the 6 FDE Work Cycles.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    statement = current_outcome.statement if current_outcome else ""
+    criteria = current_outcome.success_criteria if current_outcome else []
+    version = current_outcome.version if current_outcome else 1
+    approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
+
+    summary = supervisor_coordinator.orchestrate_engagement(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        engagement_name=eng.name,
+        current_work_cycle=eng.current_work_cycle,
+        status=eng.status,
+        outcome_statement=statement,
+        success_criteria=criteria,
+        version=version,
+        pending_approvals=len(approvals)
+    )
+
+    return {
+        "success": True,
+        "data": summary.model_dump(),
+        "message": "Supervisor 360-degree multi-agent summary generated successfully."
     }
