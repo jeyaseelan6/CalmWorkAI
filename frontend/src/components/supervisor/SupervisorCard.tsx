@@ -87,19 +87,19 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
   }, [engagementId, customerName]);
 
   return (
-    <div className="bg-slate-900 border border-teal-500/30 rounded-xl p-5 shadow-xl space-y-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Cpu className="h-5 w-5 text-teal-400" />
-          <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
+          <Cpu className="h-5 w-5 text-blue-600" />
+          <h2 className="text-base font-display font-bold text-slate-900">
             Supervisor Coordinator — Multi-Agent Orchestration
           </h2>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-[11px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-md font-mono">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+          <span className="flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full font-bold font-mono">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
             <span>AI Privacy Guardrail Active</span>
           </span>
         </div>
@@ -110,32 +110,32 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
         {summary?.agents.map((ag) => (
           <div
             key={ag.agent_name}
-            className={`p-3 rounded-lg border text-xs space-y-1 ${
+            className={`p-3.5 rounded-xl border text-xs space-y-1 ${
               ag.status === "RECOMMENDATION_PENDING"
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
-                : "bg-slate-950 border-slate-800 text-slate-200"
+                ? "bg-amber-50 border-amber-200 text-amber-900"
+                : "bg-slate-50 border-slate-200 text-slate-800"
             }`}
           >
             <div className="flex items-center justify-between font-mono font-bold">
-              <span className="text-teal-400">{ag.agent_name}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                ag.status === "RECOMMENDATION_PENDING" ? "bg-amber-400/20 text-amber-300" : "bg-emerald-500/10 text-emerald-400"
+              <span className="text-blue-700">{ag.agent_name}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                ag.status === "RECOMMENDATION_PENDING" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
               }`}>
                 {ag.status}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">{ag.role_description}</p>
+            <p className="text-xs text-slate-500 font-medium">{ag.role_description}</p>
           </div>
         ))}
       </div>
 
       {/* Orchestration Footer Info */}
-      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
+      <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-200">
         <div className="flex items-center gap-1.5">
-          <Activity className="h-3.5 w-3.5 text-teal-400" />
-          <span>Central State: <strong className="text-slate-200">{summary?.current_work_cycle}</strong></span>
+          <Activity className="h-3.5 w-3.5 text-blue-600" />
+          <span>Central State: <strong className="text-slate-900">{summary?.current_work_cycle}</strong></span>
         </div>
-        <span className="font-mono text-[10px] text-slate-500">
+        <span className="font-mono text-xs text-slate-500">
           Last Orchestrated: {summary?.orchestrated_at ? new Date(summary.orchestrated_at).toLocaleTimeString() : "Just now"}
         </span>
       </div>

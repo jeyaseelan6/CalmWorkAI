@@ -87,15 +87,15 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <BookOpen className="h-5 w-5 text-teal-400" />
-          <h3 className="text-sm font-semibold text-slate-100">KNOW Agent — Grounded Intelligence</h3>
+          <BookOpen className="h-5 w-5 text-blue-600" />
+          <h3 className="text-base font-display font-bold text-slate-900">KNOW Agent — Grounded Intelligence</h3>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-teal-300 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-md">
-          <ShieldCheck className="h-3.5 w-3.5 text-teal-400" />
+        <div className="flex items-center gap-1.5 text-xs text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full font-bold">
+          <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
           <span>Tenant Isolated ({customerName})</span>
         </div>
       </div>
@@ -103,19 +103,19 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
       {/* Query Search Form */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
           <input
             type="text"
             placeholder={`Ask KNOW Agent about ${customerName} specs, architecture, or requirements...`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500"
+            className="w-full bg-slate-100/80 border border-slate-200 rounded-full pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="bg-teal-600 hover:bg-teal-500 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-full text-xs flex items-center gap-1.5 transition disabled:opacity-50 shadow-xs"
         >
           {loading ? (
             <Sparkles className="h-3.5 w-3.5 animate-spin" />
@@ -130,40 +130,40 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
 
       {/* Answer Output */}
       {answerData && (
-        <div className="space-y-3 pt-2 border-t border-slate-800/60">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-400">Grounded Q&A Response:</span>
+        <div className="space-y-3 pt-3 border-t border-slate-200">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span className="text-slate-600">Grounded Q&A Response:</span>
             <div className="flex items-center gap-2">
-              <span className="text-emerald-400 font-mono">Confidence: {Math.round(answerData.confidence_score * 100)}%</span>
+              <span className="text-emerald-700 font-mono font-bold">Confidence: {Math.round(answerData.confidence_score * 100)}%</span>
               {answerData.privacy_scrubbed && (
-                <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">
+                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-mono text-[11px] font-bold">
                   Privacy Scrubbed
                 </span>
               )}
             </div>
           </div>
 
-          <div className="p-3.5 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-200 leading-relaxed">
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm text-slate-800 leading-relaxed font-medium">
             {answerData.answer}
           </div>
 
           {/* Citations */}
           {answerData.citations.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="space-y-2">
+              <span className="text-xs font-display font-bold text-slate-500 uppercase tracking-wider">
                 Source Citations & References
               </span>
               <div className="space-y-2">
                 {answerData.citations.map((c, i) => (
-                  <div key={i} className="p-2.5 bg-slate-950/80 rounded border border-slate-800/80 text-[11px] space-y-1">
-                    <div className="flex items-center justify-between font-medium text-teal-300">
-                      <span className="flex items-center gap-1">
-                        <FileText className="h-3 w-3 text-teal-400" />
+                  <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between font-bold text-blue-800">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-blue-600" />
                         {c.document_title}
                       </span>
-                      <span className="text-slate-500 font-mono text-[10px]">Score: {c.relevance_score}</span>
+                      <span className="text-slate-500 font-mono text-[11px]">Score: {c.relevance_score}</span>
                     </div>
-                    <p className="text-slate-400 italic">"{c.snippet}"</p>
+                    <p className="text-slate-600 italic">"{c.snippet}"</p>
                   </div>
                 ))}
               </div>

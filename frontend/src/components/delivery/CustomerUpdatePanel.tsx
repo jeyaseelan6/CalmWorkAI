@@ -82,15 +82,15 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Mail className="h-5 w-5 text-teal-400" />
-          <h3 className="text-sm font-semibold text-slate-100">DELIVER Agent — Customer Update Studio</h3>
+          <Mail className="h-5 w-5 text-blue-600" />
+          <h3 className="text-base font-display font-bold text-slate-900">DELIVER Agent — Customer Update Studio</h3>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-teal-300 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-md">
-          <ShieldCheck className="h-3.5 w-3.5 text-teal-400" />
+        <div className="flex items-center gap-1.5 text-xs text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full font-bold">
+          <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
           <span>Executive Business Translation</span>
         </div>
       </div>
@@ -98,20 +98,20 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
       {/* Input / Generate trigger */}
       {!draft ? (
         <div className="space-y-3">
-          <p className="text-xs text-slate-400 leading-relaxed">
-            DELIVER Agent translates engineering progress, completed DoD items, and blockers into manager-approved executive update emails for <strong className="text-slate-200">{customerName}</strong>.
+          <p className="text-xs text-slate-600 leading-relaxed font-medium">
+            DELIVER Agent translates engineering progress, completed DoD items, and blockers into manager-approved executive update emails for <strong className="text-slate-900 font-bold">{customerName}</strong>.
           </p>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <textarea
               placeholder="Add optional FDE notes or context for this customer update..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500 h-20 resize-none"
+              className="w-full bg-slate-100/80 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 h-20 resize-none font-medium"
             />
             <button
               onClick={handleGenerateUpdate}
               disabled={loading}
-              className="w-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-semibold px-4 py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-xs"
             >
               {loading ? (
                 <Sparkles className="h-4 w-4 animate-spin" />
@@ -125,33 +125,33 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
           </div>
         </div>
       ) : (
-        <div className="space-y-4 border-t border-slate-800/60 pt-3">
+        <div className="space-y-4 border-t border-slate-200 pt-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-teal-400 font-mono">
+            <span className="text-xs font-bold text-blue-700 font-mono">
               Draft Status: {approved ? "MANAGER APPROVED (READY TO SEND)" : "PENDING MANAGER APPROVAL"}
             </span>
             {draft.privacy_scrubbed && (
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">
+              <span className="text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono font-bold">
                 AI Privacy Scrubbed
               </span>
             )}
           </div>
 
           {/* Draft Preview Box */}
-          <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-3 text-xs text-slate-200">
-            <div className="border-b border-slate-800/80 pb-2">
-              <span className="text-[11px] text-slate-400">Subject:</span>
-              <p className="font-semibold text-slate-100">{draft.subject}</p>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4.5 space-y-3 text-xs text-slate-900 font-medium">
+            <div className="border-b border-slate-200 pb-2">
+              <span className="text-xs text-slate-500 font-bold block mb-0.5">Subject:</span>
+              <p className="font-bold text-slate-900 text-sm">{draft.subject}</p>
             </div>
 
             <div>
-              <span className="text-[11px] text-slate-400">Executive Summary:</span>
-              <p className="text-slate-300 mt-1 leading-relaxed">{draft.executive_summary}</p>
+              <span className="text-xs text-slate-500 font-bold block mb-0.5">Executive Summary:</span>
+              <p className="text-slate-800 leading-relaxed">{draft.executive_summary}</p>
             </div>
 
             <div>
-              <span className="text-[11px] text-slate-400 font-semibold">Key Milestones Achieved:</span>
-              <ul className="list-disc list-inside space-y-1 mt-1 text-slate-300">
+              <span className="text-xs text-slate-700 font-bold block mb-1">Key Milestones Achieved:</span>
+              <ul className="list-disc list-inside space-y-1 text-slate-800">
                 {draft.key_milestones_achieved.map((m, i) => (
                   <li key={i}>{m}</li>
                 ))}
@@ -159,8 +159,8 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
             </div>
 
             <div>
-              <span className="text-[11px] text-amber-400 font-semibold">Required Customer Action:</span>
-              <ul className="list-disc list-inside space-y-1 mt-1 text-amber-300">
+              <span className="text-xs text-amber-800 font-bold block mb-1">Required Customer Action:</span>
+              <ul className="list-disc list-inside space-y-1 text-amber-900 font-semibold">
                 {draft.customer_action_items.map((a, i) => (
                   <li key={i}>{a}</li>
                 ))}
@@ -173,21 +173,21 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
             {!approved ? (
               <button
                 onClick={() => setApproved(true)}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs"
               >
                 <FileCheck className="h-4 w-4" />
                 <span>Manager Approve Draft</span>
               </button>
             ) : (
-              <div className="flex-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <div className="flex-1 bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 font-semibold">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span>Approved by Manager! Ready to send to customer stakeholders.</span>
               </div>
             )}
 
             <button
               onClick={() => setDraft(null)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg text-xs transition"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-xl text-xs transition"
             >
               Reset Draft
             </button>
