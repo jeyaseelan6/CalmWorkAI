@@ -10,10 +10,10 @@ import { CheckCircle, Sparkles, Building2, Clock, RefreshCw } from "lucide-react
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 interface ApiEngagement {
-  id: str;
-  customer_name: str;
-  name: str;
-  description: str;
+  id: string;
+  customer_name: string;
+  name: string;
+  description: string;
   status: string;
   progress: number;
   current_work_cycle: string;
