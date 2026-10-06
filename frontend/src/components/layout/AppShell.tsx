@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useAuth, UserRole } from "@/context/AuthContext";
 import { 
   Briefcase, 
   CheckSquare, 
@@ -10,14 +11,14 @@ import {
   ShieldCheck, 
   LayoutDashboard, 
   UserCheck, 
-  AlertTriangle,
   Search,
   Lock,
   Building2,
-  ChevronDown
+  ChevronDown,
+  LogOut,
+  LogIn,
+  User
 } from "lucide-react";
-
-export type Role = "FDE" | "MANAGER";
 
 export interface CustomerEngagement {
   id: string;
@@ -61,22 +62,22 @@ export default function AppShell({
   onSelectCustomer,
   availableCustomers = DEFAULT_CUSTOMERS
 }: AppShellProps) {
-  const [role, setRole] = useState<Role>("FDE");
+  const { user, role, switchRole, logout, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("my-work");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const fdeNav = [
     { id: "my-work", label: "My Work Cockpit", icon: Briefcase },
     { id: "engagements", label: "All Engagements", icon: CheckSquare },
-    { id: "knowledge", label: "Knowledge Base", icon: BookOpen },
+    { id: "knowledge", label: "Knowledge Base (KNOW)", icon: BookOpen },
     { id: "timeline", label: "Audit Timeline", icon: Clock },
   ];
 
   const managerNav = [
     { id: "control-center", label: "Control Center", icon: LayoutDashboard },
     { id: "engagements", label: "All Engagements", icon: CheckSquare },
-    { id: "approvals", label: "Approval Center", icon: ShieldCheck, badge: 1 },
-    { id: "knowledge", label: "Knowledge Base", icon: BookOpen },
+    { id: "approvals", label: "Manager Approval Center", icon: ShieldCheck, badge: 1 },
+    { id: "knowledge", label: "Knowledge Base (KNOW)", icon: BookOpen },
     { id: "timeline", label: "Audit Timeline", icon: Clock },
   ];
 
@@ -98,7 +99,7 @@ export default function AppShell({
             </div>
           </div>
 
-          {/* Active Customer Switcher (Multi-Tenant / Multi-Customer Isolation) */}
+          {/* Active Customer Switcher (Multi-Tenant Isolation) */}
           <div className="mb-5 relative px-2">
             <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
               <Building2 className="h-3 w-3 text-teal-400" />
@@ -118,7 +119,7 @@ export default function AppShell({
             {dropdownOpen && (
               <div className="absolute left-2 right-2 top-full mt-1 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50 p-1 space-y-1">
                 <div className="px-2 py-1 text-[10px] uppercase font-semibold text-slate-500">
-                  Switch Parallel Customer
+                  Switch Customer Workspace
                 </div>
                 {availableCustomers.map((cust) => (
                   <button
@@ -152,12 +153,12 @@ export default function AppShell({
           {/* Role Experience Switcher */}
           <div className="mb-6 px-2">
             <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">
-              Role View
+              Role Permission View
             </label>
             <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 text-xs font-medium">
               <button
                 onClick={() => {
-                  setRole("FDE");
+                  switchRole("FDE");
                   setActiveTab("my-work");
                 }}
                 className={`py-1.5 rounded transition-all text-center ${
@@ -170,7 +171,7 @@ export default function AppShell({
               </button>
               <button
                 onClick={() => {
-                  setRole("MANAGER");
+                  switchRole("MANAGER");
                   setActiveTab("control-center");
                 }}
                 className={`py-1.5 rounded transition-all text-center ${
@@ -214,15 +215,54 @@ export default function AppShell({
           </nav>
         </div>
 
-        {/* Privacy Guardrail Active Footer */}
-        <div className="p-3 bg-slate-950/80 rounded-lg border border-slate-800 text-xs">
-          <div className="flex items-center gap-2 text-teal-400 font-medium mb-1">
-            <Lock className="h-3.5 w-3.5" />
-            <span>AI Privacy Guardrail</span>
+        {/* User Profile & Auth Section */}
+        <div className="space-y-3 pt-3 border-t border-slate-800">
+          {isAuthenticated && user ? (
+            <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center justify-center text-xs font-bold">
+                    {user.name.split(" ").map(n => n[0]).join("")}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-100">{user.name}</p>
+                    <p className="text-[10px] text-slate-400">{user.title}</p>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                  role === "MANAGER" ? "bg-amber-500/20 text-amber-300" : "bg-teal-500/20 text-teal-300"
+                }`}>
+                  {role}
+                </span>
+              </div>
+              <button
+                onClick={logout}
+                className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-rose-400 py-1 transition"
+              >
+                <LogOut className="h-3 w-3" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="w-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span>Sign In to CalmWork</span>
+            </Link>
+          )}
+
+          {/* Privacy Guardrail Active Footer */}
+          <div className="p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-xs">
+            <div className="flex items-center gap-2 text-teal-400 font-medium mb-0.5">
+              <Lock className="h-3.5 w-3.5" />
+              <span>AI Privacy Guardrail</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              Customer data isolated & pseudonymized.
+            </p>
           </div>
-          <p className="text-[11px] text-slate-400 leading-tight">
-            Customer-scoped data isolated & pseudonymized.
-          </p>
         </div>
       </aside>
 
@@ -243,11 +283,15 @@ export default function AppShell({
 
           <div className="flex items-center gap-3">
             <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-mono">
-              Role: <strong className={role === "FDE" ? "text-teal-400" : "text-amber-400"}>{role}</strong>
+              Authenticated Role: <strong className={role === "FDE" ? "text-teal-400" : "text-amber-400"}>{role}</strong>
             </span>
-            <div className="h-7 w-7 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center justify-center text-xs font-semibold">
-              {role === "FDE" ? "FE" : "MG"}
-            </div>
+            <Link
+              href="/login"
+              className="text-xs text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
+            >
+              <User className="h-3.5 w-3.5 text-teal-400" />
+              <span>{user ? user.name : "Switch Account"}</span>
+            </Link>
           </div>
         </header>
 

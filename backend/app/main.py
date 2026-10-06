@@ -38,6 +38,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.auth import create_access_token, verify_password, DEMO_USERS, get_current_user, require_role
+
 privacy_engine = PrivacyPolicyEngine(
     use_cloud_dlp=settings.USE_CLOUD_DLP_API,
     gcp_project_id=settings.GCP_PROJECT_ID
@@ -48,6 +50,62 @@ know_agent = KnowAgent(privacy_engine=privacy_engine)
 move_agent = MoveAgent(privacy_engine=privacy_engine)
 deliver_agent = DeliverAgent(privacy_engine=privacy_engine)
 supervisor_coordinator = SupervisorCoordinator(privacy_engine=privacy_engine)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: Dict[str, Any]
+
+
+@app.post(f"{settings.API_V1_STR}/auth/login", tags=["Authentication"])
+async def login(payload: LoginRequest):
+    """
+    Authenticate FDE or Manager credentials and issue JWT bearer token.
+    """
+    user = DEMO_USERS.get(payload.email.lower())
+    if not user or not verify_password(payload.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    token = create_access_token({"sub": user["email"], "role": user["role"]})
+    return {
+        "success": True,
+        "data": {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "name": user["name"],
+                "role": user["role"],
+                "title": user["title"]
+            }
+        },
+        "message": f"Successfully authenticated as {user['name']} ({user['role']})"
+    }
+
+
+@app.get(f"{settings.API_V1_STR}/auth/me", tags=["Authentication"])
+async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Return authenticated profile information."""
+    return {
+        "success": True,
+        "data": {
+            "id": current_user["id"],
+            "email": current_user["email"],
+            "name": current_user["name"],
+            "role": current_user["role"],
+            "title": current_user["title"]
+        }
+    }
 
 
 class ChangeAnalysisRequest(BaseModel):
