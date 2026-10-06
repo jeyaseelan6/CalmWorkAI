@@ -19,7 +19,10 @@ import {
   LogOut,
   LogIn,
   User,
-  Activity
+  Activity,
+  Sparkles,
+  Zap,
+  Send
 } from "lucide-react";
 
 export interface NavItem {
@@ -36,18 +39,22 @@ function NavLinks() {
   const pathname = usePathname();
 
   const fdeNav: NavItem[] = [
-    { id: "my-work", label: "My Work", href: "/", icon: Briefcase },
-    { id: "engagements", label: "Engagements", href: "/engagements", icon: CheckSquare },
-    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
-    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
+    { id: "my-work", label: "My Work Cockpit", href: "/", icon: Briefcase },
+    { id: "actions", label: "Next Best Action (MOVE)", href: "/actions", icon: Zap },
+    { id: "intelligence", label: "Scope Impact (UNDERSTAND)", href: "/intelligence", icon: Sparkles },
+    { id: "knowledge", label: "Knowledge Base (KNOW)", href: "/knowledge", icon: BookOpen },
+    { id: "delivery", label: "Customer Studio (DELIVER)", href: "/delivery", icon: Send },
+    { id: "timeline", label: "Audit Timeline", href: "/timeline", icon: Clock },
   ];
 
   const managerNav: NavItem[] = [
     { id: "control-center", label: "Control Center", href: "/", icon: LayoutDashboard },
-    { id: "engagements", label: "Engagements", href: "/engagements", icon: CheckSquare },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
-    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
-    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
+    { id: "approvals", label: "Manager Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "actions", label: "Next Best Action (MOVE)", href: "/actions", icon: Zap },
+    { id: "intelligence", label: "Scope Impact (UNDERSTAND)", href: "/intelligence", icon: Sparkles },
+    { id: "knowledge", label: "Knowledge Base (KNOW)", href: "/knowledge", icon: BookOpen },
+    { id: "delivery", label: "Customer Studio (DELIVER)", href: "/delivery", icon: Send },
+    { id: "timeline", label: "Audit Timeline", href: "/timeline", icon: Clock },
   ];
 
   const currentNav = role === "FDE" ? fdeNav : managerNav;
@@ -61,7 +68,7 @@ function NavLinks() {
           <Link
             key={item.id}
             href={item.href}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
               isActive
                 ? "bg-slate-800 text-teal-400 border-l-2 border-teal-400 shadow-sm"
                 : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
@@ -100,19 +107,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <div>
               <h1 className="font-semibold text-slate-100 text-sm tracking-wide">CalmWork AI</h1>
-              <p className="text-[10px] text-teal-400 font-mono">Work-Intelligence Workspace</p>
+              <p className="text-[10px] text-teal-400 font-mono">Dedicated Agent Workspaces</p>
             </div>
           </Link>
 
           {/* Active Customer Switcher (Multi-Tenant Isolation) */}
-          <div className="mb-5 relative px-2">
+          <div className="mb-4 relative px-2">
             <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <Building2 className="h-3 w-3 text-teal-400" />
-              Active Customer Workspace
+              Active Customer
             </label>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between text-left hover:border-slate-700 transition-all"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 flex items-center justify-between text-left hover:border-slate-700 transition-all"
             >
               <div>
                 <span className="text-xs font-bold text-slate-100 block">{activeCustomer.customerName}</span>
@@ -156,14 +163,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Role Experience Switcher */}
-          <div className="mb-6 px-2">
+          <div className="mb-5 px-2">
             <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">
               Role View Context
             </label>
             <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-md border border-slate-800 text-xs font-medium">
               <button
                 onClick={() => switchRole("FDE")}
-                className={`py-1.5 rounded transition-all text-center ${
+                className={`py-1 rounded transition-all text-center ${
                   role === "FDE" 
                     ? "bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm" 
                     : "text-slate-400 hover:text-slate-200"
@@ -173,7 +180,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 onClick={() => switchRole("MANAGER")}
-                className={`py-1.5 rounded transition-all text-center ${
+                className={`py-1 rounded transition-all text-center ${
                   role === "MANAGER" 
                     ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm" 
                     : "text-slate-400 hover:text-slate-200"
@@ -191,12 +198,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Profile & Auth Section */}
-        <div className="space-y-3 pt-3 border-t border-slate-800">
+        <div className="space-y-2.5 pt-3 border-t border-slate-800">
           {isAuthenticated && user ? (
-            <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+            <div className="p-2 bg-slate-950 rounded-lg border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center justify-center text-xs font-bold">
+                  <div className="h-6 w-6 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center justify-center text-[10px] font-bold">
                     {user.name.split(" ").map(n => n[0]).join("")}
                   </div>
                   <div>
@@ -212,7 +219,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 onClick={logout}
-                className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-rose-400 py-1 transition"
+                className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-rose-400 py-0.5 transition"
               >
                 <LogOut className="h-3 w-3" />
                 <span>Sign Out</span>
@@ -224,24 +231,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className="w-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition"
             >
               <LogIn className="h-3.5 w-3.5" />
-              <span>Sign In to CalmWork</span>
+              <span>Sign In</span>
             </Link>
           )}
 
           {/* Developer Observability & Privacy Footer */}
-          <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-xs space-y-1">
+          <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1 text-teal-400 font-medium">
                 <Lock className="h-3 w-3" />
-                <span className="text-[10px]">Privacy Guardrail</span>
+                <span className="text-[10px]">AI Guardrail</span>
               </div>
               <Link
                 href="/supervisor"
-                className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 font-mono transition"
-                title="Developer Observability Telemetry"
+                className="text-[10px] text-slate-400 hover:text-amber-300 flex items-center gap-1 font-mono transition"
+                title="Supervisor Telemetry"
               >
                 <Activity className="h-3 w-3 text-amber-400" />
-                <span>Telemetry</span>
+                <span>SUPERVISOR</span>
               </Link>
             </div>
           </div>
