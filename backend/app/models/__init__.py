@@ -2,6 +2,7 @@ from app.models.engagement import Base, Engagement, EngagementStatus, WorkCycleS
 from app.models.outcome import Outcome, OutcomeStatus
 from app.models.timeline import TimelineEvent
 from app.models.approval import Approval, ApprovalType, ApprovalStatus
+from app.models.document import DocumentModel, DocumentCategory, DocumentStatus
 
 __all__ = [
     "Base",
@@ -13,5 +14,8 @@ __all__ = [
     "TimelineEvent",
     "Approval",
     "ApprovalType",
-    "ApprovalStatus"
+    "ApprovalStatus",
+    "DocumentModel",
+    "DocumentCategory",
+    "DocumentStatus"
 ]

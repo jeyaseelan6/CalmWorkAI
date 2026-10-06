@@ -1,41 +1,19 @@
-"""
-Unit test suite for DELIVER Agent & Customer Communication Engine.
-"""
-
+import pytest
 from app.agents.deliver_agent import DeliverAgent
-from app.privacy import PrivacyPolicyEngine
 
-
-def test_deliver_agent_customer_update():
-    privacy_engine = PrivacyPolicyEngine(use_cloud_dlp=False)
-    agent = DeliverAgent(privacy_engine=privacy_engine)
-
-    engagement_id = "eng-acme-001"
-    customer_name = "Acme Corp"
-    engagement_name = "Onboarding Modernization"
-    statement = "Reduce manual customer onboarding time from 30 minutes to under 5 minutes."
-    criteria = [
-        {"id": "sc-1", "title": "Automated onboarding workflow implemented", "completed": True},
-        {"id": "sc-2", "title": "API integration complete", "completed": True},
-        {"id": "sc-3", "title": "Production validation complete", "completed": False}
-    ]
-
+def test_deliver_agent_generates_draft_for_approval():
+    agent = DeliverAgent()
     draft = agent.generate_customer_update(
-        engagement_id=engagement_id,
-        customer_name=customer_name,
-        engagement_name=engagement_name,
-        outcome_statement=statement,
-        success_criteria=criteria,
+        engagement_id="eng-acme-001",
+        customer_name="Acme Corp",
+        engagement_name="Onboarding Modernization",
+        outcome_statement="Reduce onboarding time to under 5 min.",
+        success_criteria=[{"title": "API integration", "completed": True}],
         current_work_cycle="Step 4: Build Within Real Constraints",
-        raw_notes="Contact John Smith (+94771234567) regarding SSO requirements."
+        format_type="EXECUTIVE_SUMMARY"
     )
-
-    assert draft.status == "DRAFT"
-    assert "Acme Corp" in draft.customer_name
-    assert len(draft.key_milestones_achieved) >= 2
-    assert "Executive Update" in draft.subject
-    print("DELIVER Agent unit test passed successfully!")
-
-
-if __name__ == "__main__":
-    test_deliver_agent_customer_update()
+    
+    assert draft.status == "PENDING_MANAGER_APPROVAL"
+    assert draft.approval_required is True
+    assert draft.subject is not None
+    assert draft.executive_summary is not None

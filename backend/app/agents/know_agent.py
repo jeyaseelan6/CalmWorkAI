@@ -28,11 +28,12 @@ class GroundedAnswer(BaseModel):
     confidence_score: float
     tenant_isolated: bool = True
     privacy_scrubbed: bool = True
+    evidence_sufficient: bool = True
 
 
 class KnowAgent:
     """
-    KNOW Agent: Performs grounded Q&A over engagement documentation, customer specs,
+    KNOW Agent: Performs evidence-grounded Q&A over engagement documentation, customer specs,
     and architecture notes using grounded vector retrieval.
     """
 
@@ -74,7 +75,7 @@ class KnowAgent:
     ) -> GroundedAnswer:
         """
         Answers user question strictly grounded on engagement documentation.
-        Enforces tenant boundary isolation and privacy guardrails.
+        Handles insufficient evidence explicitly without fabricating answers.
         """
         # 1. Privacy Guardrail Anonymization on incoming question
         anonymized_question, mapping = self.privacy_engine.process_llm_input(
@@ -89,19 +90,20 @@ class KnowAgent:
             top_k=top_k
         )
 
-        if not search_results:
+        # Insufficient evidence check
+        if not search_results or search_results[0][1] < 0.15:
             return GroundedAnswer(
                 question=raw_question,
-                answer="No relevant documentation found in the engagement knowledge base to answer this question.",
+                answer="I don't have enough verified engagement evidence to answer this confidently.",
                 citations=[],
                 confidence_score=0.0,
                 tenant_isolated=True,
-                privacy_scrubbed=len(mapping.reference_to_original) > 0
+                privacy_scrubbed=len(mapping.reference_to_original) > 0,
+                evidence_sufficient=False
             )
 
         # 3. Grounded Answer Synthesis with Explicit Citations
         citations: List[GroundedCitation] = []
-        context_snippets = []
 
         for chunk, score in search_results:
             clean_snippet = self.privacy_engine.sanitize_output(chunk.content[:200], mapping)
@@ -111,11 +113,10 @@ class KnowAgent:
                 snippet=clean_snippet + ("..." if len(chunk.content) > 200 else ""),
                 relevance_score=round(score, 3)
             ))
-            context_snippets.append(f"[{chunk.title}]: {chunk.content}")
 
         top_score = search_results[0][1]
         synthesized_answer = (
-            f"Based on engagement documentation ({citations[0].document_title}), "
+            f"Based on verified engagement evidence in {citations[0].document_title}: "
             f"{search_results[0][0].content[:250]}..."
         )
 
@@ -127,5 +128,6 @@ class KnowAgent:
             citations=citations,
             confidence_score=min(round(top_score * 1.5, 2), 0.98),
             tenant_isolated=True,
-            privacy_scrubbed=len(mapping.reference_to_original) > 0
+            privacy_scrubbed=len(mapping.reference_to_original) > 0,
+            evidence_sufficient=True
         )

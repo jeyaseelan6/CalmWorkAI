@@ -1,13 +1,18 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
+import uuid
+from datetime import datetime
 
 from app.config import settings
 from app.db.database import get_db, init_db
-from app.models import Engagement, Outcome, TimelineEvent, Approval
+from app.models import (
+    Engagement, Outcome, TimelineEvent, Approval, ApprovalType, ApprovalStatus,
+    DocumentModel, DocumentCategory, DocumentStatus
+)
 from app.privacy import PrivacyPolicyEngine
 from app.services import OutcomeService
 from app.agents import (
@@ -57,17 +62,8 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: Dict[str, Any]
-
-
 @app.post(f"{settings.API_V1_STR}/auth/login", tags=["Authentication"])
 async def login(payload: LoginRequest):
-    """
-    Authenticate FDE or Manager credentials and issue JWT bearer token.
-    """
     user = DEMO_USERS.get(payload.email.lower())
     if not user or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(
@@ -95,7 +91,6 @@ async def login(payload: LoginRequest):
 
 @app.get(f"{settings.API_V1_STR}/auth/me", tags=["Authentication"])
 async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Return authenticated profile information."""
     return {
         "success": True,
         "data": {
@@ -113,21 +108,15 @@ class ChangeAnalysisRequest(BaseModel):
     session_id: Optional[str] = None
 
 
-class ProposeOutcomeRequest(BaseModel):
-    statement: str
-    success_criteria: List[Dict[str, Any]]
-    proposed_by: str = "understand_agent"
-    reason: str
-
-
 class ApprovalResponseRequest(BaseModel):
     action: str  # "APPROVE" | "REJECT"
     actor_id: str = "manager_user_1"
-    outcome_id: Optional[str] = None
+    decision_note: Optional[str] = None
 
 
 class IngestDocumentRequest(BaseModel):
     title: str
+    category: str = "Technical Documentation"
     content: str
 
 
@@ -138,49 +127,19 @@ class KnowledgeQueryRequest(BaseModel):
 
 class GenerateCustomerUpdateRequest(BaseModel):
     raw_notes: Optional[str] = None
-
-
-@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/customer-updates/generate", tags=["Delivery"])
-async def generate_customer_update(engagement_id: str, payload: GenerateCustomerUpdateRequest, db: Session = Depends(get_db)):
-    """
-    DELIVER Agent Endpoint: Translates technical progress and DoD items into executive business language.
-    """
-    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
-    if not eng:
-        raise HTTPException(status_code=404, detail="Engagement not found")
-
-    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
-    statement = current_outcome.statement if current_outcome else ""
-    criteria = current_outcome.success_criteria if current_outcome else []
-
-    draft = deliver_agent.generate_customer_update(
-        engagement_id=engagement_id,
-        customer_name=eng.customer_name,
-        engagement_name=eng.name,
-        outcome_statement=statement,
-        success_criteria=criteria,
-        current_work_cycle=eng.current_work_cycle,
-        raw_notes=payload.raw_notes
-    )
-
-    return {
-        "success": True,
-        "data": draft.model_dump(),
-        "message": "DELIVER Agent executive customer update draft generated successfully."
-    }
+    format_type: str = "EXECUTIVE_SUMMARY"
 
 
 @app.on_event("startup")
 def on_startup():
     init_db()
-    # Seed default sample documentation for Acme Corp & Globex Corp into KNOW Agent vector store
+    # Seed default sample documentation
     know_agent.ingest_document(
         engagement_id="eng-acme-001",
         title="Acme Corp Enterprise Security & SSO Mandate",
         raw_text=(
             "Acme Corp enterprise security team requires all customer onboarding microservices "
-            "to authenticate via Enterprise Single Sign-On (SSO) using SAML 2.0 / OAuth2 OIDC before production cutover. "
-            "Primary security contact is John Smith (+94771234567)."
+            "to authenticate via Enterprise Single Sign-On (SSO) using SAML 2.0 / OAuth2 OIDC before production cutover."
         )
     )
     know_agent.ingest_document(
@@ -206,11 +165,11 @@ async def health_check():
 
 @app.get(f"{settings.API_V1_STR}/engagements", tags=["Engagements"])
 async def list_engagements(db: Session = Depends(get_db)):
-    """List all engagements."""
     engagements = db.query(Engagement).all()
     result = []
     for eng in engagements:
         current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+        pending_approvals = db.query(Approval).filter(Approval.engagement_id == eng.id, Approval.status == ApprovalStatus.PENDING).count()
         result.append({
             "id": eng.id,
             "customer_name": eng.customer_name,
@@ -223,6 +182,7 @@ async def list_engagements(db: Session = Depends(get_db)):
             "current_outcome": current_outcome.statement if current_outcome else None,
             "version": current_outcome.version if current_outcome else 1,
             "success_criteria": current_outcome.success_criteria if current_outcome else [],
+            "pending_approvals_count": pending_approvals,
             "created_at": eng.created_at.isoformat()
         })
     return {
@@ -234,7 +194,6 @@ async def list_engagements(db: Session = Depends(get_db)):
 
 @app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}", tags=["Engagements"])
 async def get_engagement(engagement_id: str, db: Session = Depends(get_db)):
-    """Get single engagement workspace detail."""
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -242,6 +201,7 @@ async def get_engagement(engagement_id: str, db: Session = Depends(get_db)):
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
     timeline = db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).order_by(TimelineEvent.created_at.desc()).all()
     approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id).all()
+    documents = db.query(DocumentModel).filter(DocumentModel.engagement_id == engagement_id).all()
     
     return {
         "success": True,
@@ -275,6 +235,7 @@ async def get_engagement(engagement_id: str, db: Session = Depends(get_db)):
                     "created_at": t.created_at.isoformat()
                 } for t in timeline
             ],
+            "documents_count": len(documents),
             "pending_approvals_count": len([a for a in approvals if a.status == "PENDING"])
         }
     }
@@ -282,10 +243,6 @@ async def get_engagement(engagement_id: str, db: Session = Depends(get_db)):
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/analyze-change", tags=["Intelligence"])
 async def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisRequest, db: Session = Depends(get_db)):
-    """
-    UNDERSTAND Agent endpoint: Runs pre-LLM privacy anonymization guardrail
-    and analyzes scope/requirement impact.
-    """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -301,6 +258,20 @@ async def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisReque
             current_success_criteria=criteria,
             session_id=payload.session_id or engagement_id
         )
+
+        # Log timeline detection event (does not mutate outcome state silently)
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="CHANGE_DETECTED",
+            title="Change Impact Analysis Generated",
+            description=f"UNDERSTAND Agent evaluated requirement shift: '{payload.raw_change_text[:80]}...'",
+            actor_type="UNDERSTAND_AGENT",
+            actor_id="agent_understand",
+            created_at=datetime.utcnow()
+        ))
+        db.commit()
+
         return {
             "success": True,
             "data": analysis.model_dump(),
@@ -311,34 +282,36 @@ async def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisReque
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/outcomes/history", tags=["Outcomes"])
-async def get_outcome_history(engagement_id: str, db: Session = Depends(get_db)):
-    """Fetch immutable outcome version history."""
-    outcome_service = OutcomeService(db)
-    history = outcome_service.get_outcome_history(engagement_id)
+@app.get(f"{settings.API_V1_STR}/approvals", tags=["Approvals"])
+async def list_pending_approvals(db: Session = Depends(get_db)):
+    """List all pending manager approvals with Recommendation, Why, Evidence, Impact, Confidence."""
+    approvals = db.query(Approval).filter(Approval.status == ApprovalStatus.PENDING).all()
+    result = []
+    for appr in approvals:
+        eng = db.query(Engagement).filter(Engagement.id == appr.engagement_id).first()
+        result.append({
+            "id": appr.id,
+            "engagement_id": appr.engagement_id,
+            "customer_name": eng.customer_name if eng else "Customer",
+            "type": appr.type,
+            "recommendation": f"Upgrade Definition of Done criteria and outcome for {eng.customer_name if eng else 'customer'}." if appr.type == ApprovalType.OUTCOME_CHANGE else "Approve consequential action.",
+            "why": "Customer requirement changed, gating production validation step.",
+            "evidence": [f"Requirement input received", f"Current outcome DoD affected"],
+            "impact": "Updates DoD checklist and allows production rollout.",
+            "confidence": "High",
+            "status": appr.status,
+            "requested_by": appr.requested_by,
+            "created_at": appr.created_at.isoformat()
+        })
     return {
         "success": True,
-        "data": [
-            {
-                "id": o.id,
-                "version": o.version,
-                "statement": o.statement,
-                "success_criteria": o.success_criteria,
-                "status": o.status,
-                "created_by": o.created_by,
-                "approved_by": o.approved_by,
-                "created_at": o.created_at.isoformat()
-            } for o in history
-        ]
+        "data": result,
+        "message": "Pending approvals retrieved successfully."
     }
 
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/approvals/respond", tags=["Approvals"])
 async def respond_to_approval(engagement_id: str, payload: ApprovalResponseRequest, db: Session = Depends(get_db)):
-    """
-    Manager Approval Endpoint: Accepts or rejects outcome change recommendation,
-    performing atomic Version 2 transition and updated DoD checklist activation.
-    """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -369,6 +342,19 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
             approved_by=payload.actor_id
         )
 
+        # Log timeline approval event
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="OUTCOME_APPROVED",
+            title="Outcome Version Approved",
+            description=f"Manager ({payload.actor_id}) approved transition to Outcome Version {new_v2.version}.",
+            actor_type="MANAGER",
+            actor_id=payload.actor_id,
+            created_at=datetime.utcnow()
+        ))
+        db.commit()
+
         return {
             "success": True,
             "data": {
@@ -377,7 +363,7 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
                 "status": updated_eng.status,
                 "current_outcome_id": updated_eng.current_outcome_id
             },
-            "message": "Outcome Version 2 approved and activated successfully."
+            "message": f"Outcome Version {new_v2.version} approved and activated successfully."
         }
     else:
         eng.status = "HEALTHY"
@@ -389,30 +375,94 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
         }
 
 
-@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/documents/ingest", tags=["Knowledge"])
-async def ingest_document(engagement_id: str, payload: IngestDocumentRequest):
+# Knowledge Document Ingestion Endpoints
+@app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/documents", tags=["Knowledge"])
+async def list_documents(engagement_id: str, db: Session = Depends(get_db)):
+    docs = db.query(DocumentModel).filter(DocumentModel.engagement_id == engagement_id).all()
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": d.id,
+                "engagement_id": d.engagement_id,
+                "title": d.title,
+                "category": d.category,
+                "status": d.status,
+                "chunks_count": d.chunks_count,
+                "uploaded_by": d.uploaded_by,
+                "created_at": d.created_at.isoformat()
+            } for d in docs
+        ]
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/documents/upload", tags=["Knowledge"])
+async def upload_document(
+    engagement_id: str,
+    payload: IngestDocumentRequest,
+    db: Session = Depends(get_db)
+):
     """
-    KNOW Agent Ingestion Endpoint: Ingests, anonymizes via Privacy Guardrail,
-    and indexes customer documentation into tenant vector store.
+    Manager Document Upload endpoint: Categorizes and indexes document into KNOW Agent.
     """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    # Ingest into vector store
     result = know_agent.ingest_document(
         engagement_id=engagement_id,
         title=payload.title,
         raw_text=payload.content
     )
+
+    doc_id = f"doc-{uuid.uuid4().hex[:8]}"
+    category_enum = DocumentCategory.OTHER
+    try:
+        category_enum = DocumentCategory(payload.category)
+    except Exception:
+        category_enum = DocumentCategory.OTHER
+
+    doc = DocumentModel(
+        id=doc_id,
+        engagement_id=engagement_id,
+        title=payload.title,
+        category=category_enum,
+        status=DocumentStatus.INDEXED,
+        content=payload.content,
+        chunks_count=result.get("chunks_created", 1),
+        uploaded_by="manager_user_1",
+        created_at=datetime.utcnow()
+    )
+    db.add(doc)
+
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="DOCUMENT_INGESTED",
+        title="Document Uploaded & Indexed",
+        description=f"Manager uploaded document '{payload.title}' categorized as '{category_enum.value}'.",
+        actor_type="MANAGER",
+        actor_id="manager_user_1",
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
     return {
         "success": True,
-        "data": result,
-        "message": f"Document '{payload.title}' ingested and indexed into KNOW Agent vector store."
+        "data": {
+            "id": doc.id,
+            "title": doc.title,
+            "category": doc.category,
+            "status": doc.status,
+            "chunks_count": doc.chunks_count
+        },
+        "message": f"Document '{payload.title}' uploaded and indexed under category '{category_enum.value}'."
     }
 
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/knowledge/query", tags=["Knowledge"])
 async def query_knowledge(engagement_id: str, payload: KnowledgeQueryRequest):
-    """
-    KNOW Agent Grounded Q&A Endpoint: Retrieves tenant-isolated document chunks,
-    generates grounded answers with explicit citations, and restores text through Privacy Guardrail.
-    """
     grounded_answer = know_agent.answer_question(
         engagement_id=engagement_id,
         raw_question=payload.question,
@@ -427,10 +477,6 @@ async def query_knowledge(engagement_id: str, payload: KnowledgeQueryRequest):
 
 @app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/next-action", tags=["Intelligence"])
 async def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
-    """
-    MOVE Agent Endpoint: Evaluates active blockers, work cycle status, and pending approvals
-    to return the single highest-impact Next Best Action with explicit 'Why Now' justification.
-    """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -455,12 +501,36 @@ async def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)
     }
 
 
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/customer-updates/generate", tags=["Delivery"])
+async def generate_customer_update(engagement_id: str, payload: GenerateCustomerUpdateRequest, db: Session = Depends(get_db)):
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    statement = current_outcome.statement if current_outcome else ""
+    criteria = current_outcome.success_criteria if current_outcome else []
+
+    draft = deliver_agent.generate_customer_update(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        engagement_name=eng.name,
+        outcome_statement=statement,
+        success_criteria=criteria,
+        current_work_cycle=eng.current_work_cycle,
+        raw_notes=payload.raw_notes,
+        format_type=payload.format_type
+    )
+
+    return {
+        "success": True,
+        "data": draft.model_dump(),
+        "message": "DELIVER Agent customer update draft generated successfully."
+    }
+
+
 @app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/supervisor/summary", tags=["Supervisor"])
 async def get_supervisor_summary(engagement_id: str, db: Session = Depends(get_db)):
-    """
-    Supervisor Endpoint: Returns 360-degree multi-agent status summary coordinating
-    UNDERSTAND, KNOW, MOVE, and DELIVER agents across the 6 FDE Work Cycles.
-    """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { useEngagement, CustomerEngagement } from "@/context/EngagementContext";
+import { useEngagement } from "@/context/EngagementContext";
 import { 
   Briefcase, 
   CheckSquare, 
@@ -19,7 +19,7 @@ import {
   LogOut,
   LogIn,
   User,
-  Sparkles
+  Activity
 } from "lucide-react";
 
 export interface NavItem {
@@ -30,29 +30,63 @@ export interface NavItem {
   badge?: number;
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, role, switchRole, logout, isAuthenticated } = useAuth();
-  const { customers, activeCustomer, setActiveCustomer, approvedAcme, loading, fetchEngagementDetail } = useEngagement();
+function NavLinks() {
+  const { role } = useAuth();
+  const { approvedAcme } = useEngagement();
   const pathname = usePathname();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const fdeNav: NavItem[] = [
-    { id: "my-work", label: "My Work Cockpit", href: "/", icon: Briefcase },
-    { id: "intelligence", label: "Change Intelligence (UNDERSTAND)", href: "/intelligence", icon: Sparkles },
-    { id: "knowledge", label: "Knowledge Base (KNOW)", href: "/knowledge", icon: BookOpen },
-    { id: "delivery", label: "Customer Studio (DELIVER)", href: "/delivery", icon: CheckSquare },
-    { id: "supervisor", label: "Supervisor Control", href: "/supervisor", icon: LayoutDashboard },
+    { id: "my-work", label: "My Work", href: "/", icon: Briefcase },
+    { id: "engagements", label: "Engagements", href: "/engagements", icon: CheckSquare },
+    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
+    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
   ];
 
   const managerNav: NavItem[] = [
-    { id: "supervisor", label: "Supervisor Control Center", href: "/supervisor", icon: LayoutDashboard },
-    { id: "my-work", label: "Work Cockpit", href: "/", icon: Briefcase },
-    { id: "intelligence", label: "Scope & Approvals (UNDERSTAND)", href: "/intelligence", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
-    { id: "knowledge", label: "Knowledge Base (KNOW)", href: "/knowledge", icon: BookOpen },
-    { id: "delivery", label: "Customer Studio (DELIVER)", href: "/delivery", icon: CheckSquare },
+    { id: "control-center", label: "Control Center", href: "/", icon: LayoutDashboard },
+    { id: "engagements", label: "Engagements", href: "/engagements", icon: CheckSquare },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
+    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
   ];
 
   const currentNav = role === "FDE" ? fdeNav : managerNav;
+
+  return (
+    <nav className="space-y-1">
+      {currentNav.map((item: NavItem) => {
+        const Icon = item.icon;
+        const isActive = (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname?.startsWith(item.href));
+        return (
+          <Link
+            key={item.id}
+            href={item.href}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+              isActive
+                ? "bg-slate-800 text-teal-400 border-l-2 border-teal-400 shadow-sm"
+                : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Icon className="h-4 w-4 shrink-0" />
+              <span>{item.label}</span>
+            </div>
+            {item.badge ? (
+              <span className="bg-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/30 animate-pulse font-mono">
+                {item.badge}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  const { user, role, switchRole, logout, isAuthenticated } = useAuth();
+  const { customers, activeCustomer, setActiveCustomer } = useEngagement();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
@@ -66,7 +100,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <div>
               <h1 className="font-semibold text-slate-100 text-sm tracking-wide">CalmWork AI</h1>
-              <p className="text-[10px] text-teal-400 font-mono">Single-Responsibility UX</p>
+              <p className="text-[10px] text-teal-400 font-mono">Work-Intelligence Workspace</p>
             </div>
           </Link>
 
@@ -74,7 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mb-5 relative px-2">
             <label className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <Building2 className="h-3 w-3 text-teal-400" />
-              Active Customer
+              Active Customer Workspace
             </label>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -150,34 +184,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="space-y-1">
-            {currentNav.map((item: NavItem) => {
-              const Icon = item.icon;
-              const isActive = (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname?.startsWith(item.href));
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                    isActive
-                      ? "bg-slate-800 text-teal-400 border-l-2 border-teal-400 shadow-sm"
-                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge ? (
-                    <span className="bg-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/30 animate-pulse font-mono">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })}
-          </nav>
+          {/* Navigation Links wrapped in Suspense */}
+          <Suspense fallback={<div className="h-24 bg-slate-950 rounded-lg animate-pulse" />}>
+            <NavLinks />
+          </Suspense>
         </div>
 
         {/* User Profile & Auth Section */}
@@ -218,15 +228,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
-          {/* Privacy Guardrail Active Footer */}
-          <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-xs">
-            <div className="flex items-center gap-1.5 text-teal-400 font-medium mb-0.5">
-              <Lock className="h-3 w-3" />
-              <span className="text-[11px]">AI Privacy Guardrail Active</span>
+          {/* Developer Observability & Privacy Footer */}
+          <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-xs space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1 text-teal-400 font-medium">
+                <Lock className="h-3 w-3" />
+                <span className="text-[10px]">Privacy Guardrail</span>
+              </div>
+              <Link
+                href="/supervisor"
+                className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 font-mono transition"
+                title="Developer Observability Telemetry"
+              >
+                <Activity className="h-3 w-3 text-amber-400" />
+                <span>Telemetry</span>
+              </Link>
             </div>
-            <p className="text-[10px] text-slate-400 leading-tight">
-              Isolated & pseudonymized inputs.
-            </p>
           </div>
         </div>
       </aside>
@@ -240,7 +257,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder={`Search ${activeCustomer.customerName} scope & outcomes...`}
+                placeholder={`Search ${activeCustomer.customerName} engagement...`}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500/50"
               />
             </div>

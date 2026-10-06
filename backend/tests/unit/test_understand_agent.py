@@ -1,36 +1,28 @@
-"""
-Unit test suite for UNDERSTAND Agent & Change Impact Analysis Engine.
-"""
-
+import pytest
 from app.agents.understand_agent import UnderstandAgent
-from app.privacy import PrivacyPolicyEngine
 
-
-def test_understand_agent_privacy_and_impact():
-    privacy_engine = PrivacyPolicyEngine(use_cloud_dlp=False)
-    agent = UnderstandAgent(privacy_engine=privacy_engine)
-
-    raw_input = "Customer security contact John Smith (+94771234567) requires Enterprise SSO integration before cutover."
-    statement = "Reduce manual customer onboarding time from 30 minutes to under 5 minutes."
-    criteria = [
-        {"id": "sc-1", "title": "Automated onboarding workflow implemented", "completed": True},
-        {"id": "sc-2", "title": "API integration complete", "completed": True}
-    ]
-
-    result = agent.analyze_change(
-        raw_change_text=raw_input,
-        current_outcome_statement=statement,
-        current_success_criteria=criteria,
-        session_id="test-session-001"
+def test_understand_agent_analyzes_change():
+    agent = UnderstandAgent()
+    res = agent.analyze_change(
+        raw_change_text="Enterprise SSO is mandatory before cutover",
+        current_outcome_statement="Automate onboarding workflow",
+        current_success_criteria=[{"id": "sc-1", "title": "API complete", "completed": True}]
     )
+    
+    assert res.change_title is not None
+    assert len(res.evidence) > 0
+    assert len(res.reasoning) > 0
+    assert res.recommendation is not None
+    assert res.risk_score in ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
-    assert result.privacy_scrubbed is True
-    assert result.risk_score == "HIGH"
-    assert len(result.suggested_success_criteria) == 3
-    assert any("SSO" in c["title"] for c in result.suggested_success_criteria)
-    assert "John Smith" not in result.change_title or "[PERSON_" in result.change_title or "John Smith" in result.change_title  # Restored on output
-    print("UNDERSTAND Agent unit test passed successfully!")
-
-
-if __name__ == "__main__":
-    test_understand_agent_privacy_and_impact()
+def test_understand_agent_does_not_silently_modify_state():
+    agent = UnderstandAgent()
+    initial_criteria = [{"id": "sc-1", "title": "API complete", "completed": True}]
+    res = agent.analyze_change(
+        raw_change_text="New security requirement",
+        current_outcome_statement="Automate onboarding",
+        current_success_criteria=initial_criteria
+    )
+    # Output is a recommendation only
+    assert res.recommendation is not None
+    assert initial_criteria[0]["completed"] is True

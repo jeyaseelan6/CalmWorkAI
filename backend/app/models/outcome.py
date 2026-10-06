@@ -7,6 +7,7 @@ import enum
 class OutcomeStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     RECOMMENDED = "RECOMMENDED"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     SUPERSEDED = "SUPERSEDED"
