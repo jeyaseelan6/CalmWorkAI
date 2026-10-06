@@ -15,11 +15,11 @@ def seed_demo_data():
         # Re-create database tables if schema was modified
         init_db()
 
-        # 1. Customer 1: Acme Corp — Onboarding Modernization
-        existing_acme = db.query(Engagement).filter(Engagement.id == "eng-acme-001").first()
-        if existing_acme:
-            db.delete(existing_acme)
-            db.commit()
+        # Clear existing demo data cleanly
+        db.query(TimelineEvent).filter(TimelineEvent.engagement_id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)
+        db.query(Outcome).filter(Outcome.engagement_id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)
+        db.query(Engagement).filter(Engagement.id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)
+        db.commit()
 
         acme_eng = Engagement(
             id="eng-acme-001",
@@ -75,10 +75,6 @@ def seed_demo_data():
         ))
 
         # 2. Customer 2: Globex Corp — Legacy Data Migration
-        existing_globex = db.query(Engagement).filter(Engagement.id == "eng-globex-002").first()
-        if existing_globex:
-            db.delete(existing_globex)
-            db.commit()
 
         globex_eng = Engagement(
             id="eng-globex-002",
