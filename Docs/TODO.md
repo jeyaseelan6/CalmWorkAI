@@ -1,7 +1,8 @@
 # CalmWork AI — Implementation Master TODO List
 
 **Status:** Phase 1 Foundation Completed ✓  
-**Architecture:** Next.js + TypeScript (Frontend) | Python + FastAPI (Backend) | PostgreSQL (Cloud SQL / SQLite dev) | Gemini via Vertex AI | Google Cloud DLP (`backend/app/privacy/`)  
+**Framework:** 6 FDE Work Cycles (Step 1: Understand Business Reality → Step 2: Define Right Problem → Step 3: Design AI Approach → Step 4: Build Within Constraints → Step 5: Deploy Into Production → Step 6: Own Outcomes & Improve)  
+**Architecture:** Next.js 16 + TypeScript (Frontend) | Python + FastAPI (Backend) | PostgreSQL (Cloud SQL / SQLite dev) | Gemini via Vertex AI | Google Cloud DLP (`backend/app/privacy/`)  
 
 ---
 

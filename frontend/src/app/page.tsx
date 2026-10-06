@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import AppShell, { CustomerEngagement } from "@/components/layout/AppShell";
 import OutcomeCard from "@/components/engagement/OutcomeCard";
 import ChangeImpactCard from "@/components/intelligence/ChangeImpactCard";
+import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
 import { AlertCircle, ArrowUpRight, CheckCircle, Clock, ShieldAlert, Sparkles, Building2 } from "lucide-react";
 
 const CUSTOMERS: CustomerEngagement[] = [
@@ -26,6 +27,7 @@ export default function Home() {
   const [approvedAcme, setApprovedAcme] = useState(false);
 
   const isAcme = activeCustomer.id === "eng-acme-001";
+  const currentStepNumber = isAcme ? 4 : 5; // Acme is in Step 4; Globex is in Step 5
 
   return (
     <AppShell
@@ -53,6 +55,12 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* 6 FDE Engagement Work Cycles Stepper */}
+        <WorkCycleStepper
+          currentStepNumber={currentStepNumber}
+          customerName={activeCustomer.customerName}
+        />
 
         {/* Current Customer Engagement Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -148,8 +156,8 @@ export default function Home() {
               <div className="text-[11px] text-slate-400 bg-slate-950 p-2.5 rounded border border-slate-800 leading-relaxed">
                 <strong>Why now:</strong>{" "}
                 {isAcme
-                  ? "This is currently the primary blocker preventing production validation."
-                  : "Dry run performance data is required to confirm the 15-minute cutover window."}
+                  ? "This is currently the primary blocker preventing production validation in Step 4."
+                  : "Dry run performance data is required to confirm the 15-minute cutover window for Step 5 deployment."}
               </div>
             </div>
 
