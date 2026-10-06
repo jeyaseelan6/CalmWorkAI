@@ -63,12 +63,17 @@
 
 ---
 
-## 📌 Phase 4: MOVE Agent & Next Best Action
+## 📌 Phase 4: MOVE Agent & Next Best Action (COMPLETED ✓)
 
-- [ ] **4.1 Blocker & Dependency Reasoning Engine**
-  - [ ] Backend logic to evaluate active blockers, risks, and pending decisions
-- [ ] **4.2 Next Best Action Algorithm**
-  - [ ] Dynamic priority ranking based on engagement state
+- [x] **4.1 Blocker & Dependency Reasoning Engine (`backend/app/agents/move_agent.py`)**
+  - [x] Backend logic evaluating active blockers, gating criteria, and outcome velocity across 6 FDE Work Cycles
+  - [x] Pre-LLM Privacy Guardrail anonymization on blocker descriptions and Next Best Action statements
+- [x] **4.2 Next Best Action Algorithm (`backend/app/agents/move_agent.py`)**
+  - [x] Dynamic priority ranking (`CRITICAL`, `HIGH_PRIORITY`, `MEDIUM_PRIORITY`, `ROUTINE`) with explicit 'Why Now' justification
+- [x] **4.3 MOVE Agent REST API (`backend/app/main.py`)**
+  - [x] Endpoint `GET /api/v1/engagements/{id}/next-action` returning ranked Next Best Action payload
+- [x] **4.4 Next Best Action UI Integration (`frontend/src/app/page.tsx`)**
+  - [x] Integrated live Next Best Action card into cockpit dashboard with dynamic priority badges and real-time reasoning
 
 ---
 

@@ -42,6 +42,7 @@ export default function Home() {
 
   const [activeCustomer, setActiveCustomer] = useState<CustomerEngagement>(customers[0]);
   const [activeEngagementData, setActiveEngagementData] = useState<any>(null);
+  const [nextActionData, setNextActionData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [approvedAcme, setApprovedAcme] = useState(false);
 
@@ -57,6 +58,14 @@ export default function Home() {
           if (json.data.outcome?.version >= 2) {
             setApprovedAcme(true);
           }
+        }
+      }
+      // Fetch Next Best Action from MOVE Agent endpoint
+      const nextRes = await fetch(`${API_BASE}/engagements/${id}/next-action`);
+      if (nextRes.ok) {
+        const nextJson = await nextRes.json();
+        if (nextJson.success && nextJson.data) {
+          setNextActionData(nextJson.data);
         }
       }
     } catch (e) {
@@ -228,22 +237,22 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
                   <Sparkles className="h-4 w-4" />
-                  Next Best Action
+                  Next Best Action (MOVE Agent)
                 </span>
                 <span className="text-[11px] px-2 py-0.5 rounded bg-teal-500/10 text-teal-300 font-mono">
-                  High Priority
+                  {nextActionData?.priority_level || (isAcme ? "CRITICAL" : "HIGH_PRIORITY")}
                 </span>
               </div>
               <p className="text-xs font-semibold text-slate-100">
-                {isAcme
+                {nextActionData?.action_title || (isAcme
                   ? "Follow up with customer security owner for required SSO configuration."
-                  : "Execute cutover performance dry-run test on staging replica."}
+                  : "Execute cutover performance dry-run test on staging replica.")}
               </p>
               <div className="text-[11px] text-slate-400 bg-slate-950 p-2.5 rounded border border-slate-800 leading-relaxed">
                 <strong>Why now:</strong>{" "}
-                {isAcme
+                {nextActionData?.why_now || (isAcme
                   ? "This is currently the primary blocker preventing production validation in Step 4."
-                  : "Dry run performance data is required to confirm the 15-minute cutover window for Step 5 deployment."}
+                  : "Dry run performance data is required to confirm the 15-minute cutover window for Step 5 deployment.")}
               </div>
             </div>
 

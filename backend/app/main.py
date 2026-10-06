@@ -10,7 +10,7 @@ from app.db.database import get_db, init_db
 from app.models import Engagement, Outcome, TimelineEvent, Approval
 from app.privacy import PrivacyPolicyEngine
 from app.services import OutcomeService
-from app.agents import UnderstandAgent, ChangeImpactAnalysis, KnowAgent, GroundedAnswer
+from app.agents import UnderstandAgent, ChangeImpactAnalysis, KnowAgent, GroundedAnswer, MoveAgent, NextBestActionRecommendation
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -39,6 +39,7 @@ privacy_engine = PrivacyPolicyEngine(
 
 understand_agent = UnderstandAgent(privacy_engine=privacy_engine)
 know_agent = KnowAgent(privacy_engine=privacy_engine)
+move_agent = MoveAgent(privacy_engine=privacy_engine)
 
 
 class ChangeAnalysisRequest(BaseModel):
@@ -321,4 +322,34 @@ async def query_knowledge(engagement_id: str, payload: KnowledgeQueryRequest):
         "success": True,
         "data": grounded_answer.model_dump(),
         "message": "Grounded Q&A response generated with source citations."
+    }
+
+
+@app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/next-action", tags=["Intelligence"])
+async def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
+    """
+    MOVE Agent Endpoint: Evaluates active blockers, work cycle status, and pending approvals
+    to return the single highest-impact Next Best Action with explicit 'Why Now' justification.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    version = current_outcome.version if current_outcome else 1
+    approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
+
+    recommendation = move_agent.determine_next_action(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        current_work_cycle=eng.current_work_cycle,
+        status=eng.status,
+        outcome_version=version,
+        pending_approvals=len(approvals)
+    )
+
+    return {
+        "success": True,
+        "data": recommendation.model_dump(),
+        "message": "MOVE Agent Next Best Action evaluated successfully."
     }
