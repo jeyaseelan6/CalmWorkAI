@@ -1,12 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth, UserRole } from "@/context/AuthContext";
 import { ShieldCheck, User, Lock, Sparkles, ArrowRight, Building2, CheckCircle2 } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
   const { loginWithCredentials, login } = useAuth();
   
   const [selectedRole, setSelectedRole] = useState<UserRole>("FDE");
@@ -28,12 +26,12 @@ export default function LoginPage() {
     setLoading(true);
     await loginWithCredentials(email, password);
     setLoading(false);
-    router.push("/");
+    window.location.href = "/";
   };
 
   const handleQuickDemoLogin = (role: UserRole) => {
     login(role);
-    router.push("/");
+    window.location.href = "/";
   };
 
   return (
@@ -54,6 +52,7 @@ export default function LoginPage() {
         {/* Role Tab Selector */}
         <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 grid grid-cols-2 gap-1 text-xs">
           <button
+            type="button"
             onClick={() => handleRoleTabChange("FDE")}
             className={`py-2.5 font-semibold rounded-lg transition flex items-center justify-center gap-2 ${
               selectedRole === "FDE"
@@ -65,6 +64,7 @@ export default function LoginPage() {
             <span>Forward-Deployed Engineer</span>
           </button>
           <button
+            type="button"
             onClick={() => handleRoleTabChange("MANAGER")}
             className={`py-2.5 font-semibold rounded-lg transition flex items-center justify-center gap-2 ${
               selectedRole === "MANAGER"
@@ -146,6 +146,7 @@ export default function LoginPage() {
             </span>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
+                type="button"
                 onClick={() => handleQuickDemoLogin("FDE")}
                 className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 py-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition"
               >
@@ -153,6 +154,7 @@ export default function LoginPage() {
                 <span>Demo FDE</span>
               </button>
               <button
+                type="button"
                 onClick={() => handleQuickDemoLogin("MANAGER")}
                 className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 py-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition"
               >

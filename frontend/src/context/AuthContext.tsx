@@ -63,11 +63,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithCredentials = async (email: string, password: string): Promise<boolean> => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
+
       const res = await fetch("http://localhost:8000/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -78,10 +84,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {
-      console.warn("Backend auth unavailable, falling back to role preset.");
+      console.warn("Backend auth response timed out or offline; applying instant role preset.");
     }
 
-    // Direct role fallback if offline
+    // Instant role fallback
     if (email.includes("manager")) {
       login("MANAGER");
     } else {
