@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "calmwork-ai-dev")
     GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
     GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME", "calmwork-documents")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     # AI Input Privacy Guardrail Settings
     PRIVACY_GUARDRAIL_ENABLED: bool = True
