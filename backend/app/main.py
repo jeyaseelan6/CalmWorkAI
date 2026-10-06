@@ -10,7 +10,7 @@ from app.db.database import get_db, init_db
 from app.models import Engagement, Outcome, TimelineEvent, Approval
 from app.privacy import PrivacyPolicyEngine
 from app.services import OutcomeService
-from app.agents import UnderstandAgent, ChangeImpactAnalysis
+from app.agents import UnderstandAgent, ChangeImpactAnalysis, KnowAgent, GroundedAnswer
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -38,6 +38,7 @@ privacy_engine = PrivacyPolicyEngine(
 )
 
 understand_agent = UnderstandAgent(privacy_engine=privacy_engine)
+know_agent = KnowAgent(privacy_engine=privacy_engine)
 
 
 class ChangeAnalysisRequest(BaseModel):
@@ -58,10 +59,38 @@ class ApprovalResponseRequest(BaseModel):
     outcome_id: Optional[str] = None
 
 
+class IngestDocumentRequest(BaseModel):
+    title: str
+    content: str
+
+
+class KnowledgeQueryRequest(BaseModel):
+    question: str
+    top_k: int = 3
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
-    logger.info("Database initialized successfully.")
+    # Seed default sample documentation for Acme Corp & Globex Corp into KNOW Agent vector store
+    know_agent.ingest_document(
+        engagement_id="eng-acme-001",
+        title="Acme Corp Enterprise Security & SSO Mandate",
+        raw_text=(
+            "Acme Corp enterprise security team requires all customer onboarding microservices "
+            "to authenticate via Enterprise Single Sign-On (SSO) using SAML 2.0 / OAuth2 OIDC before production cutover. "
+            "Primary security contact is John Smith (+94771234567)."
+        )
+    )
+    know_agent.ingest_document(
+        engagement_id="eng-globex-002",
+        title="Globex Legacy Data Migration CDC Specs",
+        raw_text=(
+            "Globex Corp legacy data migration pipeline utilizes Debezium Change Data Capture (CDC) stream "
+            "replicating 50M records from on-prem PostgreSQL to GCP Cloud SQL with zero downtime and a maximum 15 min cutover window."
+        )
+    )
+    logger.info("Database initialized and sample engagement documentation ingested into KNOW Agent vector store.")
 
 
 @app.get("/health", tags=["Health"])
@@ -216,7 +245,6 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
     outcome_service = OutcomeService(db)
 
     if payload.action == "APPROVE":
-        # 1. Propose and approve Version 2
         current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
         updated_criteria = list(current_outcome.success_criteria or [])
         if not any(c.get("id") == "sc-4" for c in updated_criteria):
@@ -234,7 +262,6 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
             reason="Manager approved Enterprise SSO scope expansion."
         )
 
-        # 2. Activate Version 2
         updated_eng = outcome_service.approve_outcome_version(
             engagement_id=engagement_id,
             outcome_id=new_v2.id,
@@ -259,3 +286,39 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
             "data": {"engagement_id": engagement_id, "status": "HEALTHY"},
             "message": "Outcome change proposal rejected."
         }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/documents/ingest", tags=["Knowledge"])
+async def ingest_document(engagement_id: str, payload: IngestDocumentRequest):
+    """
+    KNOW Agent Ingestion Endpoint: Ingests, anonymizes via Privacy Guardrail,
+    and indexes customer documentation into tenant vector store.
+    """
+    result = know_agent.ingest_document(
+        engagement_id=engagement_id,
+        title=payload.title,
+        raw_text=payload.content
+    )
+    return {
+        "success": True,
+        "data": result,
+        "message": f"Document '{payload.title}' ingested and indexed into KNOW Agent vector store."
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/knowledge/query", tags=["Knowledge"])
+async def query_knowledge(engagement_id: str, payload: KnowledgeQueryRequest):
+    """
+    KNOW Agent Grounded Q&A Endpoint: Retrieves tenant-isolated document chunks,
+    generates grounded answers with explicit citations, and restores text through Privacy Guardrail.
+    """
+    grounded_answer = know_agent.answer_question(
+        engagement_id=engagement_id,
+        raw_question=payload.question,
+        top_k=payload.top_k
+    )
+    return {
+        "success": True,
+        "data": grounded_answer.model_dump(),
+        "message": "Grounded Q&A response generated with source citations."
+    }

@@ -5,6 +5,7 @@ import AppShell, { CustomerEngagement } from "@/components/layout/AppShell";
 import OutcomeCard from "@/components/engagement/OutcomeCard";
 import ChangeImpactCard from "@/components/intelligence/ChangeImpactCard";
 import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
+import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import { CheckCircle, Sparkles, Building2, Clock, RefreshCw } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -212,6 +213,12 @@ export default function Home() {
                 </p>
               </div>
             )}
+
+            {/* KNOW Agent Grounded RAG Intelligence Panel */}
+            <KnowledgePanel
+              engagementId={activeCustomer.id}
+              customerName={activeCustomer.customerName}
+            />
           </div>
 
           {/* Right Sidebar: Blockers & Next Actions */}

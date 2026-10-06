@@ -49,16 +49,17 @@
 
 ---
 
-## 📌 Phase 3: KNOW Agent & Grounded RAG Pipeline
+## 📌 Phase 3: KNOW Agent & Grounded RAG Pipeline (COMPLETED ✓)
 
-- [ ] **3.1 Document Ingestion & Storage**
-  - [ ] Cloud Storage integration for document upload
-  - [ ] Text extraction, chunking, and metadata enrichment
-- [ ] **3.2 Embeddings & Vector Search**
-  - [ ] Vertex AI Embeddings generation & Vertex AI Vector Search index integration
-- [ ] **3.3 Grounded Q&A Engine**
-  - [ ] Build query pipeline enforcing engagement-level authorization
-  - [ ] Expose citation sources and evidence references in response
+- [x] **3.1 Document Ingestion & Chunking Engine (`backend/app/knowledge/ingestion.py`)**
+  - [x] Overlapping text chunking with pre-LLM Privacy Guardrail PII/secret anonymization
+- [x] **3.2 Tenant-Isolated Vector Store (`backend/app/knowledge/vector_store.py`)**
+  - [x] Multi-tenant vector index partitioned by `engagement_id` with cosine similarity retrieval
+- [x] **3.3 KNOW Agent & Grounded Q&A Engine (`backend/app/agents/know_agent.py`)**
+  - [x] Grounded Q&A engine enforcing strict engagement isolation, explicit citations, and Privacy Guardrail output restoration
+  - [x] Implement REST APIs: `POST /documents/ingest`, `POST /knowledge/query`
+- [x] **3.4 Knowledge UI Component (`frontend/src/components/knowledge/KnowledgePanel.tsx`)**
+  - [x] Added KNOW Agent Grounded Q&A panel into the cockpit dashboard with source citations and confidence badges
 
 ---
 
