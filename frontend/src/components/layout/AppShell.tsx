@@ -60,7 +60,7 @@ function NavLinks() {
   const currentNav = role === "FDE" ? fdeNav : managerNav;
 
   return (
-    <nav className="space-y-1">
+    <nav className="space-y-0.5">
       {currentNav.map((item: NavItem) => {
         const Icon = item.icon;
         const isActive = (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname?.startsWith(item.href));
@@ -68,18 +68,18 @@ function NavLinks() {
           <Link
             key={item.id}
             href={item.href}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all ${
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-all ${
               isActive
-                ? "bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600 shadow-xs"
-                : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 font-medium"
+                ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-blue-600"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium"
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-blue-600" : "text-slate-500"}`} />
+              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
               <span>{item.label}</span>
             </div>
             {item.badge ? (
-              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full border border-amber-300 font-mono font-bold">
+              <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded border border-amber-300 font-mono font-bold">
                 {item.badge}
               </span>
             ) : null}
@@ -96,40 +96,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-white text-slate-900 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-200 bg-slate-50/80 flex flex-col justify-between p-4 shrink-0">
+      <aside className="w-60 border-r border-slate-200 bg-white flex flex-col justify-between p-3.5 shrink-0">
         <div>
           {/* Logo & Application Header */}
-          <Link href="/" className="flex items-center gap-3 px-2 py-3 mb-4 border-b border-slate-200 group">
-            <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-display font-bold text-xl shadow-sm group-hover:bg-blue-700 transition">
+          <Link href="/" className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
+            <div className="h-7 w-7 rounded bg-slate-900 text-white flex items-center justify-center font-display font-bold text-sm shadow-2xs">
               C
             </div>
             <div>
-              <h1 className="font-display font-bold text-slate-900 text-base tracking-tight">CalmWork AI</h1>
-              <p className="text-xs text-blue-600 font-mono font-semibold">Dedicated Agent Workspaces</p>
+              <h1 className="font-display font-bold text-slate-900 text-sm tracking-tight">CalmWork AI</h1>
+              <p className="text-[11px] text-slate-500 font-mono">Work-Intelligence SaaS</p>
             </div>
           </Link>
 
           {/* Active Customer Switcher */}
-          <div className="mb-4 relative px-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-blue-600" />
-              Active Customer
+          <div className="mb-3 relative px-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
+              Active Engagement
             </label>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="w-full bg-white border border-slate-200 shadow-xs rounded-xl p-2.5 flex items-center justify-between text-left hover:border-slate-300 transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 flex items-center justify-between text-left hover:border-slate-300 transition-all text-xs"
             >
-              <div>
-                <span className="text-xs font-bold text-slate-900 block">{activeCustomer.customerName}</span>
-                <span className="text-xs text-slate-500 block truncate">{activeCustomer.engagementName}</span>
+              <div className="truncate">
+                <span className="font-semibold text-slate-900 block truncate">{activeCustomer.customerName}</span>
+                <span className="text-[11px] text-slate-500 block truncate">{activeCustomer.engagementName}</span>
               </div>
-              <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-1" />
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-2 right-2 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1.5 space-y-1">
+              <div className="absolute left-1 right-1 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-1 space-y-0.5">
                 <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-400">
                   Switch Customer Workspace
                 </div>
@@ -140,21 +139,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       setActiveCustomer(cust);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full text-left p-2 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                    className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between ${
                       cust.id === activeCustomer.id 
-                        ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200" 
-                        : "hover:bg-slate-100 text-slate-700"
+                        ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-blue-600" 
+                        : "hover:bg-slate-50 text-slate-700"
                     }`}
                   >
-                    <div>
-                      <div className="font-semibold">{cust.customerName}</div>
-                      <div className="text-[11px] text-slate-500">{cust.engagementName}</div>
+                    <div className="truncate">
+                      <div className="font-semibold truncate">{cust.customerName}</div>
+                      <div className="text-[10px] text-slate-500 truncate">{cust.engagementName}</div>
                     </div>
                     {cust.status === "NEEDS_REASSESSMENT" && (
-                      <span className="h-2 w-2 rounded-full bg-amber-500" title="Needs Reassessment" />
+                      <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 ml-1.5" title="Needs Reassessment" />
                     )}
                     {cust.status === "HEALTHY" && (
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" title="Healthy" />
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5" title="Healthy" />
                     )}
                   </button>
                 ))}
@@ -163,16 +162,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Role Experience Switcher */}
-          <div className="mb-5 px-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
-              Role View Context
+          <div className="mb-4 px-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Role Context
             </label>
-            <div className="grid grid-cols-2 gap-1 bg-slate-200/60 p-1 rounded-xl border border-slate-300/80 text-xs font-semibold">
+            <div className="grid grid-cols-2 gap-0.5 bg-slate-100 p-0.5 rounded-md border border-slate-200 text-xs">
               <button
                 onClick={() => switchRole("FDE")}
-                className={`py-1.5 rounded-lg transition-all text-center ${
+                className={`py-1 rounded text-center transition-all ${
                   role === "FDE" 
-                    ? "bg-white text-blue-700 shadow-xs border border-slate-300 font-bold" 
+                    ? "bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200" 
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
@@ -180,9 +179,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 onClick={() => switchRole("MANAGER")}
-                className={`py-1.5 rounded-lg transition-all text-center ${
+                className={`py-1 rounded text-center transition-all ${
                   role === "MANAGER" 
-                    ? "bg-white text-amber-700 shadow-xs border border-slate-300 font-bold" 
+                    ? "bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200" 
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
@@ -192,43 +191,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Navigation Links wrapped in Suspense */}
-          <Suspense fallback={<div className="h-24 bg-slate-100 rounded-xl animate-pulse" />}>
+          <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
             <NavLinks />
           </Suspense>
         </div>
 
         {/* User Profile & Auth Section */}
-        <div className="space-y-2.5 pt-3 border-t border-slate-200">
+        <div className="space-y-2 pt-2 border-t border-slate-200 text-xs">
           {isAuthenticated && user ? (
-            <div className="p-2.5 bg-white rounded-xl border border-slate-200 shadow-xs space-y-1.5">
+            <div className="p-2 bg-slate-50 rounded-md border border-slate-200 space-y-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center text-xs font-bold">
+                  <div className="h-6 w-6 rounded bg-slate-200 text-slate-800 font-bold flex items-center justify-center text-[10px]">
                     {user.name.split(" ").map(n => n[0]).join("")}
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900">{user.name}</p>
-                    <p className="text-[11px] text-slate-500">{user.title}</p>
+                    <p className="text-xs font-semibold text-slate-900 truncate">{user.name}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{user.title}</p>
                   </div>
                 </div>
-                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                  role === "MANAGER" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
-                }`}>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">
                   {role}
                 </span>
               </div>
               <button
                 onClick={logout}
-                className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-rose-600 py-1 transition font-medium"
+                className="w-full flex items-center justify-center gap-1 text-[11px] text-slate-500 hover:text-rose-600 py-0.5 transition font-medium"
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogOut className="h-3 w-3" />
                 <span>Sign Out</span>
               </button>
             </div>
           ) : (
             <Link
               href="/login"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-1.5 rounded-md text-xs flex items-center justify-center gap-1.5 transition"
             >
               <LogIn className="h-3.5 w-3.5" />
               <span>Sign In</span>
@@ -236,18 +233,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           {/* Developer Observability & Privacy Footer */}
-          <div className="p-2 bg-slate-100/70 rounded-xl border border-slate-200 text-xs">
+          <div className="p-2 bg-white rounded-md border border-slate-200 text-[11px]">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 text-blue-700 font-medium">
-                <Lock className="h-3 w-3" />
-                <span className="text-[11px] font-semibold">AI Guardrail</span>
+              <div className="flex items-center gap-1 text-slate-600 font-medium">
+                <Lock className="h-3 w-3 text-slate-500" />
+                <span>AI Guardrail</span>
               </div>
               <Link
                 href="/supervisor"
-                className="text-[11px] text-slate-600 hover:text-amber-700 flex items-center gap-1 font-mono font-semibold transition"
+                className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-mono font-medium transition"
                 title="Supervisor Telemetry"
               >
-                <Activity className="h-3 w-3 text-amber-600" />
+                <Activity className="h-3 w-3 text-slate-500" />
                 <span>SUPERVISOR</span>
               </Link>
             </div>
@@ -256,36 +253,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content Workspace Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
         {/* Top Header Bar */}
-        <header className="h-14 border-b border-slate-200 bg-white px-6 flex items-center justify-between shrink-0">
+        <header className="h-12 border-b border-slate-200 bg-white px-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
-            <div className="relative w-80">
-              <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+            <div className="relative w-72">
+              <Search className="absolute left-3 top-2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder={`Search ${activeCustomer.customerName} engagement...`}
-                className="w-full bg-slate-100/80 border border-slate-200 rounded-full pl-10 pr-4 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-mono font-semibold">
-              Role Context: <strong className={role === "FDE" ? "text-blue-700" : "text-amber-700"}>{role}</strong>
+            <span className="text-xs px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-mono">
+              Role: <strong className="text-slate-900">{role}</strong>
             </span>
             <Link
               href="/login"
-              className="text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 px-3 py-1.5 rounded-full flex items-center gap-1.5 transition font-medium"
+              className="text-xs text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md flex items-center gap-1.5 transition font-medium"
             >
-              <User className="h-3.5 w-3.5 text-blue-600" />
-              <span>{user ? user.name : "Switch Account"}</span>
+              <User className="h-3.5 w-3.5 text-slate-500" />
+              <span>{user ? user.name : "Account"}</span>
             </Link>
           </div>
         </header>
 
         {/* Main Body Canvas */}
-        <main className="flex-1 overflow-y-auto p-6 bg-slate-50/40">
+        <main className="flex-1 overflow-y-auto p-5">
           {children}
         </main>
       </div>

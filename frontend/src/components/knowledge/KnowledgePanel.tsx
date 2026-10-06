@@ -87,15 +87,15 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+    <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
-          <BookOpen className="h-5 w-5 text-blue-600" />
-          <h3 className="text-base font-display font-bold text-slate-900">KNOW Agent — Grounded Intelligence</h3>
+          <BookOpen className="h-4.5 w-4.5 text-slate-700" />
+          <h3 className="text-sm font-display font-bold text-slate-900">KNOW Agent — Grounded Knowledge Q&A</h3>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full font-bold">
-          <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+        <div className="flex items-center gap-1 text-xs text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded font-mono font-semibold">
+          <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
           <span>Tenant Isolated ({customerName})</span>
         </div>
       </div>
@@ -103,26 +103,26 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
       {/* Query Search Form */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
           <input
             type="text"
-            placeholder={`Ask KNOW Agent about ${customerName} specs, architecture, or requirements...`}
+            placeholder={`Query indexed architecture specs or security requirements for ${customerName}...`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-slate-100/80 border border-slate-200 rounded-full pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+            className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-full text-xs flex items-center gap-1.5 transition disabled:opacity-50 shadow-xs"
+          className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
         >
           {loading ? (
             <Sparkles className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <>
-              <span>Ask</span>
-              <Send className="h-3.5 w-3.5" />
+              <span>Ask Agent</span>
+              <Send className="h-3 w-3" />
             </>
           )}
         </button>
@@ -130,40 +130,40 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
 
       {/* Answer Output */}
       {answerData && (
-        <div className="space-y-3 pt-3 border-t border-slate-200">
-          <div className="flex items-center justify-between text-xs font-semibold">
-            <span className="text-slate-600">Grounded Q&A Response:</span>
+        <div className="space-y-3 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500 font-medium">Grounded Knowledge Synthesis:</span>
             <div className="flex items-center gap-2">
-              <span className="text-emerald-700 font-mono font-bold">Confidence: {Math.round(answerData.confidence_score * 100)}%</span>
+              <span className="text-slate-700 font-mono font-bold">Confidence: {Math.round(answerData.confidence_score * 100)}%</span>
               {answerData.privacy_scrubbed && (
-                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-mono text-[11px] font-bold">
-                  Privacy Scrubbed
+                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-mono text-[10px] font-bold">
+                  Privacy Boundary Verified
                 </span>
               )}
             </div>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm text-slate-800 leading-relaxed font-medium">
+          <div className="p-3.5 bg-slate-50 rounded-md border border-slate-200 text-xs text-slate-900 leading-relaxed font-medium">
             {answerData.answer}
           </div>
 
           {/* Citations */}
           {answerData.citations.length > 0 && (
-            <div className="space-y-2">
-              <span className="text-xs font-display font-bold text-slate-500 uppercase tracking-wider">
-                Source Citations & References
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">
+                Source Document Citations
               </span>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {answerData.citations.map((c, i) => (
-                  <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1.5 shadow-2xs">
-                    <div className="flex items-center justify-between font-bold text-blue-800">
+                  <div key={i} className="p-2.5 bg-white rounded border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-semibold text-slate-900">
                       <span className="flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-blue-600" />
+                        <FileText className="h-3.5 w-3.5 text-slate-500" />
                         {c.document_title}
                       </span>
-                      <span className="text-slate-500 font-mono text-[11px]">Score: {c.relevance_score}</span>
+                      <span className="text-slate-500 font-mono text-[10px]">Relevance: {c.relevance_score}</span>
                     </div>
-                    <p className="text-slate-600 italic">"{c.snippet}"</p>
+                    <p className="text-slate-600 italic text-[11px]">"{c.snippet}"</p>
                   </div>
                 ))}
               </div>
