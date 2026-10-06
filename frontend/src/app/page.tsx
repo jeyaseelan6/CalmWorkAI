@@ -95,10 +95,10 @@ export default function HomePage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-teal-400" />
-              <h1 className="text-xl font-bold text-slate-100">{activeCustomer.customerName} Cockpit</h1>
+              <Building2 className="h-6 w-6 text-teal-400 shrink-0" />
+              <h1 className="font-display text-2xl font-bold text-slate-100 tracking-tight">{activeCustomer.customerName} Cockpit</h1>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-sm text-slate-300 mt-1">
               Active outcome statement and FDE execution workflow for {activeCustomer.engagementName}
             </p>
           </div>
@@ -150,18 +150,18 @@ export default function HomePage() {
 
         {/* 3. Specialized AI Agent Workspaces Navigation Grid */}
         <div className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h2 className="font-display text-sm font-bold uppercase tracking-wider text-slate-300">
             Dedicated Agent Intelligence Workspaces
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             {/* MOVE Agent Link */}
             <Link
               href="/actions"
               className="bg-slate-900 border border-slate-800 hover:border-teal-500/40 rounded-xl p-5 group transition space-y-2 block shadow-lg"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-bold text-teal-300 text-sm">
-                  <Zap className="h-4 w-4 text-teal-400" />
+                <div className="flex items-center gap-2 font-display font-bold text-teal-300 text-base">
+                  <Zap className="h-5 w-5 text-teal-400" />
                   <span>MOVE Agent — Next Best Action</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-slate-500 group-hover:translate-x-1 group-hover:text-teal-400 transition" />

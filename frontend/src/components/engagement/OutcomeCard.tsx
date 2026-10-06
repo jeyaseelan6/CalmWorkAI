@@ -37,26 +37,26 @@ export default function OutcomeCard({
       {/* Header & Meta */}
       <div className="flex items-start justify-between">
         <div>
-          <span className="text-xs font-mono text-teal-400">{customerName}</span>
-          <h2 className="text-lg font-semibold text-slate-100">{engagementName}</h2>
+          <span className="text-xs font-mono font-semibold text-teal-400 uppercase tracking-wider">{customerName}</span>
+          <h2 className="text-xl font-display font-bold text-slate-100">{engagementName}</h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 font-medium">
+          <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 font-medium">
             <AlertCircle className="h-3.5 w-3.5" />
             Needs Reassessment
           </span>
-          <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+          <span className="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono font-semibold">
             Version {version}
           </span>
         </div>
       </div>
 
       {/* Outcome Statement */}
-      <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+      <div className="bg-slate-950 p-4.5 rounded-xl border border-slate-800">
+        <label className="text-xs font-display font-bold uppercase tracking-wider text-teal-400 block mb-1">
           Current Customer Outcome
         </label>
-        <p className="text-sm font-medium text-slate-100 leading-relaxed">
+        <p className="text-base font-semibold text-slate-100 leading-relaxed">
           "{outcomeStatement}"
         </p>
       </div>
@@ -64,13 +64,13 @@ export default function OutcomeCard({
       {/* Progress Bar */}
       <div>
         <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-          <span className="text-slate-400 flex items-center gap-1">
-            <TrendingUp className="h-3.5 w-3.5 text-teal-400" />
+          <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+            <TrendingUp className="h-4 w-4 text-teal-400" />
             Outcome Progress
           </span>
-          <span className="text-teal-400 font-mono">{progress}%</span>
+          <span className="text-teal-300 font-mono font-bold text-sm">{progress}%</span>
         </div>
-        <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+        <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
           <div
             className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full transition-all duration-500"
             style={{ width: `${progress}%` }}
@@ -80,16 +80,16 @@ export default function OutcomeCard({
 
       {/* Success Criteria / Definition of Done */}
       <div>
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+        <h4 className="text-xs font-display font-bold uppercase tracking-wider text-slate-400 mb-2.5">
           Success Criteria / Definition of Done (DoD)
         </h4>
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {successCriteria.map((item) => (
-            <li key={item.id} className="flex items-center gap-2.5 text-xs text-slate-200">
+            <li key={item.id} className="flex items-center gap-3 text-sm text-slate-200">
               {item.completed ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
               ) : (
-                <Circle className="h-4 w-4 text-slate-500 shrink-0" />
+                <Circle className="h-4.5 w-4.5 text-slate-500 shrink-0" />
               )}
               <span className={item.completed ? "line-through text-slate-400" : "font-medium"}>
                 {item.title}
