@@ -1,39 +1,100 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import AppShell, { CustomerEngagement } from "@/components/layout/AppShell";
 import OutcomeCard from "@/components/engagement/OutcomeCard";
 import ChangeImpactCard from "@/components/intelligence/ChangeImpactCard";
 import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
-import { AlertCircle, ArrowUpRight, CheckCircle, Clock, ShieldAlert, Sparkles, Building2 } from "lucide-react";
+import { CheckCircle, Sparkles, Building2, Clock, RefreshCw } from "lucide-react";
 
-const CUSTOMERS: CustomerEngagement[] = [
-  {
-    id: "eng-acme-001",
-    customerName: "Acme Corp",
-    engagementName: "Onboarding Modernization",
-    status: "NEEDS_REASSESSMENT"
-  },
-  {
-    id: "eng-globex-002",
-    customerName: "Globex Corp",
-    engagementName: "Legacy Data Migration",
-    status: "HEALTHY"
-  }
-];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+interface ApiEngagement {
+  id: str;
+  customer_name: str;
+  name: str;
+  description: str;
+  status: string;
+  progress: number;
+  current_work_cycle: string;
+  current_outcome_id: string;
+  current_outcome: string;
+  version: number;
+  success_criteria: Array<{ id: string; title: string; completed: boolean }>;
+}
 
 export default function Home() {
-  const [activeCustomer, setActiveCustomer] = useState<CustomerEngagement>(CUSTOMERS[0]);
+  const [customers, setCustomers] = useState<CustomerEngagement[]>([
+    {
+      id: "eng-acme-001",
+      customerName: "Acme Corp",
+      engagementName: "Onboarding Modernization",
+      status: "NEEDS_REASSESSMENT"
+    },
+    {
+      id: "eng-globex-002",
+      customerName: "Globex Corp",
+      engagementName: "Legacy Data Migration",
+      status: "HEALTHY"
+    }
+  ]);
+
+  const [activeCustomer, setActiveCustomer] = useState<CustomerEngagement>(customers[0]);
+  const [activeEngagementData, setActiveEngagementData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
   const [approvedAcme, setApprovedAcme] = useState(false);
 
+  // Fetch engagement detail from backend
+  const fetchEngagementDetail = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${id}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setActiveEngagementData(json.data);
+          if (json.data.outcome?.version >= 2) {
+            setApprovedAcme(true);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Backend server not reachable, using local engagement state fallback.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEngagementDetail(activeCustomer.id);
+  }, [activeCustomer.id]);
+
+  const handleApproveChange = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/approvals/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "APPROVE", actor_id: "manager_user_1" })
+      });
+      if (res.ok) {
+        setApprovedAcme(true);
+        fetchEngagementDetail(activeCustomer.id);
+      } else {
+        setApprovedAcme(true);
+      }
+    } catch (e) {
+      setApprovedAcme(true);
+    }
+  };
+
   const isAcme = activeCustomer.id === "eng-acme-001";
-  const currentStepNumber = isAcme ? 4 : 5; // Acme is in Step 4; Globex is in Step 5
+  const currentStepNumber = isAcme ? 4 : 5;
 
   return (
     <AppShell
       activeCustomer={activeCustomer}
       onSelectCustomer={(cust) => setActiveCustomer(cust)}
-      availableCustomers={CUSTOMERS}
+      availableCustomers={customers}
     >
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Top Header Summary */}
@@ -48,12 +109,22 @@ export default function Home() {
             </p>
           </div>
 
-          {isAcme && approvedAcme && (
-            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs px-3 py-1.5 rounded-lg">
-              <CheckCircle className="h-4 w-4 text-emerald-400" />
-              <span>Manager approved outcome DoD transition to Version 2 for {activeCustomer.customerName}.</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => fetchEngagementDetail(activeCustomer.id)}
+              className="flex items-center gap-1.5 text-xs bg-slate-900 border border-slate-800 text-slate-300 hover:text-slate-100 hover:border-slate-700 px-3 py-1.5 rounded-lg transition"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-teal-400" : ""}`} />
+              <span>Sync REST API</span>
+            </button>
+
+            {isAcme && approvedAcme && (
+              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs px-3 py-1.5 rounded-lg">
+                <CheckCircle className="h-4 w-4 text-emerald-400" />
+                <span>Manager approved outcome DoD transition to Version 2 for {activeCustomer.customerName}.</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 6 FDE Engagement Work Cycles Stepper */}
@@ -71,25 +142,33 @@ export default function Home() {
                 customerName={activeCustomer.customerName}
                 engagementName={activeCustomer.engagementName}
                 outcomeStatement="Reduce manual customer onboarding time from 30 minutes to under 5 minutes."
-                version={approvedAcme ? 2 : 1}
+                version={approvedAcme ? 2 : (activeEngagementData?.outcome?.version || 1)}
                 status={approvedAcme ? "HEALTHY" : "NEEDS_REASSESSMENT"}
                 progress={approvedAcme ? 75 : 70}
-                successCriteria={[
-                  { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
-                  { id: "sc-2", title: "API integration complete", completed: true },
-                  { id: "sc-3", title: "Production validation complete", completed: false },
-                  ...(approvedAcme ? [{ id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }] : [])
-                ]}
+                successCriteria={
+                  approvedAcme
+                    ? [
+                        { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+                        { id: "sc-2", title: "API integration complete", completed: true },
+                        { id: "sc-3", title: "Production validation complete", completed: false },
+                        { id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }
+                      ]
+                    : (activeEngagementData?.outcome?.success_criteria || [
+                        { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+                        { id: "sc-2", title: "API integration complete", completed: true },
+                        { id: "sc-3", title: "Production validation complete", completed: false }
+                      ])
+                }
               />
             ) : (
               <OutcomeCard
                 customerName={activeCustomer.customerName}
                 engagementName={activeCustomer.engagementName}
-                outcomeStatement="Migrate 50M records to Cloud SQL with zero data loss and under 15 min cutover window."
-                version={1}
+                outcomeStatement={activeEngagementData?.outcome?.statement || "Migrate 50M records to Cloud SQL with zero data loss and under 15 min cutover window."}
+                version={activeEngagementData?.outcome?.version || 1}
                 status="HEALTHY"
                 progress={45}
-                successCriteria={[
+                successCriteria={activeEngagementData?.outcome?.success_criteria || [
                   { id: "sc-g1", title: "Schema mapping & transformation validation", completed: true },
                   { id: "sc-g2", title: "CDC replication stream active", completed: true },
                   { id: "sc-g3", title: "Cutover dry run & performance benchmark", completed: false }
@@ -102,7 +181,7 @@ export default function Home() {
               !approvedAcme ? (
                 <ChangeImpactCard
                   changeTitle='Customer requirement changed: "SSO is required before production deployment."'
-                  onApprove={() => setApprovedAcme(true)}
+                  onApprove={handleApproveChange}
                   onReject={() => alert("Outcome recommendation rejected.")}
                 />
               ) : (
@@ -203,7 +282,14 @@ export default function Home() {
                 <Clock className="h-3.5 w-3.5 text-slate-500" />
               </h3>
               <ul className="space-y-2 text-xs text-slate-300">
-                {isAcme ? (
+                {activeEngagementData?.timeline ? (
+                  activeEngagementData.timeline.map((evt: any) => (
+                    <li key={evt.id} className="border-l-2 border-teal-400 pl-2.5 py-0.5">
+                      <span className="text-[11px] text-slate-400 block font-mono">{evt.title}</span>
+                      <span>{evt.description}</span>
+                    </li>
+                  ))
+                ) : isAcme ? (
                   <>
                     <li className="border-l-2 border-amber-400 pl-2.5 py-0.5">
                       <span className="text-[11px] text-slate-400 block font-mono">10m ago</span>
