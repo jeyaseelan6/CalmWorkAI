@@ -1,0 +1,31 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+.vercel
+*.log
+
+# Python / Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# Database & Environment
+calmwork_dev.db
+*.db
+*.sqlite3
+.env
+.env.local
+.env.production
+
+# IDE & System
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
