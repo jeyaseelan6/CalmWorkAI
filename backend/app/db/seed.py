@@ -12,72 +12,109 @@ def seed_demo_data():
     db = SessionLocal()
     
     try:
-        # Check if already seeded
-        existing = db.query(Engagement).filter(Engagement.id == "eng-acme-001").first()
-        if existing:
-            logger.info("Demo engagement data already seeded.")
-            return
+        # 1. Customer 1: Acme Corp — Onboarding Modernization
+        existing_acme = db.query(Engagement).filter(Engagement.id == "eng-acme-001").first()
+        if not existing_acme:
+            acme_eng = Engagement(
+                id="eng-acme-001",
+                customer_name="Acme Corp",
+                name="Onboarding Modernization",
+                description="Automating onboarding workflow and integrating API endpoints.",
+                status=EngagementStatus.NEEDS_REASSESSMENT,
+                progress=70,
+                current_outcome_id="out-acme-v1",
+                created_by="fde_user_1",
+                created_at=datetime.utcnow()
+            )
+            db.add(acme_eng)
 
-        # 1. Create Engagement
-        engagement = Engagement(
-            id="eng-acme-001",
-            customer_name="Acme Corp",
-            name="Onboarding Modernization",
-            description="Automating onboarding workflow and integrating API endpoints.",
-            status=EngagementStatus.NEEDS_REASSESSMENT,
-            progress=70,
-            current_outcome_id="out-acme-v1",
-            created_by="fde_user_1",
-            created_at=datetime.utcnow()
-        )
-        db.add(engagement)
+            acme_outcome = Outcome(
+                id="out-acme-v1",
+                engagement_id="eng-acme-001",
+                version=1,
+                statement="Reduce manual customer onboarding time from 30 minutes to under 5 minutes.",
+                success_criteria=[
+                    {"id": "sc-1", "title": "Automated onboarding workflow implemented", "completed": True},
+                    {"id": "sc-2", "title": "API integration complete", "completed": True},
+                    {"id": "sc-3", "title": "Production validation complete", "completed": False}
+                ],
+                status=OutcomeStatus.APPROVED,
+                created_by="fde_user_1",
+                approved_by="manager_user_1",
+                created_at=datetime.utcnow(),
+                approved_at=datetime.utcnow()
+            )
+            db.add(acme_outcome)
 
-        # 2. Create Initial Outcome (v1)
-        outcome_v1 = Outcome(
-            id="out-acme-v1",
-            engagement_id="eng-acme-001",
-            version=1,
-            statement="Reduce manual customer onboarding time from 30 minutes to under 5 minutes.",
-            success_criteria=[
-                {"id": "sc-1", "title": "Automated onboarding workflow implemented", "completed": True},
-                {"id": "sc-2", "title": "API integration complete", "completed": True},
-                {"id": "sc-3", "title": "Production validation complete", "completed": False}
-            ],
-            status=OutcomeStatus.APPROVED,
-            created_by="fde_user_1",
-            approved_by="manager_user_1",
-            created_at=datetime.utcnow(),
-            approved_at=datetime.utcnow()
-        )
-        db.add(outcome_v1)
+            db.add(TimelineEvent(
+                id="evt-acme-001",
+                engagement_id="eng-acme-001",
+                event_type="OUTCOME_CREATED",
+                title="Initial Outcome Established",
+                description="Outcome v1 created and approved by manager.",
+                actor_type="MANAGER",
+                actor_id="manager_user_1",
+                created_at=datetime.utcnow()
+            ))
+            db.add(TimelineEvent(
+                id="evt-acme-002",
+                engagement_id="eng-acme-001",
+                event_type="REQUIREMENT_ADDED",
+                title="New Customer Requirement",
+                description="Customer security team stated: Enterprise SSO is required before production deployment.",
+                actor_type="FDE",
+                actor_id="fde_user_1",
+                created_at=datetime.utcnow()
+            ))
 
-        # 3. Create Timeline Event
-        timeline_1 = TimelineEvent(
-            id="evt-001",
-            engagement_id="eng-acme-001",
-            event_type="OUTCOME_CREATED",
-            title="Initial Outcome Established",
-            description="Outcome v1 created and approved by manager.",
-            actor_type="MANAGER",
-            actor_id="manager_user_1",
-            created_at=datetime.utcnow()
-        )
-        timeline_2 = TimelineEvent(
-            id="evt-002",
-            engagement_id="eng-acme-001",
-            event_type="REQUIREMENT_ADDED",
-            title="New Customer Requirement",
-            description="Customer security team stated: Enterprise SSO is required before production deployment.",
-            actor_type="FDE",
-            actor_id="fde_user_1",
-            created_at=datetime.utcnow()
-        )
-        db.add(timeline_1)
-        db.add(timeline_2)
+        # 2. Customer 2: Globex Corp — Legacy Data Migration
+        existing_globex = db.query(Engagement).filter(Engagement.id == "eng-globex-002").first()
+        if not existing_globex:
+            globex_eng = Engagement(
+                id="eng-globex-002",
+                customer_name="Globex Corp",
+                name="Legacy Data Migration",
+                description="Migrating on-prem DB tables to Cloud SQL with zero downtime.",
+                status=EngagementStatus.HEALTHY,
+                progress=45,
+                current_outcome_id="out-globex-v1",
+                created_by="fde_user_1",
+                created_at=datetime.utcnow()
+            )
+            db.add(globex_eng)
+
+            globex_outcome = Outcome(
+                id="out-globex-v1",
+                engagement_id="eng-globex-002",
+                version=1,
+                statement="Migrate 50M records to Cloud SQL with zero data loss and under 15 min cutover window.",
+                success_criteria=[
+                    {"id": "sc-g1", "title": "Schema mapping & transformation validation", "completed": True},
+                    {"id": "sc-g2", "title": "CDC replication stream active", "completed": True},
+                    {"id": "sc-g3", "title": "Cutover dry run & performance benchmark", "completed": False}
+                ],
+                status=OutcomeStatus.APPROVED,
+                created_by="fde_user_1",
+                approved_by="manager_user_1",
+                created_at=datetime.utcnow(),
+                approved_at=datetime.utcnow()
+            )
+            db.add(globex_outcome)
+
+            db.add(TimelineEvent(
+                id="evt-globex-001",
+                engagement_id="eng-globex-002",
+                event_type="OUTCOME_CREATED",
+                title="Migration Outcome Established",
+                description="Target cutover window and zero data loss DoD approved.",
+                actor_type="MANAGER",
+                actor_id="manager_user_1",
+                created_at=datetime.utcnow()
+            ))
 
         db.commit()
-        logger.info("Successfully seeded demo engagement scenario data!")
-        
+        logger.info("Successfully seeded multi-customer engagement data for FDE!")
+
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to seed demo data: {str(e)}")
