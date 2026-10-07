@@ -4,6 +4,7 @@ import React from "react";
 import AppShell from "@/components/layout/AppShell";
 import OutcomeCard from "@/components/engagement/OutcomeCard";
 import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
+import DailyWorkBriefing from "@/components/engagement/DailyWorkBriefing";
 import { useAuth } from "@/context/AuthContext";
 import { useEngagement } from "@/context/EngagementContext";
 import { 
@@ -147,6 +148,9 @@ export default function HomePage() {
 
         {/* 2. Clean 6-Step FDE Work Cycle Stepper */}
         <WorkCycleStepper currentStepNumber={currentStepNumber} customerName={activeCustomer.customerName} />
+
+        {/* 3. Proactive Intelligence Daily Work Briefing */}
+        <DailyWorkBriefing />
 
         {/* 3. Specialized AI Agent Workspaces Navigation Grid */}
         <div className="space-y-2.5">

@@ -22,8 +22,10 @@ import {
   Activity,
   Sparkles,
   Zap,
-  Send
+  Send,
+  Plus
 } from "lucide-react";
+import RecordWorknoteDrawer from "@/components/layout/RecordWorknoteDrawer";
 
 export interface NavItem {
   id: string;
@@ -39,22 +41,21 @@ function NavLinks() {
   const pathname = usePathname();
 
   const fdeNav: NavItem[] = [
-    { id: "my-work", label: "My Work Cockpit", href: "/", icon: Briefcase },
-    { id: "actions", label: "Next Best Action (MOVE)", href: "/actions", icon: Zap },
-    { id: "intelligence", label: "Scope Impact (UNDERSTAND)", href: "/intelligence", icon: Sparkles },
-    { id: "knowledge", label: "Knowledge Base (KNOW)", href: "/knowledge", icon: BookOpen },
-    { id: "delivery", label: "Customer Studio (DELIVER)", href: "/delivery", icon: Send },
-    { id: "timeline", label: "Audit Timeline", href: "/timeline", icon: Clock },
+    { id: "my-work", label: "Today (Cockpit)", href: "/", icon: Briefcase },
+    { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
+    { id: "knowledge", label: "Knowledge (KNOW)", href: "/knowledge", icon: BookOpen },
+    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
   ];
 
   const managerNav: NavItem[] = [
-    { id: "control-center", label: "Control Center", href: "/", icon: LayoutDashboard },
-    { id: "approvals", label: "Manager Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
-    { id: "actions", label: "Next Best Action (MOVE)", href: "/actions", icon: Zap },
-    { id: "intelligence", label: "Scope Impact (UNDERSTAND)", href: "/intelligence", icon: Sparkles },
-    { id: "knowledge", label: "Knowledge Base (KNOW)", href: "/knowledge", icon: BookOpen },
-    { id: "delivery", label: "Customer Studio (DELIVER)", href: "/delivery", icon: Send },
-    { id: "timeline", label: "Audit Timeline", href: "/timeline", icon: Clock },
+    { id: "control-center", label: "Today (Control Center)", href: "/", icon: LayoutDashboard },
+    { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "knowledge", label: "Knowledge (KNOW)", href: "/knowledge", icon: BookOpen },
+    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
+    { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
   ];
 
   const currentNav = role === "FDE" ? fdeNav : managerNav;
@@ -94,6 +95,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, role, switchRole, logout, isAuthenticated } = useAuth();
   const { customers, activeCustomer, setActiveCustomer } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
@@ -268,6 +270,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsWorknoteDrawerOpen(true)}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 transition shadow-2xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Record Worknote</span>
+            </button>
+
             <span className="text-xs px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-mono">
               Role: <strong className="text-slate-900">{role}</strong>
             </span>
@@ -285,6 +295,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto p-5">
           {children}
         </main>
+
+        {/* Global Quick Context Capture Drawer */}
+        <RecordWorknoteDrawer
+          isOpen={isWorknoteDrawerOpen}
+          onClose={() => setIsWorknoteDrawerOpen(false)}
+        />
       </div>
     </div>
   );

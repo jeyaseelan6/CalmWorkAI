@@ -558,3 +558,119 @@ async def get_supervisor_summary(engagement_id: str, db: Session = Depends(get_d
         "data": summary.model_dump(),
         "message": "Supervisor 360-degree multi-agent summary generated successfully."
     }
+
+
+class UniversalSupervisorQueryPayload(BaseModel):
+    query: str
+
+
+class WorknotePayload(BaseModel):
+    event_type: str = "WORKNOTE"  # WORKNOTE, CUSTOMER_INPUT, DECISION, OBSERVATION, PROGRESS
+    title: str
+    description: str
+    actor_name: str = "FDE User"
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/supervisor/query", tags=["Supervisor"])
+async def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQueryPayload, db: Session = Depends(get_db)):
+    """
+    Universal Conversational Interface ('Ask CalmWork'):
+    Receives user query, orchestrates multi-agent reasoning, enforces privacy and anti-hallucination policies.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    statement = current_outcome.statement if current_outcome else ""
+    criteria = current_outcome.success_criteria if current_outcome else []
+    version = current_outcome.version if current_outcome else 1
+    approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
+
+    response = supervisor_coordinator.query_supervisor(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        raw_query=payload.query,
+        current_work_cycle=eng.current_work_cycle,
+        status=eng.status,
+        outcome_statement=statement,
+        success_criteria=criteria,
+        version=version,
+        pending_approvals=len(approvals)
+    )
+
+    return {
+        "success": True,
+        "data": response.model_dump(),
+        "message": "Supervisor universal query processed successfully."
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/supervisor/brief", tags=["Supervisor"])
+async def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)):
+    """
+    Proactive Intelligence Mode: Generates a 10-point Daily Work Briefing.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    statement = current_outcome.statement if current_outcome else ""
+    version = current_outcome.version if current_outcome else 1
+    approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
+
+    brief = supervisor_coordinator.generate_daily_work_brief(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        status=eng.status,
+        outcome_statement=statement,
+        version=version,
+        pending_approvals=len(approvals)
+    )
+
+    return {
+        "success": True,
+        "data": brief.model_dump(),
+        "message": "Daily work intelligence brief generated successfully."
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/timeline/worknotes", tags=["Timeline"])
+async def record_worknote(engagement_id: str, payload: WorknotePayload, db: Session = Depends(get_db)):
+    """
+    Fast Context Capture Endpoint ('Do work -> record what matters'):
+    Logs FDE worknote/observation/decision into PostgreSQL shared memory timeline.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    evt_id = f"evt-{uuid.uuid4().hex[:8]}"
+    evt = TimelineEvent(
+        id=evt_id,
+        engagement_id=engagement_id,
+        event_type=payload.event_type.upper(),
+        title=payload.title,
+        description=payload.description,
+        actor_type="FDE",
+        actor_id=payload.actor_name,
+        created_at=datetime.utcnow()
+    )
+    db.add(evt)
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "id": evt.id,
+            "engagement_id": evt.engagement_id,
+            "event_type": evt.event_type,
+            "title": evt.title,
+            "description": evt.description,
+            "actor_id": evt.actor_id,
+            "created_at": evt.created_at.isoformat()
+        },
+        "message": "Worknote recorded into shared memory timeline successfully."
+    }
+
