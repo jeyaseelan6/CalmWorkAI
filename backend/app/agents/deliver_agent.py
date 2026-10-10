@@ -1,16 +1,29 @@
 """
 DELIVER Agent — Executive Customer Communication Engine.
+Built on Google Agent Development Kit (ADK).
 Translates technical engineering progress, DoD checklist completion, and work cycle steps into
 executive business language updates suitable for customer stakeholders, protected by AI Privacy Guardrail.
 """
 
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
-import logging
 from datetime import datetime, timezone
+import json
+import logging
 
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions import BaseSessionService
+
+from app.config import settings
 from app.privacy import PrivacyPolicyEngine
-from app.ai.gemini_service import GeminiService
+from app.agents.adk_runtime import (
+    get_adk_model,
+    get_session_service,
+    create_privacy_guardrail_callback,
+    create_adk_runner,
+    execute_adk_runner
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +43,50 @@ class CustomerUpdateDraft(BaseModel):
     approval_required: bool = True
 
 
+DELIVER_INSTRUCTION = (
+    "You are the CalmWork DELIVER Agent, an executive communication specialist for Forward-Deployed Engineers. "
+    "Your objective is to translate technical engineering milestone progress into executive, polished business communication "
+    "suitable for enterprise customer stakeholders. "
+    "Never claim unverified completions. Only reference verified milestones and criteria. "
+    "Drafts must always require human manager approval before distribution. "
+    "Return JSON matching keys: subject (string), executive_summary (string), "
+    "key_milestones_achieved (list of strings), next_milestone_target (string), customer_action_items (list of strings)."
+)
+
+
 class DeliverAgent:
     """
-    DELIVER Agent: Translates technical outcomes and DoD progress into
-    manager-approved, executive-ready customer updates.
+    DELIVER Agent: Google ADK-powered executive communication drafting engine.
+    Translates technical outcomes and DoD progress into manager-approved customer updates.
     Does NOT auto-send communications. Manager review & approval required.
     """
 
     def __init__(
         self,
         privacy_engine: Optional[PrivacyPolicyEngine] = None,
-        gemini_service: Optional[GeminiService] = None
+        session_service: Optional[BaseSessionService] = None,
+        gemini_service: Optional[Any] = None  # retained for backward compatibility
     ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
-        self.gemini_service = gemini_service or GeminiService(privacy_engine=self.privacy_engine)
+        self.session_service = session_service or get_session_service()
+        self.model = get_adk_model()
+
+        # Build genuine Google ADK Agent
+        self.adk_agent = Agent(
+            name="deliver_agent",
+            description="Translates verified technical milestones into executive stakeholder communications requiring manager approval.",
+            model=self.model,
+            instruction=DELIVER_INSTRUCTION,
+            output_schema=CustomerUpdateDraft,
+            before_model_callback=create_privacy_guardrail_callback(self.privacy_engine)
+        )
+
+        # ADK Runner for standalone execution
+        self.runner = create_adk_runner(
+            agent=self.adk_agent,
+            session_service=self.session_service,
+            app_name=settings.ADK_APP_NAME
+        )
 
     def generate_customer_update(
         self,
@@ -57,11 +100,11 @@ class DeliverAgent:
         format_type: str = "EXECUTIVE_SUMMARY"
     ) -> CustomerUpdateDraft:
         """
-        Generates executive business update draft from technical engagement progress.
+        Generates executive business update draft from technical engagement progress using Google ADK.
         """
         raw_notes_text = raw_notes or ""
 
-        # 1. Privacy Guardrail Anonymization
+        # 1. Pre-LLM Privacy Guardrail Anonymization
         anonymized_notes, mapping = self.privacy_engine.process_llm_input(
             text=f"{customer_name} {raw_notes_text}",
             session_id=engagement_id
@@ -71,6 +114,7 @@ class DeliverAgent:
         completed_items = [c.get("title", "") for c in success_criteria if c.get("completed")]
         pending_items = [c.get("title", "") for c in success_criteria if not c.get("completed")]
 
+        # 2. Baseline content structure
         if format_type == "TECHNICAL_LOG":
             subject = f"Technical Progress Log: {customer_name} — {engagement_name}"
             exec_summary = (
@@ -94,31 +138,57 @@ class DeliverAgent:
         next_target = pending_items[0] if pending_items else "Final production validation and handover."
         customer_actions = ["Review milestone progress during next scheduled sync."]
 
-        # Try live Gemini executive drafting if available
-        if self.gemini_service and self.gemini_service.api_key:
-            gemini_draft = self.gemini_service.draft_customer_update(
-                customer_name=customer_name,
-                engagement_name=engagement_name,
-                outcome_statement=outcome_statement,
-                current_work_cycle=str(current_work_cycle),
-                completed_milestones=completed_items,
-                pending_milestones=pending_items,
-                format_type=format_type,
-                raw_notes=raw_notes_text,
-                session_id=engagement_id
-            )
-            if gemini_draft and isinstance(gemini_draft, dict):
-                if gemini_draft.get("subject"):
-                    subject = gemini_draft["subject"]
-                if gemini_draft.get("executive_summary"):
-                    exec_summary = gemini_draft["executive_summary"]
-                if gemini_draft.get("key_milestones_achieved"):
-                    milestones = gemini_draft["key_milestones_achieved"]
-                if gemini_draft.get("next_milestone_target"):
-                    next_target = gemini_draft["next_milestone_target"]
-                if gemini_draft.get("customer_action_items"):
-                    customer_actions = gemini_draft["customer_action_items"]
+        # 3. Construct ADK Prompt
+        prompt = (
+            f"Customer: {customer_name}\n"
+            f"Engagement Name: {engagement_name}\n"
+            f"Target Outcome: {outcome_statement}\n"
+            f"Format Type: {format_type}\n"
+            f"Active Work Cycle: {current_work_cycle}\n"
+            f"Completed Milestones: {json.dumps(completed_items)}\n"
+            f"Pending Milestones: {json.dumps(pending_items)}\n"
+            f"Engineer Notes: {anonymized_notes}"
+        )
 
+        # 4. Attempt ADK Runner Execution
+        adk_response_text = None
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI)
+        if has_credentials:
+            try:
+                adk_response_text = execute_adk_runner(
+                    runner=self.runner,
+                    user_id="fde_user",
+                    session_id=engagement_id,
+                    message_text=prompt
+                )
+            except Exception as e:
+                logger.warning(f"ADK DELIVER runner execution failed ({str(e)}); using deterministic template draft.")
+
+        # 5. Parse ADK response if received
+        if adk_response_text:
+            try:
+                cleaned = adk_response_text.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.split("```")[1]
+                    if cleaned.startswith("json"):
+                        cleaned = cleaned[4:]
+                    cleaned = cleaned.strip()
+
+                parsed = json.loads(cleaned)
+                if parsed.get("subject"):
+                    subject = parsed["subject"]
+                if parsed.get("executive_summary"):
+                    exec_summary = parsed["executive_summary"]
+                if parsed.get("key_milestones_achieved"):
+                    milestones = parsed["key_milestones_achieved"]
+                if parsed.get("next_milestone_target"):
+                    next_target = parsed["next_milestone_target"]
+                if parsed.get("customer_action_items"):
+                    customer_actions = parsed["customer_action_items"]
+            except Exception as parse_err:
+                logger.warning(f"Failed to parse ADK DELIVER output ({parse_err}); using template draft.")
+
+        # 6. Sanitize tokens back for authorized display
         clean_summary = self.privacy_engine.sanitize_output(exec_summary, mapping)
         clean_subject = self.privacy_engine.sanitize_output(subject, mapping)
 

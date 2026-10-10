@@ -1,15 +1,28 @@
 """
 MOVE Agent — Execution Velocity & Next Best Action Engine.
+Built on Google Agent Development Kit (ADK).
 Evaluates active blockers, dependencies, and gating criteria across the 6 FDE Work Cycles,
 determining the single highest-impact Next Best Action with explicit 'Why Now' justification.
 """
 
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
+import json
 import logging
 
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions import BaseSessionService
+
+from app.config import settings
 from app.privacy import PrivacyPolicyEngine
-from app.ai.gemini_service import GeminiService
+from app.agents.adk_runtime import (
+    get_adk_model,
+    get_session_service,
+    create_privacy_guardrail_callback,
+    create_adk_runner,
+    execute_adk_runner
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +54,50 @@ class NextBestActionRecommendation(BaseModel):
     privacy_scrubbed: bool = True
 
 
+MOVE_INSTRUCTION = (
+    "You are the CalmWork MOVE Agent, an execution velocity specialist for Forward-Deployed Engineers. "
+    "Your objective is to determine the single highest-impact Next Best Action to maintain delivery velocity "
+    "and clear gating criteria across the 6 FDE Work Cycles. "
+    "Analyze active blockers, gating criteria, outcome status, and work cycle phase. "
+    "Return JSON matching keys: action_title (string), situation (string), recommendation (string), "
+    "why_now (string), impact (string), evidence (list of strings), confidence ('High'|'Medium'|'Low'), "
+    "approval_required (bool), priority_level ('CRITICAL'|'HIGH_PRIORITY'|'MEDIUM_PRIORITY'|'ROUTINE'), "
+    "affected_role ('FDE'|'MANAGER'|'CUSTOMER_OWNER')."
+)
+
+
 class MoveAgent:
     """
-    MOVE Agent: Determines optimal execution path for Forward-Deployed Engineers.
+    MOVE Agent: Google ADK-powered execution velocity & gating action engine.
     Ranks actions by impact on gating criteria and outcome velocity.
     """
 
     def __init__(
         self,
         privacy_engine: Optional[PrivacyPolicyEngine] = None,
-        gemini_service: Optional[GeminiService] = None
+        session_service: Optional[BaseSessionService] = None,
+        gemini_service: Optional[Any] = None  # retained for backward compatibility
     ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
-        self.gemini_service = gemini_service or GeminiService(privacy_engine=self.privacy_engine)
+        self.session_service = session_service or get_session_service()
+        self.model = get_adk_model()
+
+        # Build genuine Google ADK Agent
+        self.adk_agent = Agent(
+            name="move_agent",
+            description="Evaluates blockers, work cycles, and gating criteria to calculate the single highest-leverage Next Best Action with Why Now rationale.",
+            model=self.model,
+            instruction=MOVE_INSTRUCTION,
+            output_schema=NextBestActionRecommendation,
+            before_model_callback=create_privacy_guardrail_callback(self.privacy_engine)
+        )
+
+        # ADK Runner for standalone execution
+        self.runner = create_adk_runner(
+            agent=self.adk_agent,
+            session_service=self.session_service,
+            app_name=settings.ADK_APP_NAME
+        )
 
     def determine_next_action(
         self,
@@ -66,71 +110,127 @@ class MoveAgent:
         pending_approvals: int = 0
     ) -> NextBestActionRecommendation:
         """
-        Calculates the single highest-priority Next Best Action for the FDE.
+        Calculates the single highest-priority Next Best Action for the FDE using Google ADK.
         """
         raw_blockers = blockers or []
 
-        if status == "NEEDS_REASSESSMENT" or pending_approvals > 0 or any(b.get("is_gating") for b in raw_blockers):
-            situation = f"Outcome status for {customer_name} is currently NEEDS_REASSESSMENT due to pending gating dependency or requirement change."
-            recommendation = f"Request required security configuration and obtain Manager approval for Outcome Version {outcome_version + 1}."
-            why_now = "Production validation step is currently blocked by this unfulfilled dependency."
-            impact = "Receiving configuration and approval enables authentication integration and clears deployment path."
-            evidence = [
-                f"Engagement status: {status}",
-                f"Pending approvals: {pending_approvals}",
-                "Active gating dependency unfulfilled"
-            ]
-            confidence = "High"
-            approval_required = True
-            priority = "CRITICAL"
-            gating_blocker = BlockerItem(
-                id="blk-001",
-                title="Configuration & Approval Dependency",
-                owner="Customer Security / Manager",
-                status="Waiting on Customer",
-                is_gating=True,
-                description="Enterprise SSO configuration and outcome version approval required."
-            )
-            role = "CUSTOMER_OWNER" if status == "NEEDS_REASSESSMENT" else "MANAGER"
-        elif "STEP_5" in str(current_work_cycle).upper() or "Deploy" in str(current_work_cycle):
-            situation = f"Engagement is at Step 5 (Deploy Into Production) for {customer_name}."
-            recommendation = "Execute cutover performance dry-run test on staging replica."
-            why_now = "Dry-run performance data is required to confirm the 15-minute cutover window before production deployment."
-            impact = "Confirms zero-downtime cutover window and validates replication metrics."
-            evidence = [
-                f"Current Work Cycle: {current_work_cycle}",
-                "Production deployment scheduled"
-            ]
-            confidence = "High"
-            approval_required = False
-            priority = "HIGH_PRIORITY"
-            gating_blocker = BlockerItem(
-                id="blk-002",
-                title="Staging Maintenance Window",
-                owner="FDE Team",
-                status="Scheduled",
-                is_gating=False,
-                description="Performance benchmark scheduled during off-peak maintenance window."
-            )
-            role = "FDE"
-        else:
-            situation = f"Engagement execution progressing in {current_work_cycle}."
-            recommendation = "Complete current work cycle checklist items and verify success criteria."
-            why_now = "Maintains outcome delivery velocity towards target milestone."
-            impact = "Advances progress towards production validation readiness."
-            evidence = [f"Current Work Cycle: {current_work_cycle}"]
-            confidence = "High"
-            approval_required = False
-            priority = "ROUTINE"
-            gating_blocker = None
-            role = "FDE"
+        # 1. Pre-LLM Privacy Boundary Enforcement
+        anonymized_cust, mapping = self.privacy_engine.process_llm_input(
+            text=customer_name,
+            session_id=engagement_id
+        )
 
-        # Privacy Anonymization
-        anon_action, mapping1 = self.privacy_engine.process_llm_input(recommendation, session_id=engagement_id)
-        clean_rec = self.privacy_engine.sanitize_output(recommendation, mapping1)
-        clean_sit = self.privacy_engine.sanitize_output(situation, mapping1)
-        clean_why = self.privacy_engine.sanitize_output(why_now, mapping1)
-        clean_impact = self.privacy_engine.sanitize_output(impact, mapping1)
+        # 2. ADK Prompt Construction over sanitized context
+        prompt = (
+            f"Customer: {anonymized_cust}\n"
+            f"Current Work Cycle: {current_work_cycle}\n"
+            f"Status: {status}\n"
+            f"Outcome Version: {outcome_version}\n"
+            f"Pending Approvals: {pending_approvals}\n"
+            f"Blockers: {json.dumps(raw_blockers)}"
+        )
+
+        # 3. Attempt ADK Runner execution
+        adk_response_text = None
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI)
+        if has_credentials:
+            try:
+                adk_response_text = execute_adk_runner(
+                    runner=self.runner,
+                    user_id="fde_user",
+                    session_id=engagement_id,
+                    message_text=prompt
+                )
+            except Exception as e:
+                logger.warning(f"ADK MOVE runner execution failed ({str(e)}); falling back to deterministic action logic.")
+
+        # 4. Parse ADK output if available
+        if adk_response_text:
+            try:
+                cleaned = adk_response_text.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.split("```")[1]
+                    if cleaned.startswith("json"):
+                        cleaned = cleaned[4:]
+                    cleaned = cleaned.strip()
+
+                parsed = json.loads(cleaned)
+                situation = parsed.get("situation", f"Engagement is progressing in {current_work_cycle}.")
+                recommendation = parsed.get("recommendation", "Review active work items.")
+                why_now = parsed.get("why_now", "Maintains progress towards target milestone.")
+                impact = parsed.get("impact", "Advances validation readiness.")
+                evidence = parsed.get("evidence", [f"Status: {status}", f"Work cycle: {current_work_cycle}"])
+                confidence = parsed.get("confidence", "High")
+                approval_required = parsed.get("approval_required", False)
+                priority = parsed.get("priority_level", "HIGH_PRIORITY")
+                role = parsed.get("affected_role", "FDE")
+                gating_blocker = None
+            except Exception as parse_err:
+                logger.warning(f"Failed to parse ADK MOVE output ({parse_err}); using deterministic rules.")
+                adk_response_text = None
+
+        # 5. Deterministic engagement-state reasoning fallback
+        if not adk_response_text:
+            if status == "NEEDS_REASSESSMENT" or pending_approvals > 0 or any(b.get("is_gating") for b in raw_blockers):
+                situation = f"Outcome status for {customer_name} is currently NEEDS_REASSESSMENT due to pending gating dependency or requirement change."
+                recommendation = f"Request required security configuration and obtain Manager approval for Outcome Version {outcome_version + 1}."
+                why_now = "Production validation step is currently blocked by this unfulfilled dependency."
+                impact = "Receiving configuration and approval enables authentication integration and clears deployment path."
+                evidence = [
+                    f"Engagement status: {status}",
+                    f"Pending approvals: {pending_approvals}",
+                    "Active gating dependency unfulfilled"
+                ]
+                confidence = "High"
+                approval_required = True
+                priority = "CRITICAL"
+                gating_blocker = BlockerItem(
+                    id="blk-001",
+                    title="Configuration & Approval Dependency",
+                    owner="Customer Security / Manager",
+                    status="Waiting on Customer",
+                    is_gating=True,
+                    description="Enterprise SSO configuration and outcome version approval required."
+                )
+                role = "CUSTOMER_OWNER" if status == "NEEDS_REASSESSMENT" else "MANAGER"
+            elif "STEP_5" in str(current_work_cycle).upper() or "Deploy" in str(current_work_cycle):
+                situation = f"Engagement is at Step 5 (Deploy Into Production) for {customer_name}."
+                recommendation = "Execute cutover performance dry-run test on staging replica."
+                why_now = "Dry-run performance data is required to confirm the 15-minute cutover window before production deployment."
+                impact = "Confirms zero-downtime cutover window and validates replication metrics."
+                evidence = [
+                    f"Current Work Cycle: {current_work_cycle}",
+                    "Production deployment scheduled"
+                ]
+                confidence = "High"
+                approval_required = False
+                priority = "HIGH_PRIORITY"
+                gating_blocker = BlockerItem(
+                    id="blk-002",
+                    title="Staging Maintenance Window",
+                    owner="FDE Team",
+                    status="Scheduled",
+                    is_gating=False,
+                    description="Performance benchmark scheduled during off-peak maintenance window."
+                )
+                role = "FDE"
+            else:
+                situation = f"Engagement execution progressing in {current_work_cycle}."
+                recommendation = "Complete current work cycle checklist items and verify success criteria."
+                why_now = "Maintains outcome delivery velocity towards target milestone."
+                impact = "Advances progress towards production validation readiness."
+                evidence = [f"Current Work Cycle: {current_work_cycle}"]
+                confidence = "High"
+                approval_required = False
+                priority = "ROUTINE"
+                gating_blocker = None
+                role = "FDE"
+
+        # 6. Sanitize output tokens back for authorized display
+        clean_rec = self.privacy_engine.sanitize_output(recommendation, mapping)
+        clean_sit = self.privacy_engine.sanitize_output(situation, mapping)
+        clean_why = self.privacy_engine.sanitize_output(why_now, mapping)
+        clean_impact = self.privacy_engine.sanitize_output(impact, mapping)
 
         return NextBestActionRecommendation(
             engagement_id=engagement_id,
@@ -147,5 +247,5 @@ class MoveAgent:
             target_work_cycle=str(current_work_cycle),
             gating_blocker=gating_blocker,
             affected_role=role,
-            privacy_scrubbed=len(mapping1.reference_to_original) > 0
+            privacy_scrubbed=len(mapping.reference_to_original) > 0
         )

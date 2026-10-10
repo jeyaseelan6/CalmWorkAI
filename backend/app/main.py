@@ -45,11 +45,14 @@ app.add_middleware(
 
 from app.auth import create_access_token, verify_password, DEMO_USERS, get_current_user, require_role
 
+from app.services import OutcomeService, StorageService
+
 privacy_engine = PrivacyPolicyEngine(
     use_cloud_dlp=settings.USE_CLOUD_DLP_API,
     gcp_project_id=settings.GCP_PROJECT_ID
 )
 
+storage_service = StorageService()
 understand_agent = UnderstandAgent(privacy_engine=privacy_engine)
 know_agent = KnowAgent(privacy_engine=privacy_engine)
 move_agent = MoveAgent(privacy_engine=privacy_engine)
@@ -417,6 +420,12 @@ async def upload_document(
     )
 
     doc_id = f"doc-{uuid.uuid4().hex[:8]}"
+    storage_uri = storage_service.upload_document(
+        engagement_id=engagement_id,
+        document_id=doc_id,
+        filename=f"{payload.title}.txt",
+        content=payload.content
+    )
     category_enum = DocumentCategory.OTHER
     try:
         category_enum = DocumentCategory(payload.category)

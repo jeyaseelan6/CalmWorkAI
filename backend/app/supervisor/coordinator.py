@@ -19,6 +19,18 @@ from app.privacy import PrivacyPolicyEngine
 from app.ai.gemini_service import GeminiService
 from app.supervisor.event_bus import EventBus, EngagementEvent
 
+from google.adk.agents import Agent, SequentialAgent
+from google.adk.runners import Runner
+from google.adk.sessions import BaseSessionService
+from app.agents.adk_runtime import (
+    get_adk_model,
+    get_session_service,
+    create_privacy_guardrail_callback,
+    create_adk_runner,
+    execute_adk_runner
+)
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,15 +150,63 @@ class SupervisorCoordinator:
     def __init__(
         self,
         privacy_engine: Optional[PrivacyPolicyEngine] = None,
-        gemini_service: Optional[GeminiService] = None
+        gemini_service: Optional[Any] = None,
+        session_service: Optional[BaseSessionService] = None
     ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
-        self.gemini_service = gemini_service or GeminiService(privacy_engine=self.privacy_engine)
+        self.session_service = session_service or get_session_service()
+        self.model = get_adk_model()
+        self.gemini_service = gemini_service
         self.event_bus = EventBus()
-        self.understand_agent = UnderstandAgent(privacy_engine=self.privacy_engine)
-        self.know_agent = KnowAgent(privacy_engine=self.privacy_engine, gemini_service=self.gemini_service)
-        self.move_agent = MoveAgent(privacy_engine=self.privacy_engine, gemini_service=self.gemini_service)
-        self.deliver_agent = DeliverAgent(privacy_engine=self.privacy_engine, gemini_service=self.gemini_service)
+
+        # Instantiate specialized ADK agents
+        self.understand_agent = UnderstandAgent(
+            privacy_engine=self.privacy_engine,
+            session_service=self.session_service
+        )
+        self.know_agent = KnowAgent(
+            privacy_engine=self.privacy_engine,
+            session_service=self.session_service
+        )
+        self.move_agent = MoveAgent(
+            privacy_engine=self.privacy_engine,
+            session_service=self.session_service
+        )
+        self.deliver_agent = DeliverAgent(
+            privacy_engine=self.privacy_engine,
+            session_service=self.session_service
+        )
+
+        # ADK Sequential Workflow for predictable Morning Brief orchestration
+        # CRITICAL INVARIANT: DELIVER is strictly EXCLUDED from Morning Brief
+        self.morning_brief_workflow = SequentialAgent(
+            name="morning_brief_sequential_workflow",
+            description="Sequential ADK workflow executing UNDERSTAND -> KNOW -> MOVE (DELIVER excluded).",
+            sub_agents=[
+                self.understand_agent.adk_agent,
+                self.know_agent.adk_agent,
+                self.move_agent.adk_agent
+            ]
+        )
+
+        # Central Supervisor ADK Agent for conversational queries and synthesis
+        self.supervisor_agent = Agent(
+            name="supervisor_coordinator",
+            description="Central multi-agent coordinator for conversational queries and Morning Brief synthesis.",
+            model=self.model,
+            instruction=(
+                "You are the CalmWork Supervisor Multi-Agent Coordinator for Forward-Deployed Engineers. "
+                "Synthesize findings across UNDERSTAND, KNOW, MOVE, and DELIVER. "
+                "Respond helpfully, politely, and concisely based strictly on verified engagement facts."
+            ),
+            before_model_callback=create_privacy_guardrail_callback(self.privacy_engine)
+        )
+
+        self.runner = create_adk_runner(
+            agent=self.supervisor_agent,
+            session_service=self.session_service,
+            app_name=settings.ADK_APP_NAME
+        )
 
     def query_supervisor(
         self,
@@ -267,24 +327,26 @@ class SupervisorCoordinator:
         if "KNOW" in capabilities_used and know_response.evidence_sufficient and know_response.answer:
             answer_parts.append(f"**KNOW Evidence**: {know_response.answer}")
 
-        # If it's a general question or greeting (like "hi are you there"), use live Gemini if available
+        # If it's a general question or greeting, synthesize via Google ADK Supervisor Agent
         if not answer_parts:
-            if self.gemini_service and self.gemini_service.api_key:
-                gemini_reply = self.gemini_service._call_gemini_text(
-                    prompt=(
-                        f"Customer Engagement: {customer_name}\n"
-                        f"Active Outcome: {outcome_statement}\n"
-                        f"Status: {status}\n"
-                        f"User Message: {sanitized_query}"
-                    ),
-                    system_instruction=(
-                        "You are the CalmWork Supervisor Multi-Agent AI. You assist Forward-Deployed Engineers. "
-                        "Respond helpfully, politely, and concisely."
-                    )
+            prompt = (
+                f"Customer Engagement: {customer_name}\n"
+                f"Active Outcome: {outcome_statement}\n"
+                f"Status: {status}\n"
+                f"User Message: {sanitized_query}"
+            )
+            try:
+                adk_reply = execute_adk_runner(
+                    runner=self.runner,
+                    user_id="fde_user",
+                    session_id=engagement_id,
+                    message_text=prompt
                 )
-                if gemini_reply:
-                    answer_parts.append(gemini_reply)
-            
+                if adk_reply:
+                    answer_parts.append(adk_reply)
+            except Exception as e:
+                logger.warning(f"ADK Supervisor conversational runner fallback: {e}")
+
             if not answer_parts:
                 answer_parts.append(know_response.answer)
 

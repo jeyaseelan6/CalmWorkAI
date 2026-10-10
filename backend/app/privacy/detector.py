@@ -76,6 +76,39 @@ class SensitiveDataDetector:
                 end=match.end()
             ))
 
+        # 5. Google Cloud DLP Enterprise Inspection (when configured and enabled)
+        if self.use_cloud_dlp and self.gcp_project_id:
+            try:
+                from google.cloud import dlp_v2
+                dlp_client = dlp_v2.DlpServiceClient()
+                parent = f"projects/{self.gcp_project_id}"
+                item = {"value": text}
+                inspect_config = {
+                    "info_types": [
+                        {"name": "EMAIL_ADDRESS"},
+                        {"name": "PHONE_NUMBER"},
+                        {"name": "PERSON_NAME"},
+                        {"name": "AUTH_TOKEN"},
+                        {"name": "API_KEY"}
+                    ],
+                    "min_likelihood": dlp_v2.Likelihood.LIKELY,
+                    "include_quote": True,
+                }
+                response = dlp_client.inspect_content(
+                    request={"parent": parent, "inspect_config": inspect_config, "item": item}
+                )
+                if response.result and response.result.findings:
+                    for finding in response.result.findings:
+                        if finding.location and finding.location.byte_range:
+                            entities.append(SensitiveEntity(
+                                entity_type=finding.info_type.name,
+                                text=finding.quote or "",
+                                start=finding.location.byte_range.start,
+                                end=finding.location.byte_range.end
+                            ))
+            except Exception as e:
+                logger.debug(f"Cloud DLP inspection skipped or offline ({e}); local regex engine active.")
+
         # Sort entities by start index to avoid overlapping token replacement issues
         entities.sort(key=lambda e: e.start)
         return entities

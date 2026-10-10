@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME", "calmwork-documents")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    USE_VERTEX_AI: bool = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
+    
+    # Google ADK Architecture Settings
+    ADK_APP_NAME: str = os.getenv("ADK_APP_NAME", "calmwork-ai")
+    ADK_SESSION_STORAGE: str = os.getenv("ADK_SESSION_STORAGE", "memory")  # "memory" or "database"
+    ENABLE_ADK_TRACING: bool = os.getenv("ENABLE_ADK_TRACING", "false").lower() == "true"
     
     # Auth & Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "calmwork-super-secret-development-jwt-key-2026")
