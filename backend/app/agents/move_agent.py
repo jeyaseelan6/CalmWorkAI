@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from app.privacy import PrivacyPolicyEngine
+from app.ai.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +47,13 @@ class MoveAgent:
     Ranks actions by impact on gating criteria and outcome velocity.
     """
 
-    def __init__(self, privacy_engine: Optional[PrivacyPolicyEngine] = None):
+    def __init__(
+        self,
+        privacy_engine: Optional[PrivacyPolicyEngine] = None,
+        gemini_service: Optional[GeminiService] = None
+    ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
+        self.gemini_service = gemini_service or GeminiService(privacy_engine=self.privacy_engine)
 
     def determine_next_action(
         self,

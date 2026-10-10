@@ -10,6 +10,7 @@ import logging
 
 from app.knowledge import IngestionEngine, VectorStore, DocumentChunk
 from app.privacy import PrivacyPolicyEngine
+from app.ai.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +42,13 @@ class KnowAgent:
         self,
         vector_store: Optional[VectorStore] = None,
         ingestion_engine: Optional[IngestionEngine] = None,
-        privacy_engine: Optional[PrivacyPolicyEngine] = None
+        privacy_engine: Optional[PrivacyPolicyEngine] = None,
+        gemini_service: Optional[GeminiService] = None
     ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
         self.ingestion_engine = ingestion_engine or IngestionEngine(privacy_engine=self.privacy_engine)
         self.vector_store = vector_store or VectorStore()
+        self.gemini_service = gemini_service or GeminiService(privacy_engine=self.privacy_engine)
 
     def ingest_document(
         self,
@@ -115,10 +118,23 @@ class KnowAgent:
             ))
 
         top_score = search_results[0][1]
-        synthesized_answer = (
-            f"Based on verified engagement evidence in {citations[0].document_title}: "
-            f"{search_results[0][0].content[:250]}..."
-        )
+        
+        # Try live Gemini RAG synthesis if available
+        synthesized_answer = None
+        if self.gemini_service:
+            context_texts = [f"Source: {c.title}\nContent: {c.content}" for c, _ in search_results]
+            synthesized_answer = self.gemini_service.synthesize_rag_answer(
+                question=anonymized_question,
+                context_chunks=context_texts,
+                session_id=engagement_id
+            )
+
+        # Fallback to deterministic synthesis if Gemini unavailable or returned None
+        if not synthesized_answer:
+            synthesized_answer = (
+                f"Based on verified engagement evidence in {citations[0].document_title}: "
+                f"{search_results[0][0].content[:250]}..."
+            )
 
         clean_answer = self.privacy_engine.sanitize_output(synthesized_answer, mapping)
 

@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.privacy import PrivacyPolicyEngine
+from app.ai.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,13 @@ class DeliverAgent:
     Does NOT auto-send communications. Manager review & approval required.
     """
 
-    def __init__(self, privacy_engine: Optional[PrivacyPolicyEngine] = None):
+    def __init__(
+        self,
+        privacy_engine: Optional[PrivacyPolicyEngine] = None,
+        gemini_service: Optional[GeminiService] = None
+    ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
+        self.gemini_service = gemini_service or GeminiService(privacy_engine=self.privacy_engine)
 
     def generate_customer_update(
         self,
@@ -87,6 +93,31 @@ class DeliverAgent:
         milestones = [f"Delivered: {item}" for item in completed_items] if completed_items else ["Completed initial environment & API baseline setup."]
         next_target = pending_items[0] if pending_items else "Final production validation and handover."
         customer_actions = ["Review milestone progress during next scheduled sync."]
+
+        # Try live Gemini executive drafting if available
+        if self.gemini_service and self.gemini_service.api_key:
+            gemini_draft = self.gemini_service.draft_customer_update(
+                customer_name=customer_name,
+                engagement_name=engagement_name,
+                outcome_statement=outcome_statement,
+                current_work_cycle=str(current_work_cycle),
+                completed_milestones=completed_items,
+                pending_milestones=pending_items,
+                format_type=format_type,
+                raw_notes=raw_notes_text,
+                session_id=engagement_id
+            )
+            if gemini_draft and isinstance(gemini_draft, dict):
+                if gemini_draft.get("subject"):
+                    subject = gemini_draft["subject"]
+                if gemini_draft.get("executive_summary"):
+                    exec_summary = gemini_draft["executive_summary"]
+                if gemini_draft.get("key_milestones_achieved"):
+                    milestones = gemini_draft["key_milestones_achieved"]
+                if gemini_draft.get("next_milestone_target"):
+                    next_target = gemini_draft["next_milestone_target"]
+                if gemini_draft.get("customer_action_items"):
+                    customer_actions = gemini_draft["customer_action_items"]
 
         clean_summary = self.privacy_engine.sanitize_output(exec_summary, mapping)
         clean_subject = self.privacy_engine.sanitize_output(subject, mapping)

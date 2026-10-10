@@ -1,5 +1,5 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
@@ -22,15 +22,22 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "calmwork-ai-dev")
     GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
     GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME", "calmwork-documents")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    
+    # Auth & Security
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "calmwork-super-secret-development-jwt-key-2026")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     
     # AI Input Privacy Guardrail Settings
     PRIVACY_GUARDRAIL_ENABLED: bool = True
     USE_CLOUD_DLP_API: bool = os.getenv("USE_CLOUD_DLP_API", "false").lower() == "true"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+    )
 
 
 settings = Settings()
