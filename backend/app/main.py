@@ -609,7 +609,8 @@ async def query_universal_supervisor(engagement_id: str, payload: UniversalSuper
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/supervisor/brief", tags=["Supervisor"])
 async def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)):
     """
-    Proactive Intelligence Mode: Generates a 10-point Daily Work Briefing.
+    Proactive Intelligence Mode: Generates a sequential Morning Brief (UNDERSTAND -> KNOW -> MOVE -> Supervisor Plan).
+    Persists provenance in shared timeline without invoking DELIVER.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
@@ -629,10 +630,23 @@ async def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)
         pending_approvals=len(approvals)
     )
 
+    # Persist brief provenance into shared memory timeline
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="MORNING_BRIEF_GENERATED",
+        title=f"Morning Brief Generated (v{version})",
+        description=f"Supervisor synthesized sequential Morning Brief (UNDERSTAND → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
+        actor_type="SUPERVISOR",
+        actor_id="supervisor_coordinator",
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
     return {
         "success": True,
         "data": brief.model_dump(),
-        "message": "Daily work intelligence brief generated successfully."
+        "message": "Sequential Morning Brief generated and provenance persisted in shared memory."
     }
 
 
