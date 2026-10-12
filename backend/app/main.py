@@ -47,7 +47,7 @@ app.add_middleware(
 
 from app.auth import create_access_token, verify_password, DEMO_USERS, get_current_user, require_role
 
-from app.services import OutcomeService, StorageService
+from app.services import OutcomeService, StorageService, extract_text_from_file
 
 privacy_engine = PrivacyPolicyEngine(
     use_cloud_dlp=settings.USE_CLOUD_DLP_API,
@@ -163,6 +163,23 @@ def on_startup():
             "replicating 50M records from on-prem PostgreSQL to GCP Cloud SQL with zero downtime and a maximum 15 min cutover window."
         )
     )
+    # Re-index persistent documents from database to ensure vector store state persists across restarts
+    try:
+        from app.db.database import SessionLocal
+        startup_db = SessionLocal()
+        existing_docs = startup_db.query(DocumentModel).all()
+        for doc in existing_docs:
+            if doc.content:
+                know_agent.ingest_document(
+                    engagement_id=doc.engagement_id,
+                    title=doc.title,
+                    raw_text=doc.content
+                )
+        startup_db.close()
+        logger.info(f"Re-indexed {len(existing_docs)} persistent documents from database into KNOW Agent vector store.")
+    except Exception as e:
+        logger.warning(f"Could not re-index persistent documents on startup: {e}")
+
     logger.info("Database initialized and sample engagement documentation ingested into KNOW Agent vector store.")
 
 
@@ -614,6 +631,106 @@ async def upload_document(
             "chunks_count": doc.chunks_count
         },
         "message": f"Document '{payload.title}' uploaded and indexed under category '{category_enum.value}'."
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/documents/upload-file", tags=["Knowledge"])
+async def upload_document_file(
+    engagement_id: str,
+    file: UploadFile = File(...),
+    category: str = Form("Technical Documentation"),
+    title: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Multipart File Upload endpoint for Grounded RAG Knowledge Base.
+    Extracts text from .txt, .md, .pdf, .json, .csv, runs privacy scrub,
+    chunks and indexes into KNOW Agent vector store, stores raw file,
+    and records in DocumentModel and TimelineEvent.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    try:
+        file_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    try:
+        extracted_text = extract_text_from_file(file.filename or "uploaded_file.txt", file_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error extracting text from file {file.filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract text from file: {str(e)}")
+
+    doc_title = title.strip() if title and title.strip() else (file.filename or "Untitled Document")
+
+    # Ingest into vector store
+    result = know_agent.ingest_document(
+        engagement_id=engagement_id,
+        title=doc_title,
+        raw_text=extracted_text
+    )
+
+    doc_id = f"doc-{uuid.uuid4().hex[:8]}"
+    storage_uri = storage_service.upload_document(
+        engagement_id=engagement_id,
+        document_id=doc_id,
+        filename=file.filename or f"{doc_title}.txt",
+        content=extracted_text
+    )
+
+    category_enum = DocumentCategory.OTHER
+    for cat in DocumentCategory:
+        if cat.value.lower() == category.lower() or cat.name.lower() == category.lower():
+            category_enum = cat
+            break
+
+    chunks_count = result.get("chunks_created", 1)
+
+    doc = DocumentModel(
+        id=doc_id,
+        engagement_id=engagement_id,
+        title=doc_title,
+        category=category_enum,
+        status=DocumentStatus.INDEXED,
+        content=extracted_text,
+        chunks_count=chunks_count,
+        uploaded_by="fde_user_1",
+        created_at=datetime.utcnow()
+    )
+    db.add(doc)
+
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="DOCUMENT_INGESTED",
+        title="Document Uploaded & Indexed",
+        description=f"Uploaded '{doc_title}' ({category_enum.value}) — indexed into {chunks_count} vector chunks for Grounded RAG.",
+        actor_type="FDE",
+        actor_id="fde_user_1",
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "id": doc.id,
+            "engagement_id": doc.engagement_id,
+            "title": doc.title,
+            "category": doc.category.value if hasattr(doc.category, "value") else str(doc.category),
+            "status": doc.status.value if hasattr(doc.status, "value") else str(doc.status),
+            "chunks_count": doc.chunks_count,
+            "storage_uri": storage_uri,
+            "created_at": doc.created_at.isoformat()
+        },
+        "message": f"Document '{doc_title}' uploaded and indexed into {chunks_count} vector chunks."
     }
 
 

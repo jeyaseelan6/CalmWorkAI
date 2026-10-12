@@ -12,6 +12,13 @@ from app.knowledge.ingestion import DocumentChunk
 logger = logging.getLogger(__name__)
 
 
+STOPWORDS = {
+    "what", "is", "the", "a", "an", "and", "or", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "how", "do", "does", "did", "can", "could",
+    "should", "would", "about", "tell", "me", "which", "when", "where", "who", "why"
+}
+
+
 def _tokenize(text: str) -> List[str]:
     """Tokenize text into lowercase alphanumeric terms."""
     return re.findall(r'\b[a-zA-Z0-9_]+\b', text.lower())
@@ -20,7 +27,7 @@ def _tokenize(text: str) -> List[str]:
 class VectorStore:
     """
     In-Memory Vector Store with engagement-level multi-tenant isolation.
-    Supports cosine similarity similarity retrieval with citation metadata.
+    Supports cosine similarity retrieval with citation metadata.
     """
 
     def __init__(self):
@@ -28,11 +35,14 @@ class VectorStore:
         self._chunks_by_engagement: Dict[str, List[DocumentChunk]] = {}
 
     def add_chunks(self, engagement_id: str, chunks: List[DocumentChunk]) -> int:
-        """Add document chunks to the tenant index."""
+        """Add document chunks to the tenant index, avoiding duplicate chunk IDs."""
         if engagement_id not in self._chunks_by_engagement:
             self._chunks_by_engagement[engagement_id] = []
-        self._chunks_by_engagement[engagement_id].extend(chunks)
-        logger.info(f"Added {len(chunks)} chunks to vector store for engagement {engagement_id}")
+        
+        existing_ids = {c.chunk_id for c in self._chunks_by_engagement[engagement_id]}
+        new_chunks = [c for c in chunks if c.chunk_id not in existing_ids]
+        self._chunks_by_engagement[engagement_id].extend(new_chunks)
+        logger.info(f"Added {len(new_chunks)} chunks to vector store for engagement {engagement_id}")
         return len(self._chunks_by_engagement[engagement_id])
 
     def search(
@@ -49,9 +59,12 @@ class VectorStore:
         if not tenant_chunks:
             return []
 
-        query_tokens = set(_tokenize(query))
-        if not query_tokens:
+        all_query_tokens = _tokenize(query)
+        if not all_query_tokens:
             return []
+
+        content_query_tokens = [t for t in all_query_tokens if t not in STOPWORDS]
+        query_tokens = set(content_query_tokens if content_query_tokens else all_query_tokens)
 
         scored_results: List[Tuple[DocumentChunk, float]] = []
 

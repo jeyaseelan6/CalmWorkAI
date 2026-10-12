@@ -29,3 +29,5 @@ calmwork_dev.db
 Thumbs.db
 .vscode/
 .idea/
+uploads/
+backend/uploads/
