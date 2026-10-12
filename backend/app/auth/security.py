@@ -8,10 +8,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 import hashlib
 import logging
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-SECRET_KEY = "calmwork-secret-key-change-in-production-environment"
+SECRET_KEY = getattr(settings, "SECRET_KEY", "calmwork-super-secret-development-jwt-key-2026")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

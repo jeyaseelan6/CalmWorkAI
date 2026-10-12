@@ -41,18 +41,19 @@ function NavLinks() {
   const pathname = usePathname();
 
   const fdeNav: NavItem[] = [
-    { id: "my-work", label: "Today (Cockpit)", href: "/", icon: Briefcase },
+    { id: "my-work", label: "Today (Engineer Cockpit)", href: "/", icon: Briefcase },
     { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
     { id: "knowledge", label: "Knowledge (KNOW)", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "approvals", label: "Approvals (FDE Review)", href: "/approvals", icon: Lock, badge: approvedAcme ? undefined : 1 },
     { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
   ];
 
   const managerNav: NavItem[] = [
-    { id: "control-center", label: "Today (Control Center)", href: "/", icon: LayoutDashboard },
+    { id: "control-center", label: "Today (Manager Control)", href: "/", icon: LayoutDashboard },
     { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "approvals", label: "Approval Center (Authority)", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "delivery", label: "Delivery Sign-Off", href: "/delivery", icon: Send },
     { id: "knowledge", label: "Knowledge (KNOW)", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
     { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
@@ -92,7 +93,7 @@ function NavLinks() {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, role, switchRole, logout, isAuthenticated } = useAuth();
+  const { user, role, logout, isAuthenticated } = useAuth();
   const { customers, activeCustomer, setActiveCustomer } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState(false);
@@ -161,35 +162,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Role Experience Switcher */}
-          <div className="mb-4 px-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Role Context
-            </label>
-            <div className="grid grid-cols-2 gap-0.5 bg-slate-100 p-0.5 rounded-md border border-slate-200 text-xs">
-              <button
-                onClick={() => switchRole("FDE")}
-                className={`py-1 rounded text-center transition-all ${
-                  role === "FDE" 
-                    ? "bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200" 
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                FDE
-              </button>
-              <button
-                onClick={() => switchRole("MANAGER")}
-                className={`py-1 rounded text-center transition-all ${
-                  role === "MANAGER" 
-                    ? "bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200" 
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Manager
-              </button>
-            </div>
           </div>
 
           {/* Navigation Links wrapped in Suspense */}
@@ -278,8 +250,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span>Record Worknote</span>
             </button>
 
-            <span className="text-xs px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-mono">
-              Role: <strong className="text-slate-900">{role}</strong>
+            <span className={`text-xs px-2.5 py-1 rounded border font-mono font-medium flex items-center gap-1.5 ${
+              role === "MANAGER"
+                ? "bg-amber-50 text-amber-900 border-amber-200"
+                : "bg-teal-50 text-teal-900 border-teal-200"
+            }`}>
+              {role === "MANAGER" ? (
+                <ShieldCheck className="h-3.5 w-3.5 text-amber-700" />
+              ) : (
+                <Briefcase className="h-3.5 w-3.5 text-teal-700" />
+              )}
+              <span>
+                Role: <strong className="font-bold">{role}</strong> {role === "MANAGER" ? "(Manager Authority)" : "(FDE Execution)"}
+              </span>
             </span>
             <Link
               href="/login"

@@ -83,6 +83,87 @@ export default function HomePage() {
               </Link>
             </div>
           </div>
+
+          {/* Customer Engagements Portfolio Overview */}
+          <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2 font-mono">
+                <Building2 className="h-4 w-4 text-slate-500" />
+                <span>Customer Engagements Portfolio</span>
+              </h2>
+              <span className="text-[11px] font-mono text-slate-500">2 Active Accounts</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">Acme Corp</span>
+                  <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold ${
+                    approvedAcme ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-amber-100 text-amber-800 border border-amber-300"
+                  }`}>
+                    {approvedAcme ? "HEALTHY" : "NEEDS_REASSESSMENT"}
+                  </span>
+                </div>
+                <p className="text-slate-600 text-[11px]">Onboarding Modernization — Step 4 (Build Within Constraints)</p>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px]">
+                  <span className="text-slate-500">DoD Progress: {approvedAcme ? "75%" : "70%"}</span>
+                  <Link href="/approvals" className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1">
+                    <span>{approvedAcme ? "View Governance" : "Review DoD v2 Upgrade"}</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">Globex Corp</span>
+                  <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    HEALTHY
+                  </span>
+                </div>
+                <p className="text-slate-600 text-[11px]">Legacy Data Migration — Step 5 (Verify Outcome Value)</p>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px]">
+                  <span className="text-slate-500">DoD Progress: 85%</span>
+                  <Link href="/delivery" className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1">
+                    <span>Delivery Drafts</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Outcome Definition & DoD Card (Manager View) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 font-mono">
+                Active FDE Cockpit Context ({activeCustomer.customerName})
+              </span>
+              <span className="text-[11px] text-slate-500 font-mono">Outcome Version {approvedAcme ? "2" : "1"}</span>
+            </div>
+            <OutcomeCard
+              customerName={activeCustomer.customerName}
+              engagementName={activeCustomer.engagementName}
+              outcomeStatement={isAcme ? "Reduce manual onboarding time from 30 min to under 5 min." : "Migrate 50M records to Cloud SQL with zero downtime."}
+              version={approvedAcme ? 2 : 1}
+              status={approvedAcme ? "HEALTHY" : "NEEDS_REASSESSMENT"}
+              progress={approvedAcme ? 75 : 70}
+              successCriteria={
+                approvedAcme
+                  ? [
+                      { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+                      { id: "sc-2", title: "API integration complete", completed: true },
+                      { id: "sc-3", title: "Production validation complete", completed: false },
+                      { id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }
+                    ]
+                  : [
+                      { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+                      { id: "sc-2", title: "API integration complete", completed: true },
+                      { id: "sc-3", title: "Production validation complete", completed: false }
+                    ]
+              }
+            />
+          </div>
         </div>
       </AppShell>
     );

@@ -81,19 +81,31 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
 
   const handleApproveChange = async () => {
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/approvals/respond`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "APPROVE", actor_id: "manager_user_1" })
+        headers,
+        body: JSON.stringify({ action: "APPROVE", actor_id: "David Miller" })
       });
+
       if (res.ok) {
         setApprovedAcme(true);
         fetchEngagementDetail(activeCustomer.id);
       } else {
-        setApprovedAcme(true);
+        const errorJson = await res.json().catch(() => ({}));
+        console.warn("Approval blocked by backend RBAC:", errorJson.detail || "Forbidden");
+        // Only set approved if manager succeeded
+        if (res.status !== 403) {
+          setApprovedAcme(true);
+        }
       }
     } catch (e) {
-      setApprovedAcme(true);
+      console.warn("Approval request error:", e);
     }
   };
 

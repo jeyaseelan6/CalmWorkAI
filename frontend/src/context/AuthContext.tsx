@@ -16,11 +16,12 @@ interface AuthContextType {
   user: UserProfile | null;
   token: string | null;
   role: UserRole;
+  isManager: boolean;
+  isFDE: boolean;
   isAuthenticated: boolean;
   login: (role: UserRole) => void;
   loginWithCredentials: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  switchRole: (role: UserRole) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,24 +48,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const storedRole = localStorage.getItem("calmwork_user_role");
+    const storedToken = localStorage.getItem("calmwork_auth_token");
     if (storedRole === "MANAGER") {
       setUser(MANAGER_USER);
+      setToken(storedToken || "demo-manager-token");
     } else {
       setUser(FDE_USER);
+      setToken(storedToken || "demo-fde-token");
     }
   }, []);
 
   const login = (role: UserRole) => {
     const targetUser = role === "MANAGER" ? MANAGER_USER : FDE_USER;
+    const assignedToken = `demo-${role.toLowerCase()}-token`;
     setUser(targetUser);
-    setToken(`demo-${role.toLowerCase()}-token`);
+    setToken(assignedToken);
     localStorage.setItem("calmwork_user_role", role);
+    localStorage.setItem("calmwork_auth_token", assignedToken);
   };
 
   const loginWithCredentials = async (email: string, password: string): Promise<boolean> => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1500);
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
 
       const res = await fetch("http://localhost:8000/api/v1/auth/login", {
         method: "POST",
@@ -80,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(json.data.user);
           setToken(json.data.access_token);
           localStorage.setItem("calmwork_user_role", json.data.user.role);
+          localStorage.setItem("calmwork_auth_token", json.data.access_token);
           return true;
         }
       }
@@ -100,23 +107,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setToken(null);
     localStorage.removeItem("calmwork_user_role");
+    localStorage.removeItem("calmwork_auth_token");
   };
 
-  const switchRole = (role: UserRole) => {
-    login(role);
-  };
+  const currentRole: UserRole = user?.role || "FDE";
 
   return (
     <AuthContext.Provider
       value={{
         user,
         token,
-        role: user?.role || "FDE",
+        role: currentRole,
+        isManager: currentRole === "MANAGER",
+        isFDE: currentRole === "FDE",
         isAuthenticated: !!user,
         login,
         loginWithCredentials,
-        logout,
-        switchRole
+        logout
       }}
     >
       {children}

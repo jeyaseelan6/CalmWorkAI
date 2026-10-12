@@ -3,10 +3,12 @@
 import React, { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useEngagement } from "@/context/EngagementContext";
-import { ShieldCheck, CheckCircle, AlertTriangle, ArrowRight, XCircle } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { ShieldCheck, CheckCircle, AlertTriangle, ArrowRight, XCircle, Lock } from "lucide-react";
 
 export default function ApprovalsPage() {
   const { activeCustomer, approvedAcme, handleApproveChange } = useEngagement();
+  const { isManager, isFDE } = useAuth();
   const [rejected, setRejected] = useState(false);
 
   return (
@@ -21,14 +23,16 @@ export default function ApprovalsPage() {
                   <ShieldCheck className="h-5 w-5" />
                 </div>
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
-                  Manager Governance Center
+                  {isManager ? "Manager Governance Center (Full Authority)" : "Governance Center (FDE Read-Only Oversight)"}
                 </span>
               </div>
               <h1 className="text-2xl font-bold text-slate-100">
-                Unified Manager Approval Center
+                {isManager ? "Unified Manager Approval Center" : "Engagement Approvals & DoD Status"}
               </h1>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                Review and approve consequential outcome version transitions, gating actions, and customer communication drafts. No state change bypasses this approval boundary.
+                {isManager 
+                  ? "Review and authorize consequential outcome version transitions, gating actions, and customer communication drafts. No state change bypasses this approval boundary."
+                  : "Monitor active outcome change proposals and Definition of Done upgrade requests. As an FDE, you can propose changes; manager sign-off is required to activate them."}
               </p>
             </div>
 
@@ -102,22 +106,44 @@ export default function ApprovalsPage() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  onClick={() => setRejected(true)}
-                  className="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-lg text-xs transition flex items-center gap-1.5"
-                >
-                  <XCircle className="h-4 w-4 text-rose-400" />
-                  <span>Reject Proposal</span>
-                </button>
-                <button
-                  onClick={handleApproveChange}
-                  className="px-5 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  <span>Approve Version 2 DoD Upgrade</span>
-                </button>
+              {/* Action Buttons — Gated by Role */}
+              <div className="pt-3 border-t border-slate-800">
+                {isManager ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-amber-400/90 font-mono flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Manager Role: Full Decision Authority</span>
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setRejected(true)}
+                        className="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-lg text-xs transition flex items-center gap-1.5"
+                      >
+                        <XCircle className="h-4 w-4 text-rose-400" />
+                        <span>Reject Proposal</span>
+                      </button>
+                      <button
+                        onClick={handleApproveChange}
+                        className="px-5 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5 shadow-md"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        <span>Approve Version 2 DoD Upgrade</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5 text-slate-300">
+                      <Lock className="h-4 w-4 text-amber-400 shrink-0" />
+                      <span className="leading-relaxed">
+                        <strong className="text-amber-400 font-semibold">Manager Sign-Off Required:</strong> As an FDE, you can review this proposed Definition of Done change, but only an Engineering Manager can authorize the state transition.
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded font-mono text-[11px] font-semibold shrink-0 ml-3">
+                      FDE (Read-Only)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

@@ -314,12 +314,18 @@ async def list_pending_approvals(db: Session = Depends(get_db)):
 
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/approvals/respond", tags=["Approvals"])
-async def respond_to_approval(engagement_id: str, payload: ApprovalResponseRequest, db: Session = Depends(get_db)):
+async def respond_to_approval(
+    engagement_id: str, 
+    payload: ApprovalResponseRequest, 
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+):
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
 
     outcome_service = OutcomeService(db)
+    manager_name = current_user.get("name", payload.actor_id or "David Miller")
 
     if payload.action == "APPROVE":
         current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
@@ -342,7 +348,7 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
         updated_eng = outcome_service.approve_outcome_version(
             engagement_id=engagement_id,
             outcome_id=new_v2.id,
-            approved_by=payload.actor_id
+            approved_by=manager_name
         )
 
         # Log timeline approval event
@@ -351,9 +357,9 @@ async def respond_to_approval(engagement_id: str, payload: ApprovalResponseReque
             engagement_id=engagement_id,
             event_type="OUTCOME_APPROVED",
             title="Outcome Version Approved",
-            description=f"Manager ({payload.actor_id}) approved transition to Outcome Version {new_v2.version}.",
+            description=f"Manager ({manager_name}) approved transition to Outcome Version {new_v2.version}.",
             actor_type="MANAGER",
-            actor_id=payload.actor_id,
+            actor_id=current_user.get("id", "usr-mgr-002"),
             created_at=datetime.utcnow()
         ))
         db.commit()
