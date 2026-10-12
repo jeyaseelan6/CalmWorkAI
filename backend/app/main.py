@@ -5,12 +5,14 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
 import uuid
+import re
 from datetime import datetime
 
 from app.config import settings
 from app.db.database import get_db, init_db
 from app.models import (
-    Engagement, Outcome, TimelineEvent, Approval, ApprovalType, ApprovalStatus,
+    Engagement, EngagementStatus, WorkCycleStep, Outcome, OutcomeStatus,
+    TimelineEvent, Approval, ApprovalType, ApprovalStatus,
     DocumentModel, DocumentCategory, DocumentStatus
 )
 from app.privacy import PrivacyPolicyEngine
@@ -128,6 +130,14 @@ class KnowledgeQueryRequest(BaseModel):
     top_k: int = 3
 
 
+class CreateEngagementRequest(BaseModel):
+    customer_name: str
+    name: str
+    description: Optional[str] = ""
+    initial_outcome_statement: Optional[str] = ""
+    success_criteria: Optional[List[str]] = []
+
+
 class GenerateCustomerUpdateRequest(BaseModel):
     raw_notes: Optional[str] = None
     format_type: str = "EXECUTIVE_SUMMARY"
@@ -192,6 +202,116 @@ async def list_engagements(db: Session = Depends(get_db)):
         "success": True,
         "data": result,
         "message": "Engagements retrieved successfully"
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements", tags=["Engagements"])
+async def create_engagement(
+    payload: CreateEngagementRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+):
+    if not payload.customer_name.strip() or not payload.name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Customer name and engagement name are required."
+        )
+
+    clean_slug = re.sub(r"[^a-zA-Z0-9]+", "-", payload.customer_name.lower()).strip("-")[:16] or "cust"
+    engagement_id = f"eng-{clean_slug}-{uuid.uuid4().hex[:4]}"
+    outcome_id = f"out-{clean_slug}-v1-{uuid.uuid4().hex[:4]}"
+
+    criteria = []
+    if payload.success_criteria:
+        for idx, item in enumerate(payload.success_criteria):
+            if item.strip():
+                criteria.append({"id": f"sc-{idx+1}", "title": item.strip(), "completed": False})
+
+    if not criteria:
+        criteria = [
+            {"id": "sc-1", "title": "Initial discovery and baseline architecture completed", "completed": False},
+            {"id": "sc-2", "title": "Core integration pipeline operational", "completed": False},
+            {"id": "sc-3", "title": "Production verification and signoff completed", "completed": False}
+        ]
+
+    statement = (
+        payload.initial_outcome_statement.strip()
+        if payload.initial_outcome_statement and payload.initial_outcome_statement.strip()
+        else f"Successfully deliver {payload.name} for {payload.customer_name}."
+    )
+
+    # 1. Create initial Outcome (v1)
+    outcome = Outcome(
+        id=outcome_id,
+        engagement_id=engagement_id,
+        version=1,
+        statement=statement,
+        success_criteria=criteria,
+        status=OutcomeStatus.APPROVED,
+        created_by=current_user["name"],
+        approved_by=current_user["name"],
+        created_at=datetime.utcnow(),
+        approved_at=datetime.utcnow()
+    )
+    db.add(outcome)
+
+    # 2. Create Engagement
+    eng = Engagement(
+        id=engagement_id,
+        customer_name=payload.customer_name.strip(),
+        name=payload.name.strip(),
+        description=payload.description.strip() if payload.description else f"Engagement initiative for {payload.customer_name}.",
+        status=EngagementStatus.HEALTHY,
+        current_work_cycle=WorkCycleStep.STEP_1_UNDERSTAND_BUSINESS_REALITY,
+        progress=10,
+        current_outcome_id=outcome_id,
+        created_by=current_user["name"],
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    db.add(eng)
+
+    # 3. Create initial timeline event
+    timeline_evt = TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="ENGAGEMENT_CREATED",
+        title="Engagement Initialized",
+        description=f"Manager {current_user['name']} initialized new engagement for {payload.customer_name}.",
+        actor_type="MANAGER",
+        actor_id=current_user["name"],
+        created_at=datetime.utcnow()
+    )
+    db.add(timeline_evt)
+
+    # 4. Ingest baseline documentation into KNOW Agent vector store
+    doc_text = f"Customer: {payload.customer_name}\nEngagement: {payload.name}\nDescription: {payload.description or ''}\nOutcome Goal: {statement}"
+    know_agent.ingest_document(
+        engagement_id=engagement_id,
+        title=f"{payload.customer_name} Architecture & Scope Baseline",
+        raw_text=doc_text
+    )
+
+    db.commit()
+    db.refresh(eng)
+
+    return {
+        "success": True,
+        "data": {
+            "id": eng.id,
+            "customer_name": eng.customer_name,
+            "name": eng.name,
+            "description": eng.description,
+            "status": eng.status,
+            "progress": eng.progress,
+            "current_work_cycle": eng.current_work_cycle,
+            "current_outcome_id": outcome_id,
+            "version": 1,
+            "success_criteria": criteria,
+            "pending_approvals_count": 0,
+            "created_at": eng.created_at.isoformat()
+        },
+        "message": f"Engagement for {eng.customer_name} created successfully"
     }
 
 
@@ -330,19 +450,29 @@ async def respond_to_approval(
     if payload.action == "APPROVE":
         current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
         updated_criteria = list(current_outcome.success_criteria or [])
-        if not any(c.get("id") == "sc-4" for c in updated_criteria):
+
+        # Dynamic addition title based on engagement and payload
+        if payload.decision_note and payload.decision_note.strip():
+            addition_title = payload.decision_note.strip()
+        elif eng.customer_name == "Acme Corp" or "acme" in engagement_id.lower():
+            addition_title = "Enterprise SSO configuration & validation (Added v2)"
+        else:
+            addition_title = f"Approved scope expansion criterion (Added v{(current_outcome.version if current_outcome else 1) + 1})"
+
+        new_crit_id = f"sc-{len(updated_criteria) + 1}"
+        if not any(c.get("title") == addition_title for c in updated_criteria):
             updated_criteria.append({
-                "id": "sc-4",
-                "title": "Enterprise SSO configuration & validation (Added v2)",
+                "id": new_crit_id,
+                "title": addition_title,
                 "completed": False
             })
 
         new_v2 = outcome_service.propose_new_outcome_version(
             engagement_id=engagement_id,
-            new_statement=current_outcome.statement,
+            new_statement=current_outcome.statement if current_outcome else eng.name,
             new_success_criteria=updated_criteria,
             proposed_by="understand_agent",
-            reason="Manager approved Enterprise SSO scope expansion."
+            reason=f"Manager approved scope expansion for {eng.customer_name}."
         )
 
         updated_eng = outcome_service.approve_outcome_version(
@@ -350,6 +480,17 @@ async def respond_to_approval(
             outcome_id=new_v2.id,
             approved_by=manager_name
         )
+
+        # Mark any pending approvals in DB as APPROVED
+        pending_approvals_list = db.query(Approval).filter(
+            Approval.engagement_id == engagement_id,
+            Approval.status == ApprovalStatus.PENDING
+        ).all()
+        for appr in pending_approvals_list:
+            appr.status = ApprovalStatus.APPROVED
+            appr.reviewed_by = manager_name
+            appr.decision_note = payload.decision_note
+            appr.reviewed_at = datetime.utcnow()
 
         # Log timeline approval event
         db.add(TimelineEvent(
@@ -634,7 +775,9 @@ async def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
     statement = current_outcome.statement if current_outcome else ""
     version = current_outcome.version if current_outcome else 1
+    criteria = current_outcome.success_criteria if current_outcome else []
     approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
+    timeline = db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).order_by(TimelineEvent.created_at.desc()).all()
 
     brief = supervisor_coordinator.generate_daily_work_brief(
         engagement_id=engagement_id,
@@ -642,7 +785,10 @@ async def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)
         status=eng.status,
         outcome_statement=statement,
         version=version,
-        pending_approvals=len(approvals)
+        pending_approvals=len(approvals),
+        current_work_cycle=eng.current_work_cycle,
+        timeline_events=timeline,
+        success_criteria=criteria
     )
 
     # Persist brief provenance into shared memory timeline

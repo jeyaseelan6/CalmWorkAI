@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { BookOpen, Search, ShieldCheck, Sparkles, FileText, Send, CheckCircle2 } from "lucide-react";
+import { BookOpen, Search, ShieldCheck, Sparkles, FileText, Send, CheckCircle2, AlertTriangle } from "lucide-react";
 
 interface Citation {
   document_title: string;
@@ -30,12 +30,14 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [answerData, setAnswerData] = useState<GroundedAnswerData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/knowledge/query`, {
         method: "POST",
@@ -46,41 +48,18 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
         const json = await res.json();
         if (json.success && json.data) {
           setAnswerData(json.data);
+        } else {
+          setError(json.message || "No grounded answer could be retrieved.");
+          setAnswerData(null);
         }
       } else {
-        // Local fallback simulation if server not reachable
-        setAnswerData({
-          question: query,
-          answer: `Based on engagement documentation for ${customerName}, all customer onboarding microservices require Enterprise SSO (SAML 2.0 / OAuth2) authentication prior to production cutover.`,
-          citations: [
-            {
-              document_title: `${customerName} Enterprise Security Mandate`,
-              chunk_id: "doc-001-c0",
-              snippet: "Enterprise security team requires all customer onboarding microservices to authenticate via Enterprise Single Sign-On...",
-              relevance_score: 0.94
-            }
-          ],
-          confidence_score: 0.95,
-          tenant_isolated: true,
-          privacy_scrubbed: true
-        });
+        const errJson = await res.json().catch(() => ({}));
+        setError(errJson.detail || "KNOW Agent failed to query knowledge vector store.");
+        setAnswerData(null);
       }
-    } catch (err) {
-      setAnswerData({
-        question: query,
-        answer: `Based on engagement documentation for ${customerName}, all customer onboarding microservices require Enterprise SSO (SAML 2.0 / OAuth2) authentication prior to production cutover.`,
-        citations: [
-          {
-            document_title: `${customerName} Enterprise Security Mandate`,
-            chunk_id: "doc-001-c0",
-            snippet: "Enterprise security team requires all customer onboarding microservices to authenticate via Enterprise Single Sign-On...",
-            relevance_score: 0.94
-          }
-        ],
-        confidence_score: 0.95,
-        tenant_isolated: true,
-        privacy_scrubbed: true
-      });
+    } catch (err: any) {
+      setError(err.message || "Network error while querying KNOW Agent.");
+      setAnswerData(null);
     } finally {
       setLoading(false);
     }
@@ -127,6 +106,14 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
           )}
         </button>
       </form>
+
+      {/* Error Output */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Answer Output */}
       {answerData && (

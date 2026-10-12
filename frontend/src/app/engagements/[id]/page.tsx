@@ -54,12 +54,12 @@ export default function EngagementDetailPage() {
           setDocContent("");
         }, 1200);
       } else {
-        setUploadStatus("Indexed (Local Fallback)");
-        setTimeout(() => setShowUploadModal(false), 1000);
+        setUploadStatus("Upload failed. Check backend connection.");
+        setTimeout(() => setUploadStatus(null), 2500);
       }
     } catch (err) {
-      setUploadStatus("Indexed locally!");
-      setTimeout(() => setShowUploadModal(false), 1000);
+      setUploadStatus("Network error uploading document.");
+      setTimeout(() => setUploadStatus(null), 2500);
     }
   };
 

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Send, FileCheck, Sparkles, CheckCircle2, ShieldCheck, Mail, Lock } from "lucide-react";
+import { Send, FileCheck, Sparkles, CheckCircle2, ShieldCheck, Mail, Lock, AlertTriangle } from "lucide-react";
 
 interface CustomerUpdateDraft {
   engagement_id: string;
@@ -30,9 +30,11 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   const [notes, setNotes] = useState("");
   const [draft, setDraft] = useState<CustomerUpdateDraft | null>(null);
   const [approved, setApproved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerateUpdate = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/generate`, {
         method: "POST",
@@ -45,39 +47,18 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
         if (json.success && json.data) {
           setDraft(json.data);
           setApproved(false);
+        } else {
+          setError(json.message || "Failed to generate AI customer update.");
+          setDraft(null);
         }
       } else {
-        // Fallback simulation
-        setDraft({
-          engagement_id: engagementId,
-          customer_name: customerName,
-          subject: `Executive Update: ${customerName} — ${engagementName} Progress`,
-          executive_summary: `We are actively advancing the ${engagementName} initiative for ${customerName}. Core integration phases are progressing smoothly with verified system reliability.`,
-          key_milestones_achieved: [
-            "Completed automated onboarding workflow baseline.",
-            "API endpoint integration verified and tested."
-          ],
-          next_milestone_target: "Production validation and Enterprise SSO setup.",
-          customer_action_items: ["Configure Enterprise SSO identity provider integration."],
-          status: "DRAFT",
-          privacy_scrubbed: true
-        });
+        const errJson = await res.json().catch(() => ({}));
+        setError(errJson.detail || "DELIVER Agent failed to generate update.");
+        setDraft(null);
       }
-    } catch (e) {
-      setDraft({
-        engagement_id: engagementId,
-        customer_name: customerName,
-        subject: `Executive Update: ${customerName} — ${engagementName} Progress`,
-        executive_summary: `We are actively advancing the ${engagementName} initiative for ${customerName}. Core integration phases are progressing smoothly with verified system reliability.`,
-        key_milestones_achieved: [
-          "Completed automated onboarding workflow baseline.",
-          "API endpoint integration verified and tested."
-        ],
-        next_milestone_target: "Production validation and Enterprise SSO setup.",
-        customer_action_items: ["Configure Enterprise SSO identity provider integration."],
-        status: "DRAFT",
-        privacy_scrubbed: true
-      });
+    } catch (e: any) {
+      setError(e.message || "Network error while calling DELIVER Agent.");
+      setDraft(null);
     } finally {
       setLoading(false);
     }
@@ -103,6 +84,12 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
           <p className="text-xs text-slate-600 leading-relaxed font-medium">
             DELIVER Agent translates engineering progress, completed DoD items, and blockers into manager-approved executive update emails for <strong className="text-slate-900 font-semibold">{customerName}</strong>.
           </p>
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+              <span>{error}</span>
+            </div>
+          )}
           <div className="space-y-2">
             <textarea
               placeholder="Add optional FDE notes or context for this customer update..."

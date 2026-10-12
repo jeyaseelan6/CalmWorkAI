@@ -378,7 +378,10 @@ class SupervisorCoordinator:
         status: str = "HEALTHY",
         outcome_statement: str = "",
         version: int = 1,
-        pending_approvals: int = 0
+        pending_approvals: int = 0,
+        current_work_cycle: str = "Step 1: Understand the Business Reality",
+        timeline_events: Optional[List[Any]] = None,
+        success_criteria: Optional[List[Dict[str, Any]]] = None
     ) -> DailyWorkBrief:
         """
         Proactive Morning Brief Workflow (Sequential Execution):
@@ -393,18 +396,32 @@ class SupervisorCoordinator:
         now_iso = datetime.now(timezone.utc).isoformat()
         warnings: List[str] = []
 
-        is_acme = engagement_id == "eng-acme-001"
-
         # -------------------------------------------------------------
         # STEP 1: Invoke UNDERSTAND Agent (Identify Outcome & Scope Drift)
         # -------------------------------------------------------------
+        raw_change = ""
+        if timeline_events:
+            for evt in timeline_events:
+                evt_type = getattr(evt, "event_type", "")
+                if evt_type in ("CHANGE_DETECTED", "REQUIREMENT_CHANGE", "OUTCOME_CHANGE_PROPOSED"):
+                    raw_change = getattr(evt, "description", "") or getattr(evt, "title", "")
+                    break
+            if not raw_change and len(timeline_events) > 0:
+                raw_change = getattr(timeline_events[0], "description", "") or getattr(timeline_events[0], "title", "")
+
+        if not raw_change:
+            if status == "NEEDS_REASSESSMENT":
+                raw_change = f"Scope reassessment initiated for {customer_name}: requirement drift or gating dependency identified."
+            else:
+                raw_change = f"Progress updated for {customer_name} across {current_work_cycle}."
+
         understand_findings = None
         try:
-            sample_input = "Customer added mandatory Enterprise SAML 2.0 / OAuth2 SSO requirement." if (is_acme and status == "NEEDS_REASSESSMENT") else "Timeline updated with onboarding integration test results."
+            crit_titles = [c.get("title", "") if isinstance(c, dict) else str(c) for c in (success_criteria or [])]
             understand_findings = self.understand_agent.analyze_change(
-                raw_change_text=sample_input,
-                current_outcome_statement=outcome_statement or ("Reduce onboarding time" if is_acme else "Migrate 50M records"),
-                current_success_criteria=[]
+                raw_change_text=raw_change,
+                current_outcome_statement=outcome_statement or f"Deliver active outcome for {customer_name}.",
+                current_success_criteria=crit_titles
             )
         except Exception as e:
             logger.warning(f"UNDERSTAND agent execution warning in Morning Brief: {str(e)}")
@@ -415,14 +432,14 @@ class SupervisorCoordinator:
         # -------------------------------------------------------------
         know_findings = None
         try:
-            guided_query = "SSO SAML 2.0 authentication architecture specs" if (is_acme and status == "NEEDS_REASSESSMENT") else "Data migration CDC cutoff window specs"
+            guided_query = f"{customer_name} technical specifications, architectural constraints, and outcome criteria"
             know_findings = self.know_agent.answer_question(
                 engagement_id=engagement_id,
                 raw_question=guided_query,
                 top_k=2
             )
             if not know_findings.verified_evidence_found:
-                warnings.append("KNOW agent reported limited verified document evidence for technical specs.")
+                warnings.append(f"KNOW agent reported limited indexed documentation for {customer_name}; grounded on structured database records.")
         except Exception as e:
             logger.warning(f"KNOW agent execution warning in Morning Brief: {str(e)}")
             warnings.append("KNOW retrieval incomplete; using structured DB timeline context.")
@@ -435,7 +452,7 @@ class SupervisorCoordinator:
             move_findings = self.move_agent.determine_next_action(
                 engagement_id=engagement_id,
                 customer_name=customer_name,
-                current_work_cycle="Stage 4: Validation",
+                current_work_cycle=current_work_cycle or "Step 1: Understand the Business Reality",
                 status=status,
                 outcome_version=version,
                 pending_approvals=pending_approvals
@@ -446,163 +463,157 @@ class SupervisorCoordinator:
 
         # -------------------------------------------------------------
         # STEP 4: Supervisor Synthesis & Work Plan Preparation
-        # (Constructing Sections A, B, C, D, E)
+        # (Constructing Sections A, B, C, D, E dynamically)
         # -------------------------------------------------------------
         
         # Section A: What Changed?
-        if is_acme and status == "NEEDS_REASSESSMENT":
+        what_changed: List[WhatChangedItem] = []
+        category_map = {
+            "ENGAGEMENT_CREATED": "INITIATIVE",
+            "OUTCOME_CHANGE_PROPOSED": "OUTCOME",
+            "OUTCOME_APPROVED": "OUTCOME",
+            "CHANGE_DETECTED": "REQUIREMENT",
+            "WORKNOTE_LOGGED": "PROGRESS",
+            "APPROVAL_CREATED": "GOVERNANCE",
+            "BLOCKER_IDENTIFIED": "BLOCKER",
+            "MORNING_BRIEF_GENERATED": "SYSTEM"
+        }
+        if timeline_events:
+            for evt in timeline_events:
+                evt_type = getattr(evt, "event_type", "PROGRESS")
+                # Exclude internal morning brief system events so only real business/milestone events appear
+                if evt_type == "MORNING_BRIEF_GENERATED":
+                    continue
+                summary_text = getattr(evt, "description", None) or getattr(evt, "title", "Milestone recorded")
+                evt_date = getattr(evt, "created_at", None)
+                date_str = evt_date.strftime("%Y-%m-%d") if (evt_date and hasattr(evt_date, "strftime")) else now_str
+                what_changed.append(WhatChangedItem(
+                    summary=summary_text,
+                    category=category_map.get(evt_type, "PROGRESS"),
+                    date_recorded=date_str,
+                    timeline_ref=str(getattr(evt, "id", f"evt-{engagement_id}"))
+                ))
+                if len(what_changed) >= 3:
+                    break
+
+        if not what_changed:
             what_changed = [
                 WhatChangedItem(
-                    summary="Customer specified mandatory Enterprise SAML 2.0 / OAuth2 SSO requirement.",
-                    category="REQUIREMENT",
-                    date_recorded=now_str,
-                    timeline_ref="evt-acme-change-01"
-                ),
-                WhatChangedItem(
-                    summary="Definition of Done upgrade proposed (v1 → v2) adding SSO validation item.",
-                    category="OUTCOME",
-                    date_recorded=now_str,
-                    timeline_ref="evt-acme-outcome-02"
-                ),
-                WhatChangedItem(
-                    summary="Security team OAuth configuration identified as gating production dependency.",
-                    category="BLOCKER",
-                    date_recorded=now_str,
-                    timeline_ref="evt-acme-blocker-03"
-                )
-            ]
-            what_matters_outcome = outcome_statement or "Reduce manual onboarding time from 30 min to under 5 min."
-            outcome_health = "NEEDS_REASSESSMENT"
-            risks = ["Production cutover delayed if OAuth configuration parameters are not provided by security owner."]
-            pending_decisions = ["Manager approval required for Definition of Done v2 upgrade."]
-            
-            blockers = [
-                BlockerItem(
-                    title="Missing OAuth2 Client Credentials & SAML IDP Callback URLs",
-                    dependency_type="CUSTOMER",
-                    evidence_snippet="Customer security team mandate requires SSO before production deployment.",
-                    impact_description="Gates Stage 4 Validation and prevents final cutover approval."
-                )
-            ]
-
-            # Supervisor Proposed Work Plan
-            proposed_plan = ProposedWorkPlan(
-                plan_id=f"plan-{engagement_id}-{version}",
-                engagement_id=engagement_id,
-                version=version,
-                target_outcome=what_matters_outcome,
-                work_items=[
-                    ProposedWorkItem(
-                        id="wi-1",
-                        title="Contact Customer Security Owner for SAML/OAuth Configuration",
-                        sequence_order=1,
-                        why_it_matters="Gating prerequisite to enable SSO validation in test environment.",
-                        dependencies=["Customer Security Team"],
-                        blockers=["Missing Client ID & Secret"],
-                        decisions_or_approvals_required=["Security Team Approval"],
-                        status="PROPOSED"
-                    ),
-                    ProposedWorkItem(
-                        id="wi-2",
-                        title="Configure SSO Callback Endpoints & Test Authentication Flow",
-                        sequence_order=2,
-                        why_it_matters="Fulfills Definition of Done v2 success criterion sc-4.",
-                        dependencies=["OAuth Credentials"],
-                        blockers=[],
-                        decisions_or_approvals_required=[],
-                        status="PROPOSED"
-                    ),
-                    ProposedWorkItem(
-                        id="wi-3",
-                        title="Execute End-to-End Production Cutover Validation",
-                        sequence_order=3,
-                        why_it_matters="Final validation step before customer signoff.",
-                        dependencies=["SSO Integration Complete"],
-                        blockers=[],
-                        decisions_or_approvals_required=["Manager Outcome v2 Approval"],
-                        status="PROPOSED"
-                    )
-                ],
-                assumptions_and_questions=[
-                    "Assumption: Customer security team uses standard SAML 2.0 / OIDC provider.",
-                    "Question: Who is the designated security contact for emergency cutover signoff?"
-                ],
-                recommended_first_action="Request OAuth2 client credentials from customer security owner.",
-                status="PROPOSED",
-                generated_at=now_iso
-            )
-
-            evidence_items = [
-                EvidenceAndConfidenceItem(
-                    claim="Enterprise SSO is mandatory before production cutover.",
-                    category="VERIFIED_FACT",
-                    evidence_source="Document: 'Acme Corp Enterprise Security & SSO Mandate'",
-                    confidence_level="HIGH"
-                ),
-                EvidenceAndConfidenceItem(
-                    claim="Outcome Version 2 requires Manager approval to activate.",
-                    category="PROPOSED_ACTION",
-                    evidence_source="State Model: Approval ID app-acme-001 (PENDING)",
-                    confidence_level="HIGH"
-                )
-            ]
-
-        else:
-            what_changed = [
-                WhatChangedItem(
-                    summary="Completed automated data migration CDC integration test suite.",
+                    summary=f"Engagement '{customer_name}' initialized with Outcome v{version} Definition of Done.",
                     category="PROGRESS",
                     date_recorded=now_str,
-                    timeline_ref="evt-globex-prog-01"
+                    timeline_ref=f"eng-{engagement_id}"
                 )
             ]
-            what_matters_outcome = outcome_statement or "Migrate 50M records to GCP Cloud SQL with zero downtime."
-            outcome_health = "HEALTHY"
-            risks = ["Minor network latency risk during initial PostgreSQL replication burst."]
-            pending_decisions = []
-            
-            blockers = []
 
-            proposed_plan = ProposedWorkPlan(
-                plan_id=f"plan-{engagement_id}-{version}",
-                engagement_id=engagement_id,
-                version=version,
-                target_outcome=what_matters_outcome,
-                work_items=[
-                    ProposedWorkItem(
-                        id="wi-1",
-                        title="Execute Dry-Run Cutover Simulation on Staging Cloud SQL",
-                        sequence_order=1,
-                        why_it_matters="Verifies maximum 15 min cutover window commitment.",
-                        dependencies=["Staging DB Provisioned"],
-                        blockers=[],
-                        decisions_or_approvals_required=[],
-                        status="PROPOSED"
-                    ),
-                    ProposedWorkItem(
-                        id="wi-2",
-                        title="Validate 50M Record Checksum Integrity",
-                        sequence_order=2,
-                        why_it_matters="Guarantees zero data loss success criterion.",
-                        dependencies=["Replication Complete"],
-                        blockers=[],
-                        decisions_or_approvals_required=[],
-                        status="PROPOSED"
-                    )
-                ],
-                assumptions_and_questions=[
-                    "Assumption: On-prem PostgreSQL network bandwidth supports 50Mbps replication stream."
-                ],
-                recommended_first_action="Execute production cutover dry-run simulation script.",
-                status="PROPOSED",
-                generated_at=now_iso
-            )
+        what_matters_outcome = outcome_statement or f"Deliver active engagement outcome for {customer_name}."
+        outcome_health = status
 
+        risks: List[str] = []
+        if status == "NEEDS_REASSESSMENT":
+            risks.append(f"Outcome alignment required for {customer_name}: pending scope upgrade awaiting manager signoff.")
+        elif status == "BLOCKED":
+            risks.append(f"Gating blocker currently impacting progression in {current_work_cycle} for {customer_name}.")
+        elif status == "AT_RISK":
+            risks.append(f"Delivery velocity requires attention to maintain target milestone for {customer_name}.")
+        else:
+            risks.append(f"Ensure active criteria adhere to agreed technical constraints for {customer_name}.")
+
+        pending_decisions: List[str] = []
+        if pending_approvals > 0:
+            pending_decisions.append(f"Manager approval required for {customer_name} (Outcome v{version} / DoD change).")
+
+        blockers: List[BlockerItem] = []
+        if move_findings and move_findings.gating_blocker:
+            blk = move_findings.gating_blocker
+            blockers.append(BlockerItem(
+                title=blk.title,
+                dependency_type="EXTERNAL" if "Customer" in blk.owner else "INTERNAL",
+                evidence_snippet=blk.description,
+                impact_description=move_findings.impact or f"Impacts progression in {current_work_cycle}."
+            ))
+        elif status == "NEEDS_REASSESSMENT":
+            blockers.append(BlockerItem(
+                title=f"Pending Scope Reassessment for {customer_name}",
+                dependency_type="GOVERNANCE",
+                evidence_snippet="Requirement drift or gating dependency requires Manager approval before proceeding.",
+                impact_description=f"Gates advancement in {current_work_cycle}."
+            ))
+        elif status == "BLOCKED":
+            blockers.append(BlockerItem(
+                title="Unresolved Gating Dependency",
+                dependency_type="PROCESS",
+                evidence_snippet=f"Engagement status is marked BLOCKED for {customer_name}.",
+                impact_description="Prevents advancement to subsequent work cycle phase."
+            ))
+
+        # Dynamic Work Items from success_criteria
+        work_items: List[ProposedWorkItem] = []
+        if success_criteria:
+            for idx, crit in enumerate(success_criteria):
+                crit_id = crit.get("id", f"wi-{idx+1}") if isinstance(crit, dict) else f"wi-{idx+1}"
+                crit_title = crit.get("title", f"Deliver milestone criterion {idx+1}") if isinstance(crit, dict) else str(crit)
+                is_done = crit.get("completed", False) if isinstance(crit, dict) else False
+                work_items.append(ProposedWorkItem(
+                    id=crit_id,
+                    title=crit_title,
+                    sequence_order=idx + 1,
+                    why_it_matters=f"Fulfills Definition of Done criterion for {customer_name}.",
+                    dependencies=[],
+                    blockers=[],
+                    decisions_or_approvals_required=["Manager Signoff"] if status == "NEEDS_REASSESSMENT" and idx == 0 else [],
+                    status="COMPLETED" if is_done else "PROPOSED"
+                ))
+        if not work_items:
+            work_items = [
+                ProposedWorkItem(
+                    id="wi-1",
+                    title=f"Review scope & technical requirements for {customer_name}",
+                    sequence_order=1,
+                    why_it_matters=f"Baseline alignment with customer goals in {current_work_cycle}.",
+                    dependencies=[],
+                    blockers=[],
+                    decisions_or_approvals_required=[],
+                    status="PROPOSED"
+                )
+            ]
+
+        rec_first_action = (
+            move_findings.recommendation
+            if (move_findings and move_findings.recommendation)
+            else f"Review Definition of Done criteria for {customer_name}."
+        )
+
+        proposed_plan = ProposedWorkPlan(
+            plan_id=f"plan-{engagement_id}-{version}",
+            engagement_id=engagement_id,
+            version=version,
+            target_outcome=what_matters_outcome,
+            work_items=work_items,
+            assumptions_and_questions=[
+                f"Assumption: Technical constraints and requirements for {customer_name} are captured in the active outcome.",
+                f"Work Cycle Context: Currently executing {current_work_cycle}."
+            ],
+            recommended_first_action=rec_first_action,
+            status="PROPOSED",
+            generated_at=now_iso
+        )
+
+        evidence_items: List[EvidenceAndConfidenceItem] = []
+        if know_findings and know_findings.citations:
+            for cit in know_findings.citations:
+                evidence_items.append(EvidenceAndConfidenceItem(
+                    claim=cit.snippet,
+                    category="VERIFIED_FACT",
+                    evidence_source=f"Document: '{cit.document_title}'",
+                    confidence_level="HIGH" if cit.relevance_score > 0.4 else "MEDIUM"
+                ))
+        if not evidence_items:
             evidence_items = [
                 EvidenceAndConfidenceItem(
-                    claim="Replication CDC pipeline supports 15 min cutover window.",
+                    claim=f"Outcome contract v{version} active in database for {customer_name}.",
                     category="VERIFIED_FACT",
-                    evidence_source="Document: 'Globex Legacy Data Migration CDC Specs'",
+                    evidence_source=f"State Model: Outcome {engagement_id} (Version {version})",
                     confidence_level="HIGH"
                 )
             ]

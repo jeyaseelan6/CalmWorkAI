@@ -173,52 +173,66 @@ class MoveAgent:
         if not adk_response_text:
             if status == "NEEDS_REASSESSMENT" or pending_approvals > 0 or any(b.get("is_gating") for b in raw_blockers):
                 situation = f"Outcome status for {customer_name} is currently NEEDS_REASSESSMENT due to pending gating dependency or requirement change."
-                recommendation = f"Request required security configuration and obtain Manager approval for Outcome Version {outcome_version + 1}."
-                why_now = "Production validation step is currently blocked by this unfulfilled dependency."
-                impact = "Receiving configuration and approval enables authentication integration and clears deployment path."
+                recommendation = f"Review pending approval and obtain Manager authorization for Outcome Version {outcome_version + 1} for {customer_name}."
+                why_now = "Downstream work cycle progression is paused until this criteria and version transition are approved."
+                impact = "Manager authorization activates the updated Definition of Done and unlocks delivery execution."
                 evidence = [
                     f"Engagement status: {status}",
                     f"Pending approvals: {pending_approvals}",
-                    "Active gating dependency unfulfilled"
+                    f"Current Outcome Version: {outcome_version}"
                 ]
                 confidence = "High"
                 approval_required = True
                 priority = "CRITICAL"
                 gating_blocker = BlockerItem(
                     id="blk-001",
-                    title="Configuration & Approval Dependency",
-                    owner="Customer Security / Manager",
-                    status="Waiting on Customer",
+                    title="Outcome Version Approval Dependency",
+                    owner="Manager / Customer Owner",
+                    status="Pending Review",
                     is_gating=True,
-                    description="Enterprise SSO configuration and outcome version approval required."
+                    description=f"Outcome version upgrade and updated criteria awaiting review for {customer_name}."
                 )
                 role = "CUSTOMER_OWNER" if status == "NEEDS_REASSESSMENT" else "MANAGER"
             elif "STEP_5" in str(current_work_cycle).upper() or "Deploy" in str(current_work_cycle):
                 situation = f"Engagement is at Step 5 (Deploy Into Production) for {customer_name}."
-                recommendation = "Execute cutover performance dry-run test on staging replica."
-                why_now = "Dry-run performance data is required to confirm the 15-minute cutover window before production deployment."
-                impact = "Confirms zero-downtime cutover window and validates replication metrics."
+                recommendation = f"Execute staging deployment dry-run simulation and verification suite for {customer_name}."
+                why_now = "Staging verification and cutover dry-run are required to validate deployment integrity prior to production cutover."
+                impact = f"Confirms zero-downtime cutover and validates production release criteria for {customer_name}."
                 evidence = [
                     f"Current Work Cycle: {current_work_cycle}",
-                    "Production deployment scheduled"
+                    "Staging deployment ready for verification"
                 ]
                 confidence = "High"
                 approval_required = False
                 priority = "HIGH_PRIORITY"
                 gating_blocker = BlockerItem(
                     id="blk-002",
-                    title="Staging Maintenance Window",
+                    title="Staging Verification Window",
                     owner="FDE Team",
                     status="Scheduled",
                     is_gating=False,
-                    description="Performance benchmark scheduled during off-peak maintenance window."
+                    description=f"Performance and integration verification scheduled for {customer_name}."
                 )
                 role = "FDE"
+            elif "STEP_1" in str(current_work_cycle).upper() or "Understand" in str(current_work_cycle):
+                situation = f"Engagement is at Step 1 (Understand Business Reality) for {customer_name}."
+                recommendation = f"Conduct stakeholder discovery session to clarify operational constraints for {customer_name}."
+                why_now = "Accurate problem discovery in Step 1 prevents downstream architectural rework."
+                impact = f"Establishes grounded Definition of Done criteria for {customer_name}."
+                evidence = [
+                    f"Current Work Cycle: {current_work_cycle}",
+                    f"Customer: {customer_name}"
+                ]
+                confidence = "High"
+                approval_required = False
+                priority = "HIGH_PRIORITY"
+                gating_blocker = None
+                role = "FDE"
             else:
-                situation = f"Engagement execution progressing in {current_work_cycle}."
-                recommendation = "Complete current work cycle checklist items and verify success criteria."
+                situation = f"Engagement execution progressing in {current_work_cycle} for {customer_name}."
+                recommendation = f"Complete active work cycle tasks and verify success criteria for {customer_name}."
                 why_now = "Maintains outcome delivery velocity towards target milestone."
-                impact = "Advances progress towards production validation readiness."
+                impact = f"Advances progress towards production validation readiness for {customer_name}."
                 evidence = [f"Current Work Cycle: {current_work_cycle}"]
                 confidence = "High"
                 approval_required = False

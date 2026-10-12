@@ -30,54 +30,30 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v
 export default function SupervisorCard({ engagementId, customerName }: SupervisorCardProps) {
   const [summary, setSummary] = useState<SupervisorSummaryData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSupervisorSummary = async () => {
       setLoading(true);
+      setError(null);
       try {
         const res = await fetch(`${API_BASE}/engagements/${engagementId}/supervisor/summary`);
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {
             setSummary(json.data);
+          } else {
+            setError(json.message || "Failed to retrieve supervisor summary.");
+            setSummary(null);
           }
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          setError(errJson.detail || "Supervisor coordinator service unavailable.");
+          setSummary(null);
         }
-      } catch (e) {
-        // Fallback simulation
-        setSummary({
-          engagement_id: engagementId,
-          customer_name: customerName,
-          overall_health: engagementId === "eng-acme-001" ? "NEEDS_REASSESSMENT" : "HEALTHY",
-          current_work_cycle: engagementId === "eng-acme-001" ? "Step 4: Build Within Real Constraints" : "Step 5: Deploy Into Production",
-          agents: [
-            {
-              agent_name: "UNDERSTAND",
-              role_description: "Drift & Scope Change Analysis",
-              status: engagementId === "eng-acme-001" ? "RECOMMENDATION_PENDING" : "ACTIVE",
-              last_output_summary: "Evaluates scope shifts via Evidence -> Reasoning -> Recommendation pattern."
-            },
-            {
-              agent_name: "KNOW",
-              role_description: "Tenant-Isolated Grounded RAG",
-              status: "ACTIVE",
-              last_output_summary: "Indexes customer specs and returns grounded answers with explicit citations."
-            },
-            {
-              agent_name: "MOVE",
-              role_description: "Execution Velocity & Next Action",
-              status: "ACTIVE",
-              last_output_summary: "Ranks Next Best Action based on gating criteria and outcome velocity."
-            },
-            {
-              agent_name: "DELIVER",
-              role_description: "Executive Customer Studio",
-              status: "ACTIVE",
-              last_output_summary: "Translates technical progress into executive business language updates."
-            }
-          ],
-          privacy_guardrail_active: true,
-          orchestrated_at: new Date().toISOString()
-        });
+      } catch (e: any) {
+        setError(e.message || "Network error querying Supervisor coordinator.");
+        setSummary(null);
       } finally {
         setLoading(false);
       }
@@ -106,8 +82,23 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
       </div>
 
       {/* 4 Agent Status Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {summary?.agents.map((ag) => (
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {loading && !summary && (
+        <div className="p-6 text-center text-slate-400 text-xs animate-pulse">
+          Loading live multi-agent supervisor telemetry...
+        </div>
+      )}
+
+      {summary && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {summary.agents.map((ag) => (
           <div
             key={ag.agent_name}
             className={`p-3 rounded-md border text-xs space-y-1 ${
@@ -139,6 +130,8 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
           Orchestrated: {summary?.orchestrated_at ? new Date(summary.orchestrated_at).toLocaleTimeString() : "Just now"}
         </span>
       </div>
+      </>
+      )}
     </div>
   );
 }

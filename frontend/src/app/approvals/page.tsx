@@ -7,9 +7,34 @@ import { useAuth } from "@/context/AuthContext";
 import { ShieldCheck, CheckCircle, AlertTriangle, ArrowRight, XCircle, Lock } from "lucide-react";
 
 export default function ApprovalsPage() {
-  const { activeCustomer, approvedAcme, handleApproveChange } = useEngagement();
+  const { activeCustomer, activeEngagementData, approvedAcme, handleApproveChange } = useEngagement();
   const { isManager, isFDE } = useAuth();
   const [rejected, setRejected] = useState(false);
+
+  const isAcme = activeCustomer.id === "eng-acme-001";
+  const hasPending = isAcme 
+    ? (!approvedAcme && !rejected) 
+    : (activeEngagementData?.pending_approvals_count > 0 && !rejected);
+
+  const nextVersion = (activeEngagementData?.outcome?.version || 1) + 1;
+  const recommendationText = isAcme
+    ? `Upgrade Definition of Done checklist for ${activeCustomer.customerName} to Version 2 by adding "Enterprise SSO configuration & validation".`
+    : `Upgrade Definition of Done checklist for ${activeCustomer.customerName} to Version ${nextVersion} with updated requirement criteria.`;
+
+  const whyNowText = isAcme
+    ? "Customer IT security team added a mandatory authentication requirement. Production validation step is currently blocked until this criteria is satisfied."
+    : `New requirement criteria identified for ${activeCustomer.customerName}. Progression is paused until manager authorizes the updated Definition of Done.`;
+
+  const evidenceList = isAcme
+    ? ["Customer requirement input received", "Current outcome v1 lacks SSO clause"]
+    : [
+        activeEngagementData?.timeline?.[0]?.description || "Customer requirement shift logged",
+        `Current outcome v${activeEngagementData?.outcome?.version || 1} Definition of Done affected`
+      ];
+
+  const impactText = isAcme
+    ? "+2 days timeline shift; gates Step 4 production rollout cleanly."
+    : `Updates Definition of Done and unlocks execution in ${activeEngagementData?.engagement?.current_work_cycle || "active work cycle"}.`;
 
   return (
     <AppShell>
@@ -37,7 +62,7 @@ export default function ApprovalsPage() {
             </div>
 
             <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
-              <span className="text-amber-400 font-bold">{approvedAcme ? 0 : 1}</span>
+              <span className="text-amber-400 font-bold">{hasPending ? 1 : 0}</span>
               <span className="text-slate-400">Pending Approvals</span>
             </div>
           </div>
@@ -45,13 +70,13 @@ export default function ApprovalsPage() {
 
         {/* Approvals List */}
         <div className="space-y-4">
-          {!approvedAcme && !rejected ? (
+          {hasPending ? (
             <div className="bg-slate-900 border border-amber-500/30 rounded-xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-amber-400" />
                   <span className="text-xs font-mono font-bold uppercase text-amber-400">
-                    TYPE: OUTCOME_CHANGE (v1 → v2)
+                    TYPE: OUTCOME_CHANGE (v{activeEngagementData?.outcome?.version || 1} &rarr; v{nextVersion})
                   </span>
                 </div>
                 <span className="text-xs text-slate-400 font-mono">Customer: {activeCustomer.customerName}</span>
@@ -64,7 +89,7 @@ export default function ApprovalsPage() {
                     1. Recommendation
                   </span>
                   <p className="text-slate-100 font-semibold text-sm">
-                    Upgrade Definition of Done checklist for {activeCustomer.customerName} to Version 2 by adding "Enterprise SSO configuration & validation".
+                    {recommendationText}
                   </p>
                 </div>
 
@@ -73,7 +98,7 @@ export default function ApprovalsPage() {
                     2. Why Now
                   </span>
                   <p className="text-slate-300">
-                    Customer IT security team added a mandatory authentication requirement. Production validation step is currently blocked until this criteria is satisfied.
+                    {whyNowText}
                   </p>
                 </div>
 
@@ -83,8 +108,9 @@ export default function ApprovalsPage() {
                       3. Evidence
                     </span>
                     <ul className="text-slate-300 pl-3 list-disc text-[11px] space-y-0.5">
-                      <li>Customer requirement input received</li>
-                      <li>Current outcome v1 lacks SSO clause</li>
+                      {evidenceList.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
                     </ul>
                   </div>
 
@@ -93,7 +119,7 @@ export default function ApprovalsPage() {
                       4. Impact
                     </span>
                     <p className="text-slate-300 text-[11px]">
-                      +2 days timeline shift; gates Step 4 production rollout cleanly.
+                      {impactText}
                     </p>
                   </div>
 
@@ -127,7 +153,7 @@ export default function ApprovalsPage() {
                         className="px-5 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5 shadow-md"
                       >
                         <CheckCircle className="h-4 w-4" />
-                        <span>Approve Version 2 DoD Upgrade</span>
+                        <span>Approve Version {nextVersion} DoD Upgrade</span>
                       </button>
                     </div>
                   </div>
