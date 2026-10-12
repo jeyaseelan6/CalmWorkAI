@@ -177,14 +177,16 @@ class KnowAgent:
         )
 
         adk_answer = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
         if has_credentials:
             try:
                 adk_answer = execute_adk_runner(
                     runner=self.runner,
                     user_id="fde_user",
                     session_id=engagement_id,
-                    message_text=prompt
+                    message_text=prompt,
+                    system_instruction=KNOW_INSTRUCTION,
+                    json_mode=False
                 )
             except Exception as e:
                 logger.warning(f"ADK KNOW runner synthesis failed ({str(e)}); using deterministic citation summary.")

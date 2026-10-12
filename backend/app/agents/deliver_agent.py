@@ -152,14 +152,16 @@ class DeliverAgent:
 
         # 4. Attempt ADK Runner Execution
         adk_response_text = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
         if has_credentials:
             try:
                 adk_response_text = execute_adk_runner(
                     runner=self.runner,
                     user_id="fde_user",
                     session_id=engagement_id,
-                    message_text=prompt
+                    message_text=prompt,
+                    system_instruction=DELIVER_INSTRUCTION,
+                    json_mode=True
                 )
             except Exception as e:
                 logger.warning(f"ADK DELIVER runner execution failed ({str(e)}); using deterministic template draft.")

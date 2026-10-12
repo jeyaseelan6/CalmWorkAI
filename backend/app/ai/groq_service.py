@@ -26,7 +26,8 @@ class GroqService:
         self,
         prompt: str,
         system_instruction: Optional[str] = None,
-        json_mode: bool = False
+        json_mode: bool = False,
+        max_tokens: Optional[int] = 700
     ) -> Optional[str]:
         """
         Executes a chat completion against Groq API.
@@ -36,15 +37,20 @@ class GroqService:
             logger.warning("GroqService called but GROQ_API_KEY is not configured.")
             return None
 
+        final_sys = system_instruction or ""
+        if json_mode and "json" not in final_sys.lower() and "json" not in prompt.lower():
+            final_sys += "\nYou must output your response in valid JSON format only."
+
         messages: List[Dict[str, str]] = []
-        if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
+        if final_sys.strip():
+            messages.append({"role": "system", "content": final_sys.strip()})
         messages.append({"role": "user", "content": prompt})
 
         payload: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": 0.2
+            "temperature": 0.2,
+            "max_tokens": max_tokens or 700
         }
 
         if json_mode:

@@ -132,14 +132,16 @@ class MoveAgent:
 
         # 3. Attempt ADK Runner execution
         adk_response_text = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
         if has_credentials:
             try:
                 adk_response_text = execute_adk_runner(
                     runner=self.runner,
                     user_id="fde_user",
                     session_id=engagement_id,
-                    message_text=prompt
+                    message_text=prompt,
+                    system_instruction=MOVE_INSTRUCTION,
+                    json_mode=True
                 )
             except Exception as e:
                 logger.warning(f"ADK MOVE runner execution failed ({str(e)}); falling back to deterministic action logic.")

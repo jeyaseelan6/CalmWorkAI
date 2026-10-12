@@ -18,13 +18,17 @@ class Settings(BaseSettings):
         "postgresql://postgres:postgres@localhost:5432/calmwork_db"
     )
     
-    # Google Cloud & AI Settings
+    # Google Cloud & AI Settings (Primary Competition Platform)
     GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "calmwork-ai-dev")
     GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
     GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME", "calmwork-documents")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     USE_VERTEX_AI: bool = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
+    
+    # Groq AI Settings (Testing / Rapid Prototyping Adapter)
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
     
     # Google ADK Architecture Settings
     ADK_APP_NAME: str = os.getenv("ADK_APP_NAME", "calmwork-ai")

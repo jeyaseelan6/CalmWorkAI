@@ -17,6 +17,7 @@ from google.genai import types
 
 from app.config import settings
 from app.privacy.policy import PrivacyPolicyEngine, PrivacyViolationError
+from app.ai.groq_service import groq_service
 
 logger = logging.getLogger(__name__)
 
@@ -172,18 +173,28 @@ def is_live_inference_enabled() -> bool:
     is_testing = os.getenv("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ
     if is_testing and os.getenv("RUN_LIVE_AI_TESTS") != "1":
         return False
-    return bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or os.getenv("GOOGLE_API_KEY"))
+    return bool(
+        settings.GEMINI_API_KEY or 
+        settings.USE_VERTEX_AI or 
+        os.getenv("GOOGLE_API_KEY") or 
+        settings.GROQ_API_KEY
+    )
 
 
 def execute_adk_runner(
     runner: Runner,
     user_id: str,
     session_id: str,
-    message_text: str
+    message_text: str,
+    system_instruction: Optional[str] = None,
+    json_mode: bool = False
 ) -> Optional[str]:
     """
     Executes an ADK Runner with input message and extracts the final text response.
     Catches errors safely without leaking sensitive information.
+    Dual-mode orchestration:
+    - Primary (Competition): Google Gemini / Vertex AI via native Google ADK Runner.
+    - Fallback / Fast Prototyping (Testing): Groq API via GroqService.
     Supports deterministic test mocking.
     """
     # 1. Check for registered test mocks
@@ -197,27 +208,48 @@ def execute_adk_runner(
     if not is_live_inference_enabled():
         return None
 
-    try:
-        content = types.Content(
-            parts=[types.Part.from_text(text=message_text)]
-        )
+    # 3. Primary Mode: Google Gemini / Vertex AI via native Google ADK Runner
+    gemini_active = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or os.getenv("GOOGLE_API_KEY"))
+    if gemini_active:
+        try:
+            content = types.Content(
+                parts=[types.Part.from_text(text=message_text)]
+            )
 
-        final_text = None
-        for event in runner.run(
-            user_id=user_id,
-            session_id=session_id,
-            new_message=content
-        ):
-            if event.is_final_response():
-                msg = event.message
-                if msg and msg.parts:
-                    part_texts = [p.text for p in msg.parts if getattr(p, "text", None)]
-                    if part_texts:
-                        final_text = "\n".join(part_texts)
-                elif event.message and getattr(event.message, "text", None):
-                    final_text = event.message.text
+            final_text = None
+            for event in runner.run(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=content
+            ):
+                if event.is_final_response():
+                    msg = event.message
+                    if msg and msg.parts:
+                        part_texts = [p.text for p in msg.parts if getattr(p, "text", None)]
+                        if part_texts:
+                            final_text = "\n".join(part_texts)
+                    elif event.message and getattr(event.message, "text", None):
+                        final_text = event.message.text
 
-        return final_text
-    except Exception as e:
-        logger.warning(f"ADK Runner execution failed ({e}); falling back to deterministic reasoning.")
-        return None
+            if final_text:
+                return final_text
+        except Exception as e:
+            logger.warning(f"Native Google ADK Runner execution failed ({e}); checking Groq fallback.")
+
+    # 4. Testing / Fallback Mode: Groq Service
+    if settings.GROQ_API_KEY:
+        try:
+            instruction = system_instruction or getattr(getattr(runner, "agent", None), "instruction", None)
+            logger.info(f"Executing agent inference via Groq provider (model={settings.GROQ_MODEL or 'qwen/qwen3.8-27b'}, json_mode={json_mode})")
+            groq_response = groq_service.generate_chat_completion(
+                prompt=message_text,
+                system_instruction=instruction,
+                json_mode=json_mode,
+                max_tokens=700
+            )
+            if groq_response:
+                return groq_response
+        except Exception as e:
+            logger.warning(f"Groq provider execution failed ({e}); falling back to deterministic reasoning.")
+
+    return None

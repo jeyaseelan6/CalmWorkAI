@@ -139,14 +139,16 @@ class UnderstandAgent:
 
         # 3. Execute ADK Runner if model credentials available
         adk_response_text = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or os.getenv("GOOGLE_API_KEY"))
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
         if has_credentials:
             try:
                 adk_response_text = execute_adk_runner(
                     runner=self.runner,
                     user_id="fde_user",
                     session_id=sid,
-                    message_text=prompt
+                    message_text=prompt,
+                    system_instruction=UNDERSTAND_INSTRUCTION,
+                    json_mode=True
                 )
             except Exception as e:
                 logger.warning(f"ADK Runner execution failed or model unavailable ({str(e)}); using deterministic outcome analysis.")
