@@ -22,6 +22,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return DEMO_USERS["fde@calmwork.ai"]
 
     token = credentials.credentials
+    if token == "demo-manager-token":
+        return DEMO_USERS["manager@calmwork.ai"]
+    if token == "demo-fde-token":
+        return DEMO_USERS["fde@calmwork.ai"]
+
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(

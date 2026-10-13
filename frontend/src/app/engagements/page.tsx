@@ -17,8 +17,10 @@ import {
   Target
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function EngagementsListPage() {
+  const router = useRouter();
   const { customers, activeCustomer, setActiveCustomer, approvedAcme, createEngagement } = useEngagement();
   const { isManager, isFDE } = useAuth();
 
@@ -56,7 +58,8 @@ export default function EngagementsListPage() {
     setSubmitting(false);
 
     if (res.success) {
-      setSuccessMsg(`Engagement for ${customerName} initialized and synced!`);
+      setSuccessMsg(`Engagement for ${customerName} initialized! Navigating to workspace...`);
+      const createdId = res.data?.id;
       setTimeout(() => {
         setShowCreateModal(false);
         setSuccessMsg(null);
@@ -64,7 +67,10 @@ export default function EngagementsListPage() {
         setEngagementName("");
         setDescription("");
         setOutcomeStatement("");
-      }, 1200);
+        if (createdId) {
+          router.push(`/engagements/${createdId}`);
+        }
+      }, 1000);
     } else {
       setErrorMsg(res.error || "Failed to create engagement.");
     }
@@ -151,7 +157,7 @@ export default function EngagementsListPage() {
                     DoD Outcome v{cust.version || (isAcme && approvedAcme ? 2 : 1)}
                   </span>
                   <Link
-                    href="/"
+                    href={`/engagements/${cust.id}`}
                     onClick={() => setActiveCustomer(cust)}
                     className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
                   >

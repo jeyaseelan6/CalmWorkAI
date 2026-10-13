@@ -44,7 +44,7 @@ interface EngagementContextType {
     description?: string;
     initialOutcomeStatement?: string;
     successCriteria?: string[];
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; error?: string; data?: any }>;
   handleApproveChange: () => Promise<void>;
 }
 
@@ -155,7 +155,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     description?: string;
     initialOutcomeStatement?: string;
     successCriteria?: string[];
-  }): Promise<{ success: boolean; error?: string }> => {
+  }): Promise<{ success: boolean; error?: string; data?: any }> => {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -189,7 +189,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
           };
           setActiveCustomer(newCust);
         }
-        return { success: true };
+        return { success: true, data: data.data };
       } else {
         return {
           success: false,

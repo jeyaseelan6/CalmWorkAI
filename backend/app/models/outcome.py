@@ -21,6 +21,7 @@ class Outcome(Base):
     version = Column(Integer, default=1, nullable=False)
     statement = Column(Text, nullable=False)
     success_criteria = Column(JSON, nullable=False)  # List of DoD criteria objects [{title: str, completed: bool}]
+    work_plan = Column(JSON, nullable=True)  # Structured Work Plan (milestones, tasks, dependencies, risks)
     status = Column(Enum(OutcomeStatus), default=OutcomeStatus.APPROVED, nullable=False)
     created_by = Column(String(100), nullable=False)
     approved_by = Column(String(100), nullable=True)

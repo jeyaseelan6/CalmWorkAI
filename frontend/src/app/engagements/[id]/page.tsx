@@ -7,6 +7,7 @@ import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
 import EvidenceReasoningCard from "@/components/engagement/EvidenceReasoningCard";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
+import WorkPlanSection from "@/components/engagement/WorkPlanSection";
 import { useEngagement } from "@/context/EngagementContext";
 import { 
   Building2, 
@@ -18,12 +19,53 @@ import {
   Upload, 
   ShieldAlert,
   ArrowRight,
-  Layers
+  Layers,
+  ListTodo
 } from "lucide-react";
 
-export default function EngagementDetailPage() {
-  const { activeCustomer, activeEngagementData, approvedAcme, handleApproveChange } = useEngagement();
-  const [activeTab, setActiveTab] = useState<"overview" | "outcome" | "knowledge" | "move" | "timeline">("overview");
+import { useParams } from "next/navigation";
+
+function parseStepNumber(workCycle?: string): number {
+  if (!workCycle) return 1;
+  const match = workCycle.match(/Step\s*(\d)/i);
+  if (match) return parseInt(match[1], 10);
+  if (workCycle.includes("UNDERSTAND") || workCycle.includes("Understand")) return 1;
+  if (workCycle.includes("PROBLEM") || workCycle.includes("Problem")) return 2;
+  if (workCycle.includes("DESIGN") || workCycle.includes("Design")) return 3;
+  if (workCycle.includes("BUILD") || workCycle.includes("Build")) return 4;
+  if (workCycle.includes("DEPLOY") || workCycle.includes("Deploy") || workCycle.includes("VALIDATION")) return 5;
+  if (workCycle.includes("OWN") || workCycle.includes("Own")) return 6;
+  return 1;
+}
+
+function EngagementDetailContent() {
+  const routeParams = useParams();
+  const engagementId = (routeParams?.id as string) || "eng-acme-001";
+
+  const {
+    customers,
+    activeCustomer,
+    setActiveCustomer,
+    activeEngagementData,
+    nextActionData,
+    approvedAcme,
+    handleApproveChange,
+    fetchEngagementDetail
+  } = useEngagement();
+  const [activeTab, setActiveTab] = useState<"overview" | "plan" | "outcome" | "knowledge" | "move" | "timeline">("overview");
+
+  // Sync route parameter with active engagement context
+  React.useEffect(() => {
+    if (engagementId) {
+      if (activeCustomer.id !== engagementId) {
+        const matching = customers.find((c) => c.id === engagementId);
+        if (matching) {
+          setActiveCustomer(matching);
+        }
+      }
+      fetchEngagementDetail(engagementId);
+    }
+  }, [engagementId, customers]);
 
   // Document upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -36,7 +78,7 @@ export default function EngagementDetailPage() {
     e.preventDefault();
     setUploadStatus("Uploading & Indexing...");
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/documents/upload`, {
+      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/documents/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -63,7 +105,86 @@ export default function EngagementDetailPage() {
     }
   };
 
-  const isAcme = activeCustomer.id === "eng-acme-001";
+  const isAcme = engagementId === "eng-acme-001";
+
+  // Dynamic Outcome statement from DB or active plan
+  const currentOutcomeStatement =
+    activeEngagementData?.outcome?.statement ||
+    activeEngagementData?.outcome?.work_plan?.engagement_objective ||
+    activeCustomer.engagementName;
+
+  const currentOutcomeVersion =
+    activeEngagementData?.outcome?.version ?? (isAcme && approvedAcme ? 2 : 1);
+
+  const currentOutcomeStatus =
+    activeEngagementData?.engagement?.status ?? (isAcme && approvedAcme ? "HEALTHY" : activeCustomer.status);
+
+  const currentStepNumber = parseStepNumber(
+    activeEngagementData?.engagement?.current_work_cycle || (isAcme ? "Step 4" : "Step 1")
+  );
+
+  // Dynamic Definition of Done / Success Criteria list
+  const currentSuccessCriteria = React.useMemo(() => {
+    if (activeEngagementData?.outcome?.success_criteria && activeEngagementData.outcome.success_criteria.length > 0) {
+      return activeEngagementData.outcome.success_criteria.map((c: any, idx: number) => {
+        if (typeof c === "string") {
+          return { id: `sc-${idx + 1}`, title: c, completed: false };
+        }
+        return {
+          id: c.id || `sc-${idx + 1}`,
+          title: c.title || c.statement || String(c),
+          completed: Boolean(c.completed)
+        };
+      });
+    }
+    if (activeEngagementData?.outcome?.work_plan?.definition_of_done && activeEngagementData.outcome.work_plan.definition_of_done.length > 0) {
+      return activeEngagementData.outcome.work_plan.definition_of_done.map((d: any, idx: number) => {
+        if (typeof d === "string") {
+          return { id: `dod-${idx + 1}`, title: d, completed: false };
+        }
+        return {
+          id: d.id || `dod-${idx + 1}`,
+          title: d.title || String(d),
+          completed: Boolean(d.completed)
+        };
+      });
+    }
+    if (isAcme) {
+      return approvedAcme
+        ? [
+            { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+            { id: "sc-2", title: "API integration complete", completed: true },
+            { id: "sc-3", title: "Production validation complete", completed: false },
+            { id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }
+          ]
+        : [
+            { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+            { id: "sc-2", title: "API integration complete", completed: true },
+            { id: "sc-3", title: "Production validation complete", completed: false }
+          ];
+    }
+    return [
+      { id: "sc-1", title: `Baseline architecture assessment completed for ${activeCustomer.customerName}`, completed: false },
+      { id: "sc-2", title: "Core migration workflows implemented and validated", completed: false },
+      { id: "sc-3", title: "Production verification and signoff completed", completed: false }
+    ];
+  }, [activeEngagementData, isAcme, approvedAcme, activeCustomer.customerName]);
+
+  const completedCount = currentSuccessCriteria.filter((c: any) => c.completed).length;
+  const currentProgress = currentSuccessCriteria.length > 0
+    ? Math.round((completedCount / currentSuccessCriteria.length) * 100)
+    : (activeEngagementData?.engagement?.progress ?? (currentOutcomeStatus === "HEALTHY" ? 75 : 10));
+
+  const handleToggleCriterion = async (criterionId: string) => {
+    try {
+      await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/dod/${criterionId}/toggle`, {
+        method: "PATCH"
+      });
+      fetchEngagementDetail(engagementId);
+    } catch (e) {
+      console.warn("Failed to toggle criterion:", e);
+    }
+  };
 
   return (
     <AppShell>
@@ -81,12 +202,12 @@ export default function EngagementDetailPage() {
 
             <div className="flex items-center gap-3">
               <span className={`text-xs px-3 py-1 rounded-full font-mono border ${
-                approvedAcme ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                currentOutcomeStatus === "HEALTHY" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-300 border-amber-500/30"
               }`}>
-                Outcome Version: {approvedAcme ? 2 : 1}
+                Outcome Version: {currentOutcomeVersion}
               </span>
               <span className="text-xs px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300 font-mono">
-                Status: {approvedAcme ? "HEALTHY" : activeCustomer.status}
+                Status: {currentOutcomeStatus}
               </span>
             </div>
           </div>
@@ -100,6 +221,15 @@ export default function EngagementDetailPage() {
               }`}
             >
               Overview
+            </button>
+            <button
+              onClick={() => setActiveTab("plan")}
+              className={`px-4 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                activeTab === "plan" ? "bg-teal-500/20 text-teal-300 border border-teal-500/40" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <ListTodo className="h-3.5 w-3.5" />
+              <span>Work Plan</span>
             </button>
             <button
               onClick={() => setActiveTab("outcome")}
@@ -139,54 +269,77 @@ export default function EngagementDetailPage() {
         {/* Tab 1: OVERVIEW */}
         {activeTab === "overview" && (
           <div className="space-y-6">
-            <WorkCycleStepper currentStepNumber={isAcme ? 4 : 5} customerName={activeCustomer.customerName} />
+            <WorkCycleStepper currentStepNumber={currentStepNumber} customerName={activeCustomer.customerName} />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
+                <WorkPlanSection
+                  engagementId={engagementId}
+                  customerName={activeCustomer.customerName}
+                  initialWorkPlan={activeEngagementData?.outcome?.work_plan}
+                  outcomeVersion={currentOutcomeVersion}
+                  onPlanApproved={() => {
+                    fetchEngagementDetail(engagementId);
+                  }}
+                />
+
                 <OutcomeCard
                   customerName={activeCustomer.customerName}
                   engagementName={activeCustomer.engagementName}
-                  outcomeStatement={isAcme ? "Reduce manual onboarding time from 30 min to under 5 min." : "Migrate 50M records to Cloud SQL with zero downtime."}
-                  version={approvedAcme ? 2 : 1}
-                  status={approvedAcme ? "HEALTHY" : "NEEDS_REASSESSMENT"}
-                  progress={approvedAcme ? 75 : 70}
-                  successCriteria={
-                    approvedAcme
-                      ? [
-                          { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
-                          { id: "sc-2", title: "API integration complete", completed: true },
-                          { id: "sc-3", title: "Production validation complete", completed: false },
-                          { id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }
-                        ]
-                      : [
-                          { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
-                          { id: "sc-2", title: "API integration complete", completed: true },
-                          { id: "sc-3", title: "Production validation complete", completed: false }
-                        ]
-                  }
+                  outcomeStatement={currentOutcomeStatement}
+                  version={currentOutcomeVersion}
+                  status={currentOutcomeStatus}
+                  progress={currentProgress}
+                  successCriteria={currentSuccessCriteria}
+                  onToggleCriterion={handleToggleCriterion}
+                  outcomesList={activeEngagementData?.outcome?.work_plan?.outcomes || []}
                 />
 
                 {/* Evidence -> Reasoning -> Recommendation Pattern */}
-                <EvidenceReasoningCard
-                  title="UNDERSTAND Change Impact Reasoning"
-                  evidence={[
-                    `Customer requirement input: 'Enterprise SSO is mandatory before cutover.'`,
-                    `Current Outcome v1 success criteria lacks enterprise authentication clause.`,
-                    `Step 4 production validation gated on security compliance.`
-                  ]}
-                  reasoning={[
-                    `Adding Enterprise SSO is a mandatory gating requirement for customer IT security sign-off.`,
-                    `DoD completion progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
-                  ]}
-                  recommendation={
-                    approvedAcme
-                      ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Definition of Done checklist."
-                      : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to DoD checklist and request Manager approval."
-                  }
-                  confidence="High (96.4%)"
-                  approvalRequired={!approvedAcme}
-                  onApprove={!approvedAcme ? handleApproveChange : undefined}
-                />
+                {isAcme && !activeEngagementData?.outcome?.work_plan ? (
+                  <EvidenceReasoningCard
+                    title="UNDERSTAND Change Impact Reasoning"
+                    evidence={[
+                      `Customer requirement input: 'Enterprise SSO is mandatory before cutover.'`,
+                      `Current Outcome v1 success criteria lacks enterprise authentication clause.`,
+                      `Step 4 production validation gated on security compliance.`
+                    ]}
+                    reasoning={[
+                      `Adding Enterprise SSO is a mandatory gating requirement for customer IT security sign-off.`,
+                      `DoD completion progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
+                    ]}
+                    recommendation={
+                      approvedAcme
+                        ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Definition of Done checklist."
+                        : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to DoD checklist and request Manager approval."
+                    }
+                    confidence="High (96.4%)"
+                    approvalRequired={!approvedAcme}
+                    onApprove={!approvedAcme ? handleApproveChange : undefined}
+                  />
+                ) : (
+                  <EvidenceReasoningCard
+                    title="UNDERSTAND & Supervisor Alignment"
+                    evidence={[
+                      activeEngagementData?.outcome?.work_plan
+                        ? `Manager approved structured work plan containing ${activeEngagementData.outcome.work_plan.milestones?.length || 3} delivery milestones.`
+                        : `Baseline engagement parameters initialized for ${activeCustomer.customerName}.`,
+                      `Objective: ${currentOutcomeStatement.slice(0, 100)}...`,
+                      `Definition of Done: ${currentSuccessCriteria.length} verified acceptance conditions established.`
+                    ]}
+                    reasoning={[
+                      `Target delivery stages and task packages are aligned with customer technical constraints.`,
+                      `Progress tracked deterministically against DoD acceptance criteria without hallucinated metrics.`
+                    ]}
+                    recommendation={
+                      activeEngagementData?.outcome?.work_plan?.next_actions?.[0] ||
+                      nextActionData?.recommendation ||
+                      `Execute initial discovery and baseline architecture assessment for ${activeCustomer.customerName}.`
+                    }
+                    confidence="High (98.2%)"
+                    approvalRequired={false}
+                  />
+                )}
               </div>
 
               {/* Right Sidebar */}
@@ -194,24 +347,60 @@ export default function EngagementDetailPage() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
                   <span className="text-xs font-semibold uppercase tracking-wider text-teal-400">Next Best Action</span>
                   <p className="text-xs font-semibold text-slate-100">
-                    {approvedAcme ? "Execute cutover dry-run test on staging replica." : "Request SSO configuration from customer security owner."}
+                    {activeEngagementData?.outcome?.work_plan?.next_actions?.[0] ||
+                      nextActionData?.recommendation ||
+                      (isAcme ? (approvedAcme ? "Execute cutover dry-run test on staging replica." : "Request SSO configuration from customer security owner.") : `Initiate discovery interviews with ${activeCustomer.customerName} technical team.`)}
                   </p>
                   <p className="text-[11px] text-slate-400 bg-slate-950 p-2 rounded border border-slate-800">
-                    <strong>Why now:</strong> {approvedAcme ? "Validates production deployment window." : "Primary blocker gating Step 4 production rollout."}
+                    <strong>Why now:</strong> {activeEngagementData?.outcome?.work_plan?.timeline_summary || nextActionData?.why_now || (isAcme && approvedAcme ? "Validates production deployment window." : "Gating prerequisite for active work cycle.")}
                   </p>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Blockers</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Blockers & Risks</span>
                   <ul className="space-y-2 text-xs">
-                    <li className="p-2 bg-slate-950 rounded border border-slate-800">
-                      <span className="text-amber-400 font-bold block">● SSO Configuration</span>
-                      <span className="text-[10px] text-slate-400">Waiting on Customer Security Team</span>
-                    </li>
+                    {activeEngagementData?.outcome?.work_plan?.risks && activeEngagementData.outcome.work_plan.risks.length > 0 ? (
+                      activeEngagementData.outcome.work_plan.risks.map((risk: string, i: number) => (
+                        <li key={i} className="p-2 bg-slate-950 rounded border border-slate-800">
+                          <span className="text-amber-400 font-bold block">● Delivery Risk #{i + 1}</span>
+                          <span className="text-[10px] text-slate-400">{risk}</span>
+                        </li>
+                      ))
+                    ) : nextActionData?.gating_blocker ? (
+                      <li className="p-2 bg-slate-950 rounded border border-slate-800">
+                        <span className="text-amber-400 font-bold block">● {nextActionData.gating_blocker.title}</span>
+                        <span className="text-[10px] text-slate-400">{nextActionData.gating_blocker.description || `Waiting on ${nextActionData.gating_blocker.owner}`}</span>
+                      </li>
+                    ) : (isAcme && !approvedAcme) ? (
+                      <li className="p-2 bg-slate-950 rounded border border-slate-800">
+                        <span className="text-amber-400 font-bold block">● SSO Configuration</span>
+                        <span className="text-[10px] text-slate-400">Waiting on Customer Security Team</span>
+                      </li>
+                    ) : (
+                      <li className="p-2 bg-slate-950 rounded border border-slate-800">
+                        <span className="text-emerald-400 font-bold block">● Zero Gating Blockers</span>
+                        <span className="text-[10px] text-slate-400">All prerequisite dependencies cleared for current delivery cycle.</span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Tab: WORK PLAN */}
+        {activeTab === "plan" && (
+          <div className="space-y-6">
+            <WorkPlanSection
+              engagementId={engagementId}
+              customerName={activeCustomer.customerName}
+              initialWorkPlan={activeEngagementData?.outcome?.work_plan}
+              outcomeVersion={currentOutcomeVersion}
+              onPlanApproved={() => {
+                fetchEngagementDetail(engagementId);
+              }}
+            />
           </div>
         )}
 
@@ -221,24 +410,13 @@ export default function EngagementDetailPage() {
             <OutcomeCard
               customerName={activeCustomer.customerName}
               engagementName={activeCustomer.engagementName}
-              outcomeStatement={isAcme ? "Reduce manual onboarding time from 30 min to under 5 min." : "Migrate 50M records to Cloud SQL with zero downtime."}
-              version={approvedAcme ? 2 : 1}
-              status={approvedAcme ? "HEALTHY" : "NEEDS_REASSESSMENT"}
-              progress={approvedAcme ? 75 : 70}
-              successCriteria={
-                approvedAcme
-                  ? [
-                      { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
-                      { id: "sc-2", title: "API integration complete", completed: true },
-                      { id: "sc-3", title: "Production validation complete", completed: false },
-                      { id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }
-                    ]
-                  : [
-                      { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
-                      { id: "sc-2", title: "API integration complete", completed: true },
-                      { id: "sc-3", title: "Production validation complete", completed: false }
-                    ]
-              }
+              outcomeStatement={currentOutcomeStatement}
+              version={currentOutcomeVersion}
+              status={currentOutcomeStatus}
+              progress={currentProgress}
+              successCriteria={currentSuccessCriteria}
+              onToggleCriterion={handleToggleCriterion}
+              outcomesList={activeEngagementData?.outcome?.work_plan?.outcomes || []}
             />
           </div>
         )}
@@ -376,5 +554,22 @@ export default function EngagementDetailPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function EngagementDetailPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8">
+          <div className="text-xs text-slate-400 font-mono animate-pulse flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-teal-400 animate-ping" />
+            <span>Loading engagement workspace...</span>
+          </div>
+        </div>
+      }
+    >
+      <EngagementDetailContent />
+    </React.Suspense>
   );
 }

@@ -5,6 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 import OutcomeCard from "@/components/engagement/OutcomeCard";
 import WorkCycleStepper from "@/components/engagement/WorkCycleStepper";
 import DailyWorkBriefing from "@/components/engagement/DailyWorkBriefing";
+import WorkPlanSection from "@/components/engagement/WorkPlanSection";
 import { useAuth } from "@/context/AuthContext";
 import { useEngagement } from "@/context/EngagementContext";
 import { 
@@ -47,20 +48,73 @@ export default function HomePage() {
   } = useEngagement();
 
   const isAcme = activeCustomer.id === "eng-acme-001";
-  const currentStepNumber = parseStepNumber(activeEngagementData?.engagement?.current_work_cycle);
+  const currentStepNumber = parseStepNumber(activeEngagementData?.engagement?.current_work_cycle || (isAcme ? "Step 4" : "Step 1"));
 
   // Dynamic Outcome & DoD Data from database / active engagement
-  const outcomeStatement = activeEngagementData?.outcome?.statement || activeCustomer.engagementName;
+  const outcomeStatement =
+    activeEngagementData?.outcome?.statement ||
+    activeEngagementData?.outcome?.work_plan?.engagement_objective ||
+    activeCustomer.engagementName;
   const outcomeVersion = activeEngagementData?.outcome?.version ?? (isAcme && approvedAcme ? 2 : 1);
-  const outcomeStatus = activeEngagementData?.engagement?.status ?? activeCustomer.status;
-  const outcomeProgress = activeEngagementData?.engagement?.progress ?? (outcomeStatus === "HEALTHY" ? 75 : 10);
-  const successCriteria = activeEngagementData?.outcome?.success_criteria && activeEngagementData.outcome.success_criteria.length > 0
-    ? activeEngagementData.outcome.success_criteria
-    : [
-        { id: "sc-1", title: "Initial discovery and baseline architecture completed", completed: false },
-        { id: "sc-2", title: "Core integration pipeline operational", completed: false },
-        { id: "sc-3", title: "Production verification and signoff completed", completed: false }
-      ];
+  const outcomeStatus = activeEngagementData?.engagement?.status ?? (isAcme && approvedAcme ? "HEALTHY" : activeCustomer.status);
+
+  const successCriteria = React.useMemo(() => {
+    if (activeEngagementData?.outcome?.success_criteria && activeEngagementData.outcome.success_criteria.length > 0) {
+      return activeEngagementData.outcome.success_criteria.map((c: any, idx: number) => {
+        if (typeof c === "string") return { id: `sc-${idx + 1}`, title: c, completed: false };
+        return {
+          id: c.id || `sc-${idx + 1}`,
+          title: c.title || c.statement || String(c),
+          completed: Boolean(c.completed)
+        };
+      });
+    }
+    if (activeEngagementData?.outcome?.work_plan?.definition_of_done && activeEngagementData.outcome.work_plan.definition_of_done.length > 0) {
+      return activeEngagementData.outcome.work_plan.definition_of_done.map((d: any, idx: number) => {
+        if (typeof d === "string") return { id: `dod-${idx + 1}`, title: d, completed: false };
+        return {
+          id: d.id || `dod-${idx + 1}`,
+          title: d.title || String(d),
+          completed: Boolean(d.completed)
+        };
+      });
+    }
+    if (isAcme) {
+      return approvedAcme
+        ? [
+            { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+            { id: "sc-2", title: "API integration complete", completed: true },
+            { id: "sc-3", title: "Production validation complete", completed: false },
+            { id: "sc-4", title: "Enterprise SSO configuration & validation (Added v2)", completed: false }
+          ]
+        : [
+            { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
+            { id: "sc-2", title: "API integration complete", completed: true },
+            { id: "sc-3", title: "Production validation complete", completed: false }
+          ];
+    }
+    return [
+      { id: "sc-1", title: `Baseline architecture assessment completed for ${activeCustomer.customerName}`, completed: false },
+      { id: "sc-2", title: "Core migration workflows implemented and validated", completed: false },
+      { id: "sc-3", title: "Production verification and signoff completed", completed: false }
+    ];
+  }, [activeEngagementData, isAcme, approvedAcme, activeCustomer.customerName]);
+
+  const completedCount = successCriteria.filter((c: any) => c.completed).length;
+  const outcomeProgress = successCriteria.length > 0
+    ? Math.round((completedCount / successCriteria.length) * 100)
+    : (activeEngagementData?.engagement?.progress ?? (outcomeStatus === "HEALTHY" ? 75 : 10));
+
+  const handleToggleCriterion = async (criterionId: string) => {
+    try {
+      await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/dod/${criterionId}/toggle`, {
+        method: "PATCH"
+      });
+      fetchEngagementDetail(activeCustomer.id);
+    } catch (e) {
+      console.warn("Failed to toggle criterion:", e);
+    }
+  };
 
   const pendingApprovalsCount = activeEngagementData?.pending_approvals_count ?? (approvedAcme ? 0 : 1);
 
@@ -153,6 +207,17 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* Natural-Language Work Planning (Supervisor Led) */}
+          <WorkPlanSection
+            engagementId={activeCustomer.id}
+            customerName={activeCustomer.customerName}
+            initialWorkPlan={activeEngagementData?.outcome?.work_plan}
+            outcomeVersion={outcomeVersion}
+            onPlanApproved={() => {
+              fetchEngagementDetail(activeCustomer.id);
+            }}
+          />
+
           {/* Active Outcome Definition & DoD Card (Manager View) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -169,6 +234,8 @@ export default function HomePage() {
               status={outcomeStatus}
               progress={outcomeProgress}
               successCriteria={successCriteria}
+              onToggleCriterion={handleToggleCriterion}
+              outcomesList={activeEngagementData?.outcome?.work_plan?.outcomes || []}
             />
           </div>
         </div>
@@ -219,6 +286,8 @@ export default function HomePage() {
           status={outcomeStatus}
           progress={outcomeProgress}
           successCriteria={successCriteria}
+          onToggleCriterion={handleToggleCriterion}
+          outcomesList={activeEngagementData?.outcome?.work_plan?.outcomes || []}
         />
 
         {/* 2. Clean 6-Step FDE Work Cycle Stepper */}
@@ -226,6 +295,17 @@ export default function HomePage() {
 
         {/* 3. Proactive Intelligence Daily Work Briefing */}
         <DailyWorkBriefing />
+
+        {/* 4. Natural-Language Work Planning (Supervisor Led) */}
+        <WorkPlanSection
+          engagementId={activeCustomer.id}
+          customerName={activeCustomer.customerName}
+          initialWorkPlan={activeEngagementData?.outcome?.work_plan}
+          outcomeVersion={outcomeVersion}
+          onPlanApproved={() => {
+            fetchEngagementDetail(activeCustomer.id);
+          }}
+        />
 
         {/* 4. Specialized AI Agent Workspaces Navigation Grid */}
         <div className="space-y-2.5">

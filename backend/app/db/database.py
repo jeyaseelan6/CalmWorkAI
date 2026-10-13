@@ -20,8 +20,18 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
-    """Create all database tables."""
+    """Create all database tables and ensure migrations."""
     Base.metadata.create_all(bind=engine)
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE outcomes ADD COLUMN work_plan JSON"))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+    except Exception as e:
+        logger.debug(f"Migration check completed: {e}")
 
 
 def get_db():

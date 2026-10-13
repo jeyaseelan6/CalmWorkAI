@@ -17,20 +17,20 @@ interface OutcomeCardProps {
   status: string;
   progress: number;
   successCriteria: SuccessCriterion[];
+  onToggleCriterion?: (id: string) => void;
+  outcomesList?: string[];
 }
 
 export default function OutcomeCard({
-  customerName = "Acme Corp",
-  engagementName = "Onboarding Modernization",
-  outcomeStatement = "Reduce manual customer onboarding time from 30 minutes to under 5 minutes.",
+  customerName = "Active Customer",
+  engagementName = "Customer Initiative",
+  outcomeStatement = "Deliver customer outcomes with verified Definition of Done criteria.",
   version = 1,
-  status = "NEEDS_REASSESSMENT",
-  progress = 70,
-  successCriteria = [
-    { id: "sc-1", title: "Automated onboarding workflow implemented", completed: true },
-    { id: "sc-2", title: "API integration complete", completed: true },
-    { id: "sc-3", title: "Production validation complete", completed: false }
-  ]
+  status = "HEALTHY",
+  progress = 0,
+  successCriteria = [],
+  onToggleCriterion,
+  outcomesList = []
 }: Partial<OutcomeCardProps>) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
@@ -58,7 +58,7 @@ export default function OutcomeCard({
       {/* Outcome Statement */}
       <div className="bg-slate-50 p-4 rounded-md border border-slate-200/80">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono">
             Active Customer Outcome Definition
           </span>
           <span className="text-[11px] text-slate-500 font-mono">Bound to Outcome v{version}</span>
@@ -67,6 +67,23 @@ export default function OutcomeCard({
           "{outcomeStatement}"
         </p>
       </div>
+
+      {/* Measurable Outcomes (if present) */}
+      {outcomesList && outcomesList.length > 0 && (
+        <div className="bg-emerald-50/50 p-3.5 rounded-md border border-emerald-200/60 space-y-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 font-mono block">
+            Target Measurable Outcomes ({outcomesList.length})
+          </span>
+          <ul className="space-y-1 text-xs text-slate-800">
+            {outcomesList.map((out, idx) => (
+              <li key={idx} className="flex items-start gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span className="leading-snug">{out}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Progress Bar */}
       <div>
@@ -79,7 +96,7 @@ export default function OutcomeCard({
         </div>
         <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200/60">
           <div
-            className="bg-slate-900 h-full transition-all duration-300"
+            className="bg-blue-600 h-full transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -87,19 +104,33 @@ export default function OutcomeCard({
 
       {/* Success Criteria / Definition of Done */}
       <div>
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-          Definition of Done (DoD) Criteria
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
+            Definition of Done (DoD) Criteria ({successCriteria.length})
+          </h3>
+          {onToggleCriterion && (
+            <span className="text-[10px] text-slate-400 font-mono">Click to toggle status</span>
+          )}
+        </div>
         <ul className="space-y-1.5">
           {successCriteria.map((item) => (
-            <li key={item.id} className="flex items-center gap-2.5 text-xs text-slate-800">
+            <li
+              key={item.id}
+              onClick={() => onToggleCriterion && onToggleCriterion(item.id)}
+              className={`flex items-center gap-2.5 text-xs p-1.5 rounded transition ${
+                onToggleCriterion ? "cursor-pointer hover:bg-slate-50" : ""
+              } ${item.completed ? "text-slate-500" : "text-slate-800"}`}
+            >
               {item.completed ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
               ) : (
-                <Circle className="h-4 w-4 text-slate-300 shrink-0" />
+                <Circle className="h-4 w-4 text-slate-300 hover:text-blue-500 shrink-0 transition" />
               )}
-              <span className={item.completed ? "line-through text-slate-400" : "font-medium text-slate-900"}>
+              <span className={`flex-1 ${item.completed ? "line-through text-slate-400" : "font-medium text-slate-900"}`}>
                 {item.title}
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">
+                {item.completed ? "Done" : "Pending"}
               </span>
             </li>
           ))}
