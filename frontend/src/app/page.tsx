@@ -15,7 +15,6 @@ import {
   Check
 } from "lucide-react";
 import Link from "next/link";
-import AiLifecycleTracker from "@/components/engagement/AiLifecycleTracker";
 
 export default function MyDayPage() {
   const { role } = useAuth();
@@ -169,12 +168,6 @@ export default function MyDayPage() {
             </div>
           </div>
         </div>
-
-        {/* End-to-End Gen AI Lifecycle Tracker */}
-        <AiLifecycleTracker 
-          engagementId={activeCustomer.id} 
-          customerName={activeCustomer.customerName} 
-        />
 
         {/* 1. Primary Next Best Action (Highest-Impact Focus) */}
         <div className="space-y-2">
