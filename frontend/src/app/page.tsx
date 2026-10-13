@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useAuth } from "@/context/AuthContext";
 import { useEngagement } from "@/context/EngagementContext";
@@ -12,12 +12,18 @@ import {
   ChevronDown,
   ChevronRight,
   ShieldCheck,
+  ShieldAlert,
   Check,
   Sun,
-  Sparkles
+  Sparkles,
+  BookOpen,
+  Clock,
+  AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
-import DailyWorkBriefing from "@/components/engagement/DailyWorkBriefing";
+import { MorningBriefData } from "@/components/engagement/DailyWorkBriefing";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export default function MyDayPage() {
   const { role } = useAuth();
@@ -25,21 +31,59 @@ export default function MyDayPage() {
     activeCustomer,
     activeEngagementData,
     nextActionData,
-    loading,
+    loading: engagementLoading,
     approvedAcme,
     fetchEngagementDetail
   } = useEngagement();
 
+  const [brief, setBrief] = useState<MorningBriefData | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<string>("");
   const [showEvidence, setShowEvidence] = useState(false);
-  const [showMorningBrief, setShowMorningBrief] = useState(false);
+
+  // Fetch sequential Morning Brief from Supervisor Coordinator
+  const fetchBrief = useCallback(async () => {
+    if (!activeCustomer?.id) return;
+    setBriefLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setBrief(data.data);
+        setLastRefreshed(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch Morning Brief:", err);
+    } finally {
+      setBriefLoading(false);
+    }
+  }, [activeCustomer?.id]);
+
+  useEffect(() => {
+    fetchBrief();
+  }, [fetchBrief]);
+
+  const handleSyncAll = () => {
+    fetchEngagementDetail(activeCustomer.id);
+    fetchBrief();
+  };
 
   const isAcme = activeCustomer.id === "eng-acme-001";
   const outcomeStatement =
+    brief?.what_matters_today_outcome ||
     activeEngagementData?.outcome?.statement ||
     activeEngagementData?.outcome?.work_plan?.engagement_objective ||
     activeCustomer.engagementName;
-  const outcomeVersion = activeEngagementData?.outcome?.version ?? (isAcme && approvedAcme ? 2 : 1);
-  const outcomeStatus = activeEngagementData?.engagement?.status ?? (isAcme && approvedAcme ? "HEALTHY" : activeCustomer.status);
+
+  const outcomeVersion =
+    brief?.source_state_version ??
+    activeEngagementData?.outcome?.version ??
+    (isAcme && approvedAcme ? 2 : 1);
+
+  const rawStatus = brief?.outcome_health ?? activeEngagementData?.engagement?.status ?? activeCustomer.status;
+  const outcomeStatus = rawStatus === "HEALTHY" ? "HEALTHY" : "NEEDS_REASSESSMENT";
 
   // Success criteria / Definition of Done
   const successCriteria = React.useMemo(() => {
@@ -77,7 +121,7 @@ export default function MyDayPage() {
 
   const handleToggleCriterion = async (criterionId: string) => {
     try {
-      await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/dod/${criterionId}/toggle`, {
+      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/dod/${criterionId}/toggle`, {
         method: "PATCH"
       });
       fetchEngagementDetail(activeCustomer.id);
@@ -87,30 +131,32 @@ export default function MyDayPage() {
   };
 
   const pendingApprovalsCount = activeEngagementData?.pending_approvals_count ?? (approvedAcme ? 0 : 1);
-  const activePlan = activeEngagementData?.outcome?.work_plan;
 
-  // Next action calculation
+  // Daily Work Plan values directly derived from Morning Brief
+  const proposedPlan = brief?.proposed_work_plan;
   const primaryAction =
-    activePlan?.next_actions?.[0] ||
+    proposedPlan?.recommended_first_action ||
+    activeEngagementData?.outcome?.work_plan?.next_actions?.[0] ||
     nextActionData?.recommendation ||
-    `Complete discovery and requirements alignment for ${activeCustomer.customerName}.`;
+    `Complete active delivery iteration for ${activeCustomer.customerName}.`;
 
-  const actionWhyNow =
-    activePlan?.timeline_summary ||
-    nextActionData?.why_now ||
-    "Highest-impact gating dependency for active delivery cycle.";
+  const workItems = proposedPlan?.work_items || [];
 
-  // Blockers calculation
-  const blockersList: string[] = (activePlan?.risks && activePlan.risks.length > 0)
-    ? activePlan.risks
+  // Active blockers from Morning Brief
+  const briefBlockers = brief?.what_is_blocking_progress || [];
+  const fallbackBlockers = (activeEngagementData?.outcome?.work_plan?.risks && activeEngagementData.outcome.work_plan.risks.length > 0)
+    ? activeEngagementData.outcome.work_plan.risks
     : nextActionData?.gating_blocker
     ? [String(nextActionData.gating_blocker.title || nextActionData.gating_blocker)]
     : isAcme && !approvedAcme
     ? ["SSO Configuration — Waiting on Customer Security Team"]
     : [];
 
-  // Recent timeline events
-  const recentEvents = (activeEngagementData?.timeline || []).slice(0, 3);
+  // Latest updates / worknotes from Morning Brief
+  const briefChanges = brief?.what_changed || [];
+  const fallbackEvents = (activeEngagementData?.timeline || []).slice(0, 3);
+
+  const isLoading = briefLoading || engagementLoading;
 
   return (
     <AppShell>
@@ -134,11 +180,17 @@ export default function MyDayPage() {
           </div>
         )}
 
-        {/* Page Identity & Active Focus */}
+        {/* Page Identity & Active Engagement Focus */}
         <div className="border-b border-slate-200 pb-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-display font-bold text-slate-900">My Day</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-display font-bold text-slate-900">My Day</h1>
+                <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800">
+                  <Sun className="h-3 w-3 text-amber-600" />
+                  <span>Morning Brief Synchronized</span>
+                </span>
+              </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 {activeCustomer.customerName} &middot; {activeCustomer.engagementName}
               </p>
@@ -153,27 +205,14 @@ export default function MyDayPage() {
                 {outcomeStatus === "HEALTHY" ? "Healthy" : "Reassessment"} &middot; v{outcomeVersion}
               </span>
 
-              {/* Morning Brief Action Button */}
               <button
-                type="button"
-                onClick={() => setShowMorningBrief(!showMorningBrief)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
-                  showMorningBrief
-                    ? "bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold"
-                    : "bg-slate-900 hover:bg-slate-800 text-white"
-                }`}
+                onClick={handleSyncAll}
+                disabled={isLoading}
+                title="Refresh State & Morning Brief"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
-                <Sun className={`h-3.5 w-3.5 ${showMorningBrief ? "text-slate-950" : "text-amber-400"}`} />
-                <span>{showMorningBrief ? "Hide Morning Brief" : "Morning Brief"}</span>
-              </button>
-
-              <button
-                onClick={() => fetchEngagementDetail(activeCustomer.id)}
-                disabled={loading}
-                title="Sync state"
-                className="text-slate-400 hover:text-slate-600 transition p-1 cursor-pointer"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
+                <span>{isLoading ? "Refreshing..." : "Refresh"}</span>
               </button>
 
               <Link
@@ -187,104 +226,119 @@ export default function MyDayPage() {
           </div>
         </div>
 
-        {/* Morning Brief Section */}
-        {showMorningBrief ? (
-          <div className="animate-fadeIn">
-            <DailyWorkBriefing onClose={() => setShowMorningBrief(false)} />
-          </div>
-        ) : (
-          <div
-            onClick={() => setShowMorningBrief(true)}
-            className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/90 rounded-xl flex items-center justify-between text-xs text-amber-950 transition cursor-pointer group"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 bg-amber-500/20 text-amber-700 rounded-md">
-                <Sun className="h-4 w-4 text-amber-600" />
+        {/* 1. Daily Work Plan (Priority Focus — Powered by Morning Brief) */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-amber-500 text-slate-950 rounded-md shrink-0 shadow-2xs">
+                <Sun className="h-4 w-4" />
               </div>
-              <span>
-                <strong>Morning Situational Brief:</strong> Overnight changes, active blockers, and supervisor daily work plan ready for <strong>{activeCustomer.customerName}</strong>.
-              </span>
-            </div>
-            <span className="text-[11px] font-semibold text-amber-900 group-hover:translate-x-0.5 transition flex items-center gap-1 shrink-0 ml-2">
-              <span>View Brief</span>
-              <ArrowRight className="h-3 w-3" />
-            </span>
-          </div>
-        )}
-
-        {/* 1. Primary Next Best Action (Highest-Impact Focus) */}
-        <div className="space-y-2">
-          <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-            Today's Priority Action
-          </span>
-          <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-2.5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold text-slate-900 leading-snug">
-                  {primaryAction}
+              <div>
+                <h2 className="text-sm font-display font-bold text-slate-900">
+                  Daily Work Plan
                 </h2>
-                <p className="text-xs text-slate-600">
-                  <strong className="text-slate-700">Why now:</strong> {actionWhyNow}
+                <p className="text-[11px] text-slate-500">
+                  Synthesized by Supervisor &middot; {lastRefreshed ? `Refreshed at ${lastRefreshed}` : "Active"}
                 </p>
               </div>
             </div>
 
-            {/* Progressive Disclosure: Expandable Context */}
-            <div className="pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setShowEvidence(!showEvidence)}
-                className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium transition cursor-pointer"
-              >
-                {showEvidence ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-                <span>{showEvidence ? "Hide evidence & context" : "Show evidence & context"}</span>
-              </button>
+            {proposedPlan?.plan_id && (
+              <span className="font-mono text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">
+                Plan {proposedPlan.plan_id}
+              </span>
+            )}
+          </div>
 
-              {showEvidence && (
-                <div className="mt-2.5 p-3 rounded bg-slate-50 border border-slate-100 space-y-2 text-xs text-slate-600">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <span className="font-mono text-slate-400 uppercase text-[10px] block">Impact Context:</span>
-                      <span>{nextActionData?.impact || `Advances delivery towards target acceptance criteria.`}</span>
-                    </div>
-                    <div>
-                      <span className="font-mono text-slate-400 uppercase text-[10px] block">Confidence:</span>
-                      <span>{nextActionData?.confidence || "High (98%)"} &middot; Bound to Outcome v{outcomeVersion}</span>
-                    </div>
-                  </div>
-                  {nextActionData?.evidence && nextActionData.evidence.length > 0 && (
-                    <div className="pt-1.5 border-t border-slate-200/60">
-                      <span className="font-mono text-slate-400 uppercase text-[10px] block mb-1">Grounded Evidence:</span>
-                      <ul className="space-y-0.5 text-[11px]">
-                        {nextActionData.evidence.map((ev: string, idx: number) => (
-                          <li key={idx} className="flex items-start gap-1.5 text-slate-700">
-                            <span className="text-slate-400">&bull;</span>
-                            <span>{ev}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
+          <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-xs space-y-3">
+            {/* Recommended First Action Highlight */}
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-1">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+                  Recommended First Action Today:
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-white leading-relaxed">
+                {primaryAction}
+              </p>
             </div>
+
+            {/* Ordered Work Sequence */}
+            {workItems.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                  Ordered Task Sequence:
+                </span>
+                <div className="space-y-2">
+                  {workItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 bg-slate-800/90 border border-slate-700/80 rounded-lg space-y-1.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-amber-300 font-mono text-[11px]">
+                          #{item.sequence_order}. {item.title}
+                        </span>
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 bg-slate-900 text-slate-400 rounded border border-slate-700/60">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        <strong className="text-slate-200">Why it matters:</strong> {item.why_it_matters}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 2. Actionable Blockers & Meaningful Changes */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Actionable Blockers */}
+        {/* 2. Context & Guardrails: Gating Blockers & Latest Updates */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Active Gating Blockers */}
           <div className="space-y-2">
-            <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-              Gating Blockers & Risks
-            </span>
-            <div className="p-4 rounded-lg bg-white border border-slate-200">
-              {blockersList.length > 0 ? (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
+                Active Gating Blockers
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">
+                {briefBlockers.length > 0 ? `${briefBlockers.length} Active` : "Cleared"}
+              </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5 min-h-[140px]">
+              {briefBlockers.length > 0 ? (
+                <div className="space-y-2.5 text-xs">
+                  {briefBlockers.map((b, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg space-y-1 text-amber-950"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <ShieldAlert className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                          <span>{b.title}</span>
+                        </div>
+                        <span className="text-[9px] font-mono bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300 font-bold">
+                          {b.dependency_type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-900 leading-snug">
+                        <strong>Impact:</strong> {b.impact_description}
+                      </p>
+                      {b.evidence_snippet && (
+                        <p className="text-[10px] font-mono text-slate-600 bg-white/70 p-1 rounded border border-amber-200/60 truncate">
+                          {b.evidence_snippet}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : fallbackBlockers.length > 0 ? (
                 <ul className="space-y-2 text-xs">
-                  {blockersList.map((blocker: string, idx: number) => (
+                  {fallbackBlockers.map((blocker, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-slate-800">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
                       <span className="leading-relaxed">{blocker}</span>
@@ -292,23 +346,43 @@ export default function MyDayPage() {
                   ))}
                 </ul>
               ) : (
-                <div className="flex items-center gap-2 text-xs text-slate-500 py-1">
-                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-3">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0" />
                   <span>No active blockers gating execution.</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Meaningful Changes */}
+          {/* Latest Updates & Worknotes */}
           <div className="space-y-2">
-            <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-              Recent Activity & Changes
-            </span>
-            <div className="p-4 rounded-lg bg-white border border-slate-200">
-              {recentEvents.length > 0 ? (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
+                Latest Updates & Worknotes
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">
+                {briefChanges.length > 0 ? `${briefChanges.length} Recorded` : "Baseline"}
+              </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5 min-h-[140px]">
+              {briefChanges.length > 0 ? (
+                <div className="space-y-2 text-xs">
+                  {briefChanges.slice(0, 3).map((item, idx) => (
+                    <div key={idx} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-mono font-bold px-1.5 py-0.5 bg-white text-slate-700 rounded border border-slate-200">
+                          {item.category}
+                        </span>
+                        <span className="text-slate-400 font-mono">{item.date_recorded}</span>
+                      </div>
+                      <p className="font-medium text-xs text-slate-900 leading-snug">{item.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : fallbackEvents.length > 0 ? (
                 <ul className="space-y-2 text-xs">
-                  {recentEvents.map((evt: any) => (
+                  {fallbackEvents.map((evt: any) => (
                     <li key={evt.id} className="space-y-0.5 text-slate-800">
                       <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                         <span>{evt.actor_type}</span>
@@ -319,7 +393,7 @@ export default function MyDayPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-500 py-1">Baseline engagement parameters active.</p>
+                <p className="text-xs text-slate-500 py-3">Baseline engagement parameters active.</p>
               )}
             </div>
           </div>
@@ -334,12 +408,12 @@ export default function MyDayPage() {
             <span className="text-xs font-mono text-slate-500">{progressPct}% Complete</span>
           </div>
 
-          <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-3">
+          <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3">
             <p className="text-xs text-slate-600 italic">
               &ldquo;{outcomeStatement}&rdquo;
             </p>
 
-            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
               <div
                 className="bg-slate-900 h-full transition-all duration-300"
                 style={{ width: `${progressPct}%` }}
@@ -351,7 +425,7 @@ export default function MyDayPage() {
                 <li
                   key={item.id}
                   onClick={() => handleToggleCriterion(item.id)}
-                  className={`flex items-start gap-2.5 p-1.5 rounded transition cursor-pointer hover:bg-slate-50 ${
+                  className={`flex items-start gap-2.5 p-2 rounded-lg transition cursor-pointer hover:bg-slate-50 ${
                     item.completed ? "text-slate-400" : "text-slate-800"
                   }`}
                 >
@@ -371,13 +445,46 @@ export default function MyDayPage() {
           </div>
         </div>
 
+        {/* 4. Traceability & Reasoning (Progressive Disclosure) */}
+        {brief?.evidence_and_confidence && brief.evidence_and_confidence.length > 0 && (
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+            <button
+              onClick={() => setShowEvidence(!showEvidence)}
+              className="w-full flex items-center justify-between text-xs text-slate-600 hover:text-slate-900 font-medium transition cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5 text-slate-500" />
+                <span>Evidence & Confidence Traceability ({brief.evidence_and_confidence.length} Sources)</span>
+              </div>
+              {showEvidence ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+
+            {showEvidence && (
+              <div className="pt-2 border-t border-slate-200 space-y-2 animate-fadeIn">
+                {brief.evidence_and_confidence.map((ev, idx) => (
+                  <div key={idx} className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-mono font-bold text-slate-700">{ev.category}</span>
+                      <span className="font-mono text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        {ev.confidence_level} Confidence
+                      </span>
+                    </div>
+                    <p className="font-medium text-slate-900">{ev.claim}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">Source: {ev.evidence_source}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Footer Link to Dedicated Workspace */}
         <div className="pt-2 pb-6 text-center">
           <Link
             href={`/engagements/${activeCustomer.id}`}
             className="text-xs text-slate-500 hover:text-slate-900 font-medium inline-flex items-center gap-1.5 transition"
           >
-            <span>Open {activeCustomer.customerName} workspace for plan, knowledge, and customer updates</span>
+            <span>Open {activeCustomer.customerName} workspace for architecture diagrams, documents, and customer updates</span>
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
