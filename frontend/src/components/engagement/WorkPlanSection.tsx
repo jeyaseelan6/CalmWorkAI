@@ -189,10 +189,6 @@ export default function WorkPlanSection({
 
   const handleApprovePlan = async () => {
     if (!draftProposal) return;
-    if (!isManager) {
-      setErrorMsg("Only Managers possess authorization to approve and persist authoritative work plans.");
-      return;
-    }
 
     setIsApproving(true);
     setErrorMsg(null);
@@ -203,7 +199,7 @@ export default function WorkPlanSection({
         engagement_objective: editedObjective || draftProposal.engagement_objective
       };
 
-      const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || "demo-manager-token";
+      const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || (isManager ? "demo-manager-token" : "demo-fde-token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
@@ -214,7 +210,9 @@ export default function WorkPlanSection({
         headers,
         body: JSON.stringify({
           plan: planToApprove,
-          decision_note: "Manager reviewed and approved structured work plan."
+          decision_note: isManager
+            ? "Manager reviewed and approved structured work plan."
+            : "FDE approved and activated execution work plan within scope."
         })
       });
 
@@ -709,8 +707,8 @@ export default function WorkPlanSection({
           <div className="flex items-center justify-between pt-3 border-t border-slate-200">
             <span className="text-xs text-slate-500">
               {isManager
-                ? "Approval will bind plan to shared memory timeline and vectorize it in KNOW Agent."
-                : "Manager role required to persist plan."}
+                ? "Manager approval activates plan and authorizes scope commitments."
+                : "FDE self-approval activates execution work plans within approved engagement scope."}
             </span>
 
             <div className="flex items-center gap-2">
@@ -722,7 +720,7 @@ export default function WorkPlanSection({
               </button>
               <button
                 onClick={handleApprovePlan}
-                disabled={isApproving || !isManager}
+                disabled={isApproving}
                 className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
                 {isApproving ? (

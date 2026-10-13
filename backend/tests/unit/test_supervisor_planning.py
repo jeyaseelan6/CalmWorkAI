@@ -145,8 +145,11 @@ def test_propose_endpoint_does_not_mutate_authoritative_state(test_db: Session):
     assert len(timeline_events) == 0, "No WORK_PLAN_APPROVED timeline event should exist prior to approval"
 
 
-def test_rbac_fde_cannot_approve_work_plan():
-    """Verifies that an FDE user cannot approve a work plan (HTTP 403)."""
+def test_fde_can_approve_within_scope_work_plan(test_db: Session):
+    """
+    Verifies that an FDE can review, approve, and activate their own generated work plan
+    within approved engagement scope without requiring manager approval (HTTP 200).
+    """
     # Create engagement as manager
     create_res = client.post(
         "/api/v1/engagements",
@@ -154,23 +157,190 @@ def test_rbac_fde_cannot_approve_work_plan():
         json={
             "customer_name": "Cyber Secure",
             "name": "Vault Migration",
-            "description": "Secure vault migration."
+            "description": "Secure vault migration initiative."
         }
     )
+    assert create_res.status_code == 200
     eng_id = create_res.json()["data"]["id"]
 
-    # FDE attempts to approve work plan
+    # FDE generates proposal and approves within scope
+    fde_plan = {
+        "engagement_objective": "Deliver vault migration",
+        "milestones": [
+            {
+                "id": "m-1",
+                "title": "Architecture Assessment",
+                "sequence_order": 1,
+                "deliverables": ["Security Arch Blueprint"]
+            },
+            {
+                "id": "m-2",
+                "title": "Vault Deployment",
+                "sequence_order": 2,
+                "deliverables": ["Production Cluster"]
+            }
+        ],
+        "tasks": [
+            {
+                "id": "t-1",
+                "milestone_id": "m-1",
+                "title": "Audit legacy crypto keys",
+                "description": "Inventory keys and TLS certs.",
+                "status": "NOT_STARTED"
+            }
+        ],
+        "definition_of_done": ["All vault secrets migrated", "Zero-trust signoff"]
+    }
+
     approve_res = client.post(
         f"/api/v1/engagements/{eng_id}/plan/approve",
         headers={"Authorization": f"Bearer {FDE_TOKEN}"},
         json={
-            "plan": {
-                "engagement_objective": "Deliver vault migration",
-                "milestones": [{"id": "m-1", "title": "Milestone 1", "sequence_order": 1, "deliverables": ["Arch doc"]}]
-            }
+            "plan": fde_plan,
+            "decision_note": "FDE reviewed and activated execution plan within approved scope."
         }
     )
-    assert approve_res.status_code == 403, "FDE must be denied permission to approve work plan"
+    assert approve_res.status_code == 200, f"FDE must be allowed to self-approve within scope: {approve_res.text}"
+    body = approve_res.json()
+    assert body["success"] is True
+    assert body["data"]["version"] == 1
+    assert body["data"]["work_plan"]["engagement_objective"] == fde_plan["engagement_objective"]
+
+    # Verify DB persistence and actor provenance
+    test_db.expire_all()
+    eng = test_db.query(Engagement).filter(Engagement.id == eng_id).first()
+    active_outcome = test_db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    assert active_outcome.work_plan is not None
+    assert active_outcome.approved_by == "Sarah Chen"
+
+    timeline_evt = test_db.query(TimelineEvent).filter(
+        TimelineEvent.engagement_id == eng_id,
+        TimelineEvent.event_type == "WORK_PLAN_APPROVED"
+    ).first()
+    assert timeline_evt is not None
+    assert timeline_evt.actor_type == "FDE"
+    assert "FDE Sarah Chen" in timeline_evt.description
+
+
+def test_fde_blocked_from_consequential_outcome_scope_change(test_db: Session):
+    """
+    Verifies that consequential changes (altering approved outcome statement,
+    expanding contractual scope, or outcome version upgrades) require Manager approval (HTTP 403).
+    """
+    create_res = client.post(
+        "/api/v1/engagements",
+        headers={"Authorization": f"Bearer {MANAGER_TOKEN}"},
+        json={
+            "customer_name": "GovData Systems",
+            "name": "Cloud Backup",
+            "initial_outcome_statement": "Secure offsite cloud backup pipeline."
+        }
+    )
+    assert create_res.status_code == 200
+    eng_id = create_res.json()["data"]["id"]
+
+    # First, approve baseline plan v1
+    baseline_plan = {
+        "engagement_objective": "Secure offsite cloud backup pipeline.",
+        "milestones": [{"id": "m-1", "title": "Backup Storage", "sequence_order": 1, "deliverables": ["S3 bucket"]}]
+    }
+    init_res = client.post(
+        f"/api/v1/engagements/{eng_id}/plan/approve",
+        headers={"Authorization": f"Bearer {FDE_TOKEN}"},
+        json={"plan": baseline_plan}
+    )
+    assert init_res.status_code == 200
+
+    # 1. FDE attempts consequential scope expansion changing the approved outcome statement
+    consequential_plan = {
+        "engagement_objective": "Complete Multi-Cloud Active-Active Replication and Datacenter Overhaul",
+        "milestones": [
+            {"id": "m-1", "title": "Backup Storage", "sequence_order": 1, "deliverables": ["S3 bucket"]},
+            {"id": "m-2", "title": "Datacenter Overhaul", "sequence_order": 2, "deliverables": ["Fiber Cutover"]}
+        ]
+    }
+    block_res_1 = client.post(
+        f"/api/v1/engagements/{eng_id}/plan/approve",
+        headers={"Authorization": f"Bearer {FDE_TOKEN}"},
+        json={
+            "plan": consequential_plan,
+            "decision_note": "Expanded scope to include datacenter overhaul."
+        }
+    )
+    assert block_res_1.status_code == 403
+    assert "Manager approval required" in block_res_1.json()["detail"]
+
+    # 2. FDE attempts explicit consequential change flag
+    flagged_plan = {
+        "engagement_objective": "Secure offsite cloud backup pipeline.",
+        "milestones": [{"id": "m-1", "title": "Backup Storage", "sequence_order": 1, "deliverables": ["S3 bucket"]}],
+        "is_consequential_change": True
+    }
+    block_res_2 = client.post(
+        f"/api/v1/engagements/{eng_id}/plan/approve",
+        headers={"Authorization": f"Bearer {FDE_TOKEN}"},
+        json={"plan": flagged_plan}
+    )
+    assert block_res_2.status_code == 403
+    assert "Manager approval required" in block_res_2.json()["detail"]
+
+
+def test_fde_routine_task_updates_and_creation(test_db: Session):
+    """
+    Verifies that routine task creation and updates within active approved plans
+    do not require manager approval and are permitted for FDEs.
+    """
+    create_res = client.post(
+        "/api/v1/engagements",
+        headers={"Authorization": f"Bearer {MANAGER_TOKEN}"},
+        json={"customer_name": "TaskFlow Inc", "name": "Workflow Optimization"}
+    )
+    eng_id = create_res.json()["data"]["id"]
+
+    # Establish baseline plan
+    plan = {
+        "engagement_objective": "Optimize async job workflows",
+        "milestones": [{"id": "m-1", "title": "Queue Tuning", "sequence_order": 1, "deliverables": ["Tuned configs"]}],
+        "tasks": [{"id": "task-init", "milestone_id": "m-1", "title": "Benchmark latency", "status": "NOT_STARTED"}]
+    }
+    approve_res = client.post(
+        f"/api/v1/engagements/{eng_id}/plan/approve",
+        headers={"Authorization": f"Bearer {FDE_TOKEN}"},
+        json={"plan": plan}
+    )
+    assert approve_res.status_code == 200
+
+    # 1. FDE updates routine task status via PATCH /tasks/{task_id}
+    patch_res = client.patch(
+        f"/api/v1/engagements/{eng_id}/tasks/task-init",
+        headers={"Authorization": f"Bearer {FDE_TOKEN}"},
+        json={"status": "IN_PROGRESS", "description": "Running wrk benchmarks against queue."}
+    )
+    assert patch_res.status_code == 200
+    assert patch_res.json()["data"]["status"] == "IN_PROGRESS"
+
+    # 2. FDE creates new routine task via POST /tasks
+    create_task_res = client.post(
+        f"/api/v1/engagements/{eng_id}/tasks",
+        headers={"Authorization": f"Bearer {FDE_TOKEN}"},
+        json={
+            "milestone_id": "m-1",
+            "title": "Configure Redis connection pool",
+            "status": "NOT_STARTED",
+            "estimated_days": 1
+        }
+    )
+    assert create_task_res.status_code == 200
+    created_task_id = create_task_res.json()["data"]["id"]
+
+    # Verify task was persisted into active work plan in DB
+    test_db.expire_all()
+    eng = test_db.query(Engagement).filter(Engagement.id == eng_id).first()
+    active_outcome = test_db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    task_ids = [t["id"] for t in active_outcome.work_plan["tasks"]]
+    assert "task-init" in task_ids
+    assert created_task_id in task_ids
+
 
 
 def test_manager_approves_and_persists_work_plan(test_db: Session):

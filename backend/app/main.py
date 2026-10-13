@@ -1035,13 +1035,16 @@ async def approve_work_plan(
     engagement_id: str,
     payload: ApproveWorkPlanRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
 ):
     """
-    Manager Approval and Persistence Endpoint for Work Plan:
-    Enforces server-side authorization (MANAGER only).
-    Validates, idempotently persists approved plan into Outcome,
-    records WORK_PLAN_APPROVED timeline event, and indexes into KNOW Agent vector store.
+    Work Plan Approval and Persistence Endpoint:
+    - Allows FDEs to review, edit, approve, and activate their own generated work plans
+      and routine tasks when remaining within the engagement's approved scope.
+    - Preserves MANAGER approval requirement for consequential changes to approved outcomes,
+      engagement scope, delivery commitments, or version upgrades (v2+).
+    - Idempotently persists approved plan into Outcome, records timeline event with provenance,
+      and indexes into KNOW Agent vector store.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
@@ -1051,7 +1054,9 @@ async def approve_work_plan(
     if not isinstance(plan_dict, dict) or not plan_dict:
         raise HTTPException(status_code=400, detail="Invalid plan payload: must be a non-empty object.")
 
-    manager_name = current_user.get("name", payload.actor_id or "David Miller")
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", payload.actor_id or ("Sarah Chen" if user_role == "FDE" else "David Miller"))
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
 
     # Idempotency check: if current outcome already has the identical plan, return success without duplicate writes
@@ -1066,6 +1071,50 @@ async def approve_work_plan(
             },
             "message": "Work plan is already approved and active (idempotent request)."
         }
+
+    has_existing_plan = bool(current_outcome and current_outcome.work_plan is not None)
+    current_statement = (current_outcome.statement if current_outcome else eng.name).strip()
+    proposed_objective = (plan_dict.get("engagement_objective") or "").strip()
+
+    # Determine whether the requested change is consequential under approval policy:
+    # 1. Explicit consequential or scope-expansion flag
+    is_explicit_consequential = bool(
+        plan_dict.get("is_consequential_change")
+        or plan_dict.get("scope_expansion")
+        or plan_dict.get("requires_manager_approval")
+    )
+    # 2. Target outcome version bump requested
+    target_version = plan_dict.get("version")
+    is_version_upgrade = bool(
+        target_version and current_outcome and int(target_version) > current_outcome.version
+    )
+    # 3. Modification of approved outcome statement on an already active plan
+    statement_changed = bool(
+        has_existing_plan
+        and proposed_objective
+        and current_statement
+        and proposed_objective != current_statement
+    )
+    # 4. Explicit decision note declaring scope expansion / contract alteration
+    note_lower = (payload.decision_note or "").lower()
+    is_scope_expansion_note = bool(
+        "scope" in note_lower and any(w in note_lower for w in ["expand", "revision", "new scope", "contract", "cdc pipeline"])
+    )
+
+    is_consequential = bool(
+        is_explicit_consequential
+        or is_version_upgrade
+        or (has_existing_plan and statement_changed)
+        or is_scope_expansion_note
+    )
+
+    # Server-side RBAC & Policy Enforcement:
+    # FDEs can approve within-scope plans and routine task updates, but consequential changes require MANAGER
+    if is_consequential and user_role != "MANAGER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager approval required for consequential changes to approved outcomes, engagement scope, and delivery commitments."
+        )
 
     outcome_service = OutcomeService(db)
 
@@ -1087,17 +1136,17 @@ async def approve_work_plan(
     if not updated_criteria and current_outcome:
         updated_criteria = current_outcome.success_criteria or []
 
-    new_statement = plan_dict.get("engagement_objective") or (current_outcome.statement if current_outcome else eng.name)
+    new_statement = proposed_objective if (user_role == "MANAGER" and proposed_objective) else current_statement
 
     try:
-        # Determine versioning: if current outcome already had an approved work plan, propose and approve a new version
-        if current_outcome and current_outcome.work_plan is not None:
+        if is_consequential and user_role == "MANAGER":
+            # Consequential scope change approved by Manager: upgrade outcome version (v2+)
             new_version_outcome = outcome_service.propose_new_outcome_version(
                 engagement_id=engagement_id,
-                new_statement=new_statement,
+                new_statement=proposed_objective or current_statement,
                 new_success_criteria=updated_criteria,
-                proposed_by=manager_name,
-                reason=payload.decision_note or "Manager updated and approved revised work plan."
+                proposed_by=actor_name,
+                reason=payload.decision_note or "Manager updated and approved revised work plan with consequential scope changes."
             )
             new_version_outcome.work_plan = plan_dict
             db.commit()
@@ -1105,11 +1154,30 @@ async def approve_work_plan(
             outcome_service.approve_outcome_version(
                 engagement_id=engagement_id,
                 outcome_id=new_version_outcome.id,
-                approved_by=manager_name
+                approved_by=actor_name
             )
             active_outcome = new_version_outcome
+            event_type = "WORK_PLAN_APPROVED"
+            event_title = f"Work Plan Approved (v{active_outcome.version})"
+            event_desc = f"Manager {actor_name} approved revised work plan with consequential scope changes."
+        elif has_existing_plan:
+            # Routine task update / ordinary work plan refinement within approved scope (FDE or Manager)
+            current_outcome.work_plan = plan_dict
+            if updated_criteria:
+                current_outcome.success_criteria = updated_criteria
+            eng.updated_at = datetime.utcnow()
+            active_outcome = current_outcome
+            db.commit()
+
+            event_type = "WORK_PLAN_UPDATED"
+            event_title = f"Work Plan Updated (v{active_outcome.version})"
+            event_desc = (
+                f"FDE {actor_name} updated routine tasks and milestones within approved scope."
+                if user_role == "FDE"
+                else f"Manager {actor_name} updated work plan tasks."
+            )
         else:
-            # Initial work plan approval for this engagement
+            # Initial work plan approval within approved scope (FDE self-approval or Manager)
             if not current_outcome:
                 outcome_id = f"out-{engagement_id[:8]}-v1-{uuid.uuid4().hex[:4]}"
                 current_outcome = Outcome(
@@ -1120,35 +1188,54 @@ async def approve_work_plan(
                     success_criteria=updated_criteria,
                     work_plan=plan_dict,
                     status=OutcomeStatus.APPROVED,
-                    created_by=manager_name,
-                    approved_by=manager_name,
+                    created_by=actor_name,
+                    approved_by=actor_name,
                     created_at=datetime.utcnow(),
                     approved_at=datetime.utcnow()
                 )
                 db.add(current_outcome)
                 eng.current_outcome_id = outcome_id
             else:
-                current_outcome.statement = new_statement
+                if user_role == "MANAGER" and proposed_objective:
+                    current_outcome.statement = proposed_objective
                 current_outcome.success_criteria = updated_criteria
                 current_outcome.work_plan = plan_dict
-                current_outcome.approved_by = manager_name
+                current_outcome.approved_by = actor_name
                 current_outcome.approved_at = datetime.utcnow()
 
             eng.updated_at = datetime.utcnow()
             active_outcome = current_outcome
             db.commit()
 
-        # Record WORK_PLAN_APPROVED timeline event with provenance
+            event_type = "WORK_PLAN_APPROVED"
+            event_title = f"Work Plan Approved (v{active_outcome.version})"
+            milestones_count = len(plan_dict.get("milestones", []))
+            tasks_count = len(plan_dict.get("tasks", [])) or sum(
+                len(m.get("deliverables", []))
+                for m in plan_dict.get("milestones", [])
+                if isinstance(m, dict)
+            )
+            event_desc = (
+                f"FDE {actor_name} approved and activated structured work plan with {milestones_count} milestones and {tasks_count} tasks within approved engagement scope."
+                if user_role == "FDE"
+                else f"Manager {actor_name} approved structured work plan with {milestones_count} milestones and {tasks_count} tasks."
+            )
+
+        # Record TimelineEvent with strict audit provenance
         milestones_count = len(plan_dict.get("milestones", []))
-        tasks_count = len(plan_dict.get("tasks", [])) or sum(len(m.get("deliverables", [])) for m in plan_dict.get("milestones", []) if isinstance(m, dict))
+        tasks_count = len(plan_dict.get("tasks", [])) or sum(
+            len(m.get("deliverables", []))
+            for m in plan_dict.get("milestones", [])
+            if isinstance(m, dict)
+        )
         evt = TimelineEvent(
             id=f"evt-{uuid.uuid4().hex[:8]}",
             engagement_id=engagement_id,
-            event_type="WORK_PLAN_APPROVED",
-            title=f"Work Plan Approved (v{active_outcome.version})",
-            description=f"Manager {manager_name} approved structured work plan with {milestones_count} milestones and {tasks_count} tasks.",
-            actor_type="MANAGER",
-            actor_id=current_user.get("id", "mgr-user"),
+            event_type=event_type,
+            title=event_title,
+            description=event_desc,
+            actor_type=user_role,
+            actor_id=actor_id,
             created_at=datetime.utcnow()
         )
         db.add(evt)
@@ -1159,8 +1246,8 @@ async def approve_work_plan(
             plan_doc_lines = [
                 f"# Approved Work Plan: {eng.name} ({eng.customer_name})",
                 f"Version: {active_outcome.version}",
-                f"Approved By: {manager_name}",
-                f"Objective: {new_statement}\n",
+                f"Approved By: {actor_name} ({user_role})",
+                f"Objective: {active_outcome.statement}\n",
                 "## Outcomes:"
             ]
             for out in plan_dict.get("outcomes", []):
@@ -1230,6 +1317,8 @@ async def approve_work_plan(
             },
             "message": f"Work Plan approved and activated as authoritative state (v{active_outcome.version})."
         }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to persist approved work plan: {e}")
@@ -1308,4 +1397,120 @@ async def toggle_dod_criterion(engagement_id: str, dod_id: str, db: Session = De
     }
 
 
+@app.patch(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/tasks/{{task_id}}", tags=["Engagements"])
+async def update_routine_task(
+    engagement_id: str,
+    task_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["FDE", "MANAGER"]))
+):
+    """
+    Update a routine task within the active work plan.
+    Does NOT require manager approval for ordinary task updates within scope.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    if not current_outcome or not current_outcome.work_plan:
+        raise HTTPException(status_code=404, detail="Active work plan not found")
 
+    from sqlalchemy.orm.attributes import flag_modified
+    wp = dict(current_outcome.work_plan)
+    tasks = list(wp.get("tasks", []))
+    target_task = None
+    for t in tasks:
+        if isinstance(t, dict) and t.get("id") == task_id:
+            for k, v in payload.items():
+                t[k] = v
+            target_task = t
+            break
+
+    if not target_task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found in active work plan")
+
+    wp["tasks"] = tasks
+    current_outcome.work_plan = wp
+    flag_modified(current_outcome, "work_plan")
+    eng.updated_at = datetime.utcnow()
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="TASK_UPDATED",
+        title=f"Task Updated: {target_task.get('title', task_id)}",
+        description=f"{user_role} {actor_name} updated routine task '{task_id}' within approved scope.",
+        actor_type=user_role,
+        actor_id=actor_id,
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": target_task,
+        "message": "Routine task updated successfully."
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/tasks", tags=["Engagements"])
+async def create_routine_task(
+    engagement_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["FDE", "MANAGER"]))
+):
+    """
+    Create a routine task in the active work plan.
+    Does NOT require manager approval for routine FDE-created tasks within scope.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    if not current_outcome or not current_outcome.work_plan:
+        raise HTTPException(status_code=400, detail="Active work plan must be established before adding tasks")
+
+    from sqlalchemy.orm.attributes import flag_modified
+    wp = dict(current_outcome.work_plan)
+    tasks = list(wp.get("tasks", []))
+
+    new_task = {
+        "id": payload.get("id") or f"task-{len(tasks)+1}-{uuid.uuid4().hex[:4]}",
+        "milestone_id": payload.get("milestone_id") or (wp.get("milestones", [{}])[0].get("id") if wp.get("milestones") else "m-1"),
+        "title": payload.get("title", "New Task"),
+        "description": payload.get("description", ""),
+        "status": payload.get("status", "NOT_STARTED"),
+        "dependencies": payload.get("dependencies", []),
+        "estimated_days": payload.get("estimated_days", 1)
+    }
+    tasks.append(new_task)
+    wp["tasks"] = tasks
+    current_outcome.work_plan = wp
+    flag_modified(current_outcome, "work_plan")
+    eng.updated_at = datetime.utcnow()
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="TASK_CREATED",
+        title=f"Task Created: {new_task['title']}",
+        description=f"{user_role} {actor_name} created routine task '{new_task['id']}' within approved scope.",
+        actor_type=user_role,
+        actor_id=actor_id,
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": new_task,
+        "message": "Routine task created successfully."
+    }
