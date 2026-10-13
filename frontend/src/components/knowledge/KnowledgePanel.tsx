@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   BookOpen, Search, ShieldCheck, Sparkles, FileText, Send,
   CheckCircle2, AlertTriangle, UploadCloud, FileUp, Folder,
-  RefreshCw, Check, Layers, Clock, Lock, FileCode
+  RefreshCw, Check, Layers, Clock, Lock, FileCode,
+  Eye, Download, ZoomIn, ZoomOut, RotateCcw, X, Copy,
+  ExternalLink, Image as ImageIcon, Filter, ChevronRight
 } from "lucide-react";
 
 interface Citation {
@@ -31,8 +33,24 @@ interface IndexedDocument {
   category: string;
   status: string;
   chunks_count: number;
+  file_type?: "pdf" | "image" | "text";
   uploaded_by: string;
   created_at: string;
+}
+
+interface DocumentDetail {
+  id: string;
+  engagement_id: string;
+  title: string;
+  filename: string;
+  category: string;
+  status: string;
+  chunks_count: number;
+  file_type: "pdf" | "image" | "text";
+  has_binary_file: boolean;
+  content: string;
+  uploaded_by: string;
+  created_at?: string;
 }
 
 interface KnowledgePanelProps {
@@ -52,7 +70,7 @@ const CATEGORIES = [
 ];
 
 export default function KnowledgePanel({ engagementId, customerName }: KnowledgePanelProps) {
-  const [activeTab, setActiveTab] = useState<"query" | "upload">("query");
+  const [activeTab, setActiveTab] = useState<"documents" | "query">("documents");
 
   // Query State
   const [query, setQuery] = useState("");
@@ -60,16 +78,30 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   const [answerData, setAnswerData] = useState<GroundedAnswerData | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
 
-  // Upload & Documents State
+  // Documents & Library State
   const [documents, setDocuments] = useState<IndexedDocument[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Form Fields
+  // Search & Filtering State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<"all" | "pdf" | "image" | "text">("all");
+
+  // Document Viewer Modal State
+  const [viewingDoc, setViewingDoc] = useState<IndexedDocument | null>(null);
+  const [docDetail, setDocDetail] = useState<DocumentDetail | null>(null);
+  const [docDetailLoading, setDocDetailLoading] = useState(false);
+  const [viewerMode, setViewerMode] = useState<"file" | "text">("file");
+  const [imageZoom, setImageZoom] = useState(1);
+  const [copiedText, setCopiedText] = useState(false);
+
+  // Upload Form Fields
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>("Technical Documentation");
+  const [uploadCategory, setUploadCategory] = useState<string>("Technical Documentation");
   const [customTitle, setCustomTitle] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,7 +130,71 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
     setQuery("");
     setUploadSuccess(null);
     setUploadError(null);
+    setViewingDoc(null);
   }, [engagementId]);
+
+  // Open Document Viewer
+  const handleOpenViewer = async (doc: IndexedDocument) => {
+    setViewingDoc(doc);
+    setDocDetail(null);
+    setDocDetailLoading(true);
+    setViewerMode("file");
+    setImageZoom(1);
+    setCopiedText(false);
+
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/documents/${doc.id}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setDocDetail(json.data);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching document details:", err);
+    } finally {
+      setDocDetailLoading(false);
+    }
+  };
+
+  // Close Document Viewer
+  const handleCloseViewer = () => {
+    setViewingDoc(null);
+    setDocDetail(null);
+    setImageZoom(1);
+  };
+
+  // Copy document text
+  const handleCopyText = () => {
+    if (docDetail?.content) {
+      navigator.clipboard.writeText(docDetail.content);
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 2000);
+    }
+  };
+
+  // Filtered documents list based on search and category filters
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      // Category filter
+      if (selectedCategory !== "All" && doc.category !== selectedCategory) {
+        return false;
+      }
+      // Type filter
+      if (selectedTypeFilter !== "all") {
+        const ftype = doc.file_type || (doc.title.toLowerCase().endsWith(".pdf") ? "pdf" : "text");
+        if (ftype !== selectedTypeFilter) return false;
+      }
+      // Keyword search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const titleMatch = doc.title.toLowerCase().includes(q);
+        const categoryMatch = doc.category.toLowerCase().includes(q);
+        return titleMatch || categoryMatch;
+      }
+      return true;
+    });
+  }, [documents, searchQuery, selectedCategory, selectedTypeFilter]);
 
   // Handle RAG Q&A
   const handleSearch = async (e: React.FormEvent) => {
@@ -148,7 +244,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
 
     const formData = new FormData();
     formData.append("file", selectedFile);
-    formData.append("category", selectedCategory);
+    formData.append("category", uploadCategory);
     if (customTitle.trim()) {
       formData.append("title", customTitle.trim());
     }
@@ -167,6 +263,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
         setSelectedFile(null);
         setCustomTitle("");
         if (fileInputRef.current) fileInputRef.current.value = "";
+        setShowUploadForm(false);
         await fetchDocuments();
       } else {
         setUploadError(json.detail || json.message || "Failed to upload and index document.");
@@ -195,6 +292,33 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
     }
   };
 
+  // Helper for file type badge
+  const getFileBadge = (doc: IndexedDocument) => {
+    const ftype = doc.file_type || (doc.title.toLowerCase().endsWith(".pdf") ? "pdf" : "text");
+    if (ftype === "pdf") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded">
+          <FileText className="h-3 w-3 text-rose-600" />
+          PDF
+        </span>
+      );
+    }
+    if (ftype === "image") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded">
+          <ImageIcon className="h-3 w-3 text-purple-600" />
+          IMAGE
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">
+        <FileCode className="h-3 w-3 text-slate-600" />
+        DOC
+      </span>
+    );
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
       {/* Top Header Bar */}
@@ -206,12 +330,12 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               KNOW Agent Grounded Intelligence
-              <span className="text-[10px] bg-teal-100 text-teal-800 font-mono px-2 py-0.5 rounded font-semibold">
+              <span className="text-xs bg-teal-100 text-teal-800 font-mono px-2 py-0.5 rounded font-semibold">
                 RAG Active
               </span>
             </h3>
             <p className="text-xs text-slate-500">
-              Tenant-isolated knowledge retrieval with privacy boundary scrub for <strong className="text-slate-700">{customerName}</strong>
+              Document library, reading interfaces, and verified citations for <strong className="text-slate-700">{customerName}</strong>
             </p>
           </div>
         </div>
@@ -220,32 +344,400 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
         <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-lg text-xs font-medium self-stretch sm:self-auto">
           <button
             type="button"
-            onClick={() => setActiveTab("query")}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition ${
-              activeTab === "query"
-                ? "bg-white text-slate-900 shadow-xs font-semibold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Search className="h-3.5 w-3.5" />
-            <span>Ask Agent</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("upload")}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition ${
-              activeTab === "upload"
+            onClick={() => setActiveTab("documents")}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+              activeTab === "documents"
                 ? "bg-white text-slate-900 shadow-xs font-semibold"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
             <Folder className="h-3.5 w-3.5" />
-            <span>Documents ({documents.length})</span>
+            <span>Document Library ({documents.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("query")}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+              activeTab === "query"
+                ? "bg-white text-slate-900 shadow-xs font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Ask Agent</span>
           </button>
         </div>
       </div>
 
-      {/* TAB 1: Grounded Q&A Interface */}
+      {/* Upload Feedback Banner */}
+      {uploadSuccess && (
+        <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{uploadSuccess}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUploadSuccess(null)}
+            className="text-slate-400 hover:text-slate-700 cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 1: Document Library & Reading Interfaces               */}
+      {/* ========================================================= */}
+      {activeTab === "documents" && (
+        <div className="p-5 space-y-5">
+          {/* Action Row: Search Bar + Filter Pills + Upload Toggle */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search documents by keyword, title, or category..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={fetchDocuments}
+                  disabled={docsLoading}
+                  title="Refresh documents"
+                  className="p-2 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                >
+                  <RefreshCw className={`h-4 w-4 ${docsLoading ? "animate-spin" : ""}`} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUploadForm(!showUploadForm)}
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                    showUploadForm
+                      ? "bg-slate-200 text-slate-800"
+                      : "bg-slate-900 hover:bg-slate-800 text-white"
+                  }`}
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  <span>{showUploadForm ? "Hide Upload Form" : "Upload Document"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
+              <span className="text-xs text-slate-400 font-medium mr-1 flex items-center gap-1">
+                <Filter className="h-3 w-3" />
+                Category:
+              </span>
+              {["All", ...CATEGORIES].map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                    selectedCategory === cat
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+
+              <span className="text-slate-300 mx-1">|</span>
+
+              {/* Type Pills */}
+              <button
+                type="button"
+                onClick={() => setSelectedTypeFilter(selectedTypeFilter === "pdf" ? "all" : "pdf")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
+                  selectedTypeFilter === "pdf"
+                    ? "bg-rose-700 text-white"
+                    : "bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200"
+                }`}
+              >
+                <FileText className="h-3 w-3" />
+                <span>PDFs Only</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTypeFilter(selectedTypeFilter === "image" ? "all" : "image")}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
+                  selectedTypeFilter === "image"
+                    ? "bg-purple-700 text-white"
+                    : "bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200"
+                }`}
+              >
+                <ImageIcon className="h-3 w-3" />
+                <span>Images Only</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Collapsible Upload Form */}
+          {showUploadForm && (
+            <form onSubmit={handleFileUpload} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-fadeIn">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 uppercase font-mono flex items-center gap-1.5">
+                  <UploadCloud className="h-4 w-4 text-teal-600" />
+                  Upload Technical Document or Architecture Diagram
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowUploadForm(false)}
+                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Drag & Drop Zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition ${
+                  isDragging
+                    ? "border-teal-500 bg-teal-50/50"
+                    : selectedFile
+                    ? "border-emerald-400 bg-emerald-50/30"
+                    : "border-slate-300 hover:border-slate-400 bg-white"
+                }`}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setSelectedFile(e.target.files[0]);
+                    }
+                  }}
+                  accept=".pdf,.png,.jpg,.jpeg,.svg,.webp,.txt,.md,.markdown,.json,.csv,.yaml,.yml"
+                  className="hidden"
+                />
+
+                {selectedFile ? (
+                  <div className="space-y-1">
+                    <CheckCircle2 className="h-6 w-6 mx-auto text-emerald-600" />
+                    <p className="text-xs font-bold text-slate-900">{selectedFile.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {(selectedFile.size / 1024).toFixed(1)} KB &middot; Click to change file
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <UploadCloud className="h-6 w-6 mx-auto text-slate-400" />
+                    <p className="text-xs font-semibold text-slate-700">
+                      Drag & drop PDF, architecture image, or document here, or click to browse
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Supports PDF, PNG, JPG, SVG, WebP, Markdown, Text, JSON (Max 50MB)
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Category & Title Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Document Category
+                  </label>
+                  <select
+                    value={uploadCategory}
+                    onChange={(e) => setUploadCategory(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Display Title (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Production Cutover Architecture Spec"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              {uploadError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadForm(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-200 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadLoading || !selectedFile}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-semibold py-1.5 px-4 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+                >
+                  {uploadLoading ? (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                      <span>Processing & Indexing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileUp className="h-3.5 w-3.5" />
+                      <span>Upload & Index</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Document Count Indicator */}
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <span>
+              Showing <strong className="text-slate-800">{filteredDocuments.length}</strong> of {documents.length} indexed documents
+            </span>
+            {searchQuery && (
+              <span className="text-teal-700 font-medium">
+                Filtered by: &ldquo;{searchQuery}&rdquo;
+              </span>
+            )}
+          </div>
+
+          {/* Document Cards Grid */}
+          {filteredDocuments.length === 0 ? (
+            <div className="p-10 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-500 space-y-2">
+              <FileCode className="h-8 w-8 mx-auto text-slate-400" />
+              <p className="text-xs font-semibold text-slate-700">
+                {documents.length === 0
+                  ? "No documents uploaded for this engagement yet."
+                  : "No documents matching your search filter."}
+              </p>
+              <p className="text-xs text-slate-400">
+                {documents.length === 0
+                  ? "Click 'Upload Document' above to add PDFs, architecture specs, or technical diagrams."
+                  : "Try adjusting your keyword query or category filter."}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2.5">
+              {filteredDocuments.map((doc) => {
+                const ftype = doc.file_type || (doc.title.toLowerCase().endsWith(".pdf") ? "pdf" : "text");
+                const isPdf = ftype === "pdf";
+                const isImage = ftype === "image";
+
+                return (
+                  <div
+                    key={doc.id}
+                    className="p-3.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        {getFileBadge(doc)}
+                        <h4
+                          onClick={() => handleOpenViewer(doc)}
+                          className="text-xs font-bold text-slate-900 group-hover:text-blue-700 transition cursor-pointer"
+                        >
+                          {doc.title}
+                        </h4>
+                        <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono">
+                          {doc.category}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-slate-400">
+                        <span className="flex items-center gap-1 font-mono">
+                          <Layers className="h-3 w-3 text-slate-400" />
+                          {doc.chunks_count} Vector Chunks
+                        </span>
+                        <span>&bull;</span>
+                        <span className="flex items-center gap-1 font-mono">
+                          <Clock className="h-3 w-3 text-slate-400" />
+                          {new Date(doc.created_at).toLocaleDateString()}
+                        </span>
+                        <span>&bull;</span>
+                        <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                          <Check className="h-3 w-3 text-emerald-600" />
+                          Indexed
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenViewer(doc)}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer ${
+                          isPdf
+                            ? "bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200"
+                            : isImage
+                            ? "bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200"
+                        }`}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>{isPdf ? "Read PDF" : isImage ? "View Image" : "Read Document"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab("query");
+                          setQuery(`Summarize the key requirements from ${doc.title}`);
+                        }}
+                        className="text-xs text-teal-700 hover:text-teal-900 font-semibold px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200 transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        <span>Ask AI &rarr;</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 2: Grounded Q&A Interface (Ask Agent)                  */}
+      {/* ========================================================= */}
       {activeTab === "query" && (
         <div className="p-5 space-y-4">
           {/* Query Search Form */}
@@ -263,7 +755,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
             <button
               type="submit"
               disabled={queryLoading}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50 shrink-0"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50 shrink-0 cursor-pointer"
             >
               {queryLoading ? (
                 <>
@@ -282,20 +774,20 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
           {/* Quick suggestions based on uploaded docs */}
           {documents.length > 0 && !answerData && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-[11px] text-slate-400 font-medium">Try asking:</span>
+              <span className="text-xs text-slate-400 font-medium">Quick Queries:</span>
               <button
                 type="button"
                 onClick={() => setQuery("What are the enterprise security and SSO requirements?")}
-                className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded transition"
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded transition cursor-pointer"
               >
-                "What are the SSO requirements?"
+                &ldquo;What are the SSO requirements?&rdquo;
               </button>
               <button
                 type="button"
                 onClick={() => setQuery("What is the database cutover window and migration pipeline?")}
-                className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded transition"
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded transition cursor-pointer"
               >
-                "What is the cutover window?"
+                &ldquo;What is the cutover window?&rdquo;
               </button>
             </div>
           )}
@@ -321,9 +813,9 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                     Confidence: {Math.round(answerData.confidence_score * 100)}%
                   </span>
                   {answerData.privacy_scrubbed && (
-                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-mono text-[10px] font-bold flex items-center gap-1">
+                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-mono text-xs font-bold flex items-center gap-1">
                       <Lock className="h-3 w-3 text-emerald-600" />
-                      Privacy Boundary Scrubbed
+                      Privacy Scrubbed
                     </span>
                   )}
                 </div>
@@ -338,11 +830,11 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
               {answerData.citations && answerData.citations.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-1.5">
                       <Layers className="h-3.5 w-3.5 text-teal-600" />
                       Verified Source Evidence ({answerData.citations.length} Chunks)
                     </span>
-                    <span className="text-[10px] text-slate-400">Strictly grounded — zero hallucinations</span>
+                    <span className="text-xs text-slate-400">Strictly grounded &middot; zero hallucinations</span>
                   </div>
 
                   <div className="grid grid-cols-1 gap-2">
@@ -353,12 +845,12 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                             <FileText className="h-3.5 w-3.5 text-teal-600" />
                             {c.document_title}
                           </span>
-                          <span className="text-slate-500 font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded">
+                          <span className="text-slate-500 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
                             Relevance: {c.relevance_score}
                           </span>
                         </div>
-                        <p className="text-slate-600 italic text-[11px] leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
-                          "{c.snippet}"
+                        <p className="text-slate-600 italic text-xs leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
+                          &ldquo;{c.snippet}&rdquo;
                         </p>
                       </div>
                     ))}
@@ -370,217 +862,252 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
         </div>
       )}
 
-      {/* TAB 2: Document Upload & Library */}
-      {activeTab === "upload" && (
-        <div className="p-5 space-y-6">
-          {/* Upload Form */}
-          <form onSubmit={handleFileUpload} className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono flex items-center gap-1.5">
-                <FileUp className="h-4 w-4 text-teal-600" />
-                Upload New Document into RAG Vector Store
-              </h4>
-              <span className="text-[10px] text-slate-400">
-                Supports .txt, .md, .pdf, .json, .csv, .log
-              </span>
-            </div>
-
-            {/* Drag & Drop Zone */}
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 ${
-                isDragging
-                  ? "border-teal-500 bg-teal-50/50"
-                  : selectedFile
-                  ? "border-emerald-400 bg-emerald-50/30"
-                  : "border-slate-300 hover:border-slate-400 bg-slate-50/50"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".txt,.md,.pdf,.json,.csv,.yaml,.yml,.log"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setSelectedFile(e.target.files[0]);
-                  }
-                }}
-              />
-
-              <div className="p-2.5 rounded-full bg-white shadow-2xs border border-slate-200 text-teal-600">
-                <UploadCloud className="h-6 w-6" />
+      {/* ========================================================= */}
+      {/* DOCUMENT VIEWER MODAL (PDF / IMAGE / TEXT READER)         */}
+      {/* ========================================================= */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+            {/* Viewer Header */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-slate-50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {getFileBadge(viewingDoc)}
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-900 truncate">
+                    {viewingDoc.title}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
+                    <span>{viewingDoc.category}</span>
+                    <span>&bull;</span>
+                    <span>{viewingDoc.chunks_count} Vector Chunks</span>
+                  </div>
+                </div>
               </div>
 
-              {selectedFile ? (
-                <div>
-                  <p className="text-xs font-bold text-slate-800">{selectedFile.name}</p>
-                  <p className="text-[11px] text-slate-500">
-                    {(selectedFile.size / 1024).toFixed(1)} KB — Click to change file
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-xs font-semibold text-slate-700">
-                    Click to browse or drag and drop customer documents here
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Architecture guides, technical requirements, RFCs, and API specifications
-                  </p>
-                </div>
-              )}
-            </div>
+              {/* Viewer Controls */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Mode switcher for PDFs */}
+                {viewingDoc.file_type === "pdf" && (
+                  <div className="flex items-center bg-slate-200/80 p-0.5 rounded-lg text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setViewerMode("file")}
+                      className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                        viewerMode === "file" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600"
+                      }`}
+                    >
+                      PDF View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewerMode("text")}
+                      className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                        viewerMode === "text" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600"
+                      }`}
+                    >
+                      Extracted Text
+                    </button>
+                  </div>
+                )}
 
-            {/* Category and Custom Title inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Document Category
-                </label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                {/* External Open in Tab */}
+                <a
+                  href={`${API_BASE}/engagements/${engagementId}/documents/${viewingDoc.id}/file`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open in new window"
+                  className="p-1.5 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition cursor-pointer"
                 >
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <ExternalLink className="h-4 w-4" />
+                </a>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Document Title (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Defaults to filename..."
-                  value={customTitle}
-                  onChange={(e) => setCustomTitle(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
+                {/* Download */}
+                <a
+                  href={`${API_BASE}/engagements/${engagementId}/documents/${viewingDoc.id}/file`}
+                  target="_blank"
+                  rel="noreferrer"
+                  download
+                  title="Download file"
+                  className="p-1.5 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
 
-            {/* Upload Feedback */}
-            {uploadSuccess && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span>{uploadSuccess}</span>
-                </div>
+                {/* Ask AI quick action */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab("query")}
-                  className="text-xs font-bold text-emerald-700 underline hover:text-emerald-900 ml-3 shrink-0"
+                  onClick={() => {
+                    const docTitle = viewingDoc.title;
+                    handleCloseViewer();
+                    setActiveTab("query");
+                    setQuery(`Summarize the core specifications and requirements in ${docTitle}`);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold border border-teal-200 flex items-center gap-1 transition cursor-pointer"
                 >
-                  Test Q&A &rarr;
+                  <Sparkles className="h-3.5 w-3.5 text-teal-600" />
+                  <span>Ask AI</span>
+                </button>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={handleCloseViewer}
+                  className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-            )}
-
-            {uploadError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-                <span>{uploadError}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={uploadLoading || !selectedFile}
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-2 transition disabled:opacity-50"
-            >
-              {uploadLoading ? (
-                <>
-                  <Sparkles className="h-3.5 w-3.5 animate-spin" />
-                  <span>Processing, Chunking & Indexing...</span>
-                </>
-              ) : (
-                <>
-                  <FileUp className="h-3.5 w-3.5" />
-                  <span>Upload & Activate Grounded RAG</span>
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Document Library List */}
-          <div className="space-y-3 pt-4 border-t border-slate-200">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono flex items-center gap-1.5">
-                <Folder className="h-4 w-4 text-slate-500" />
-                Indexed Customer Documents ({documents.length})
-              </h4>
-              <button
-                type="button"
-                onClick={fetchDocuments}
-                disabled={docsLoading}
-                className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 transition"
-              >
-                <RefreshCw className={`h-3 w-3 ${docsLoading ? "animate-spin" : ""}`} />
-                <span>Refresh</span>
-              </button>
             </div>
 
-            {documents.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-xs">
-                <FileCode className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                No documents uploaded for this engagement yet. Upload a document above to activate Grounded RAG!
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-2.5">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="p-3.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl transition flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+            {/* Viewer Content Body */}
+            <div className="flex-1 overflow-auto p-4 bg-slate-100/50">
+              {docDetailLoading ? (
+                <div className="h-80 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+                  <Sparkles className="h-6 w-6 animate-spin text-teal-600" />
+                  <span>Loading document content...</span>
+                </div>
+              ) : viewingDoc.file_type === "pdf" && viewerMode === "file" ? (
+                /* PDF Interactive Viewer */
+                <div className="w-full h-[660px] bg-white rounded-lg shadow-inner overflow-hidden border border-slate-200 relative">
+                  <object
+                    data={`${API_BASE}/engagements/${engagementId}/documents/${viewingDoc.id}/file#toolbar=1`}
+                    type="application/pdf"
+                    className="w-full h-full border-0"
                   >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-teal-600 shrink-0" />
-                        <span className="text-xs font-bold text-slate-900">{doc.title}</span>
-                        <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-medium">
-                          {doc.category}
-                        </span>
+                    <iframe
+                      src={`${API_BASE}/engagements/${engagementId}/documents/${viewingDoc.id}/file#toolbar=1`}
+                      className="w-full h-full border-0"
+                      title={viewingDoc.title}
+                    >
+                      <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center text-xs text-slate-600 bg-slate-50">
+                        <FileText className="h-8 w-8 text-rose-500" />
+                        <p className="font-semibold text-slate-800">Inline PDF preview is not available in your browser.</p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setViewerMode("text")}
+                            className="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 transition cursor-pointer"
+                          >
+                            Switch to Extracted Text
+                          </button>
+                          <a
+                            href={`${API_BASE}/engagements/${engagementId}/documents/${viewingDoc.id}/file`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-100 transition cursor-pointer"
+                          >
+                            Open in New Tab
+                          </a>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-400 pl-6">
-                        <span className="flex items-center gap-1">
-                          <Layers className="h-3 w-3 text-slate-400" />
-                          {doc.chunks_count} Vector Chunks
-                        </span>
-                        <span>&bull;</span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-slate-400" />
-                          {new Date(doc.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
+                    </iframe>
+                  </object>
+                </div>
 
-                    <div className="flex items-center gap-2 pl-6 sm:pl-0">
-                      <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-bold font-mono">
-                        <Check className="h-3 w-3 text-emerald-600" />
-                        Indexed
+              ) : viewingDoc.file_type === "image" ? (
+                /* Architecture Image Lightbox */
+                <div className="space-y-3">
+                  {/* Image Toolbar */}
+                  <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
+                    <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                      <ImageIcon className="h-3.5 w-3.5 text-purple-600" />
+                      Architecture Diagram Preview
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom((prev) => Math.max(0.5, prev - 0.2))}
+                        className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
+                        title="Zoom out"
+                      >
+                        <ZoomOut className="h-4 w-4" />
+                      </button>
+                      <span className="font-mono text-xs text-slate-500 w-12 text-center">
+                        {Math.round(imageZoom * 100)}%
                       </span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setActiveTab("query");
-                          setQuery(`Summarize the core requirements from ${doc.title}`);
-                        }}
-                        className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 transition"
+                        onClick={() => setImageZoom((prev) => Math.min(3, prev + 0.2))}
+                        className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
+                        title="Zoom in"
                       >
-                        Ask &rarr;
+                        <ZoomIn className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageZoom(1)}
+                        className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
+                        title="Reset zoom"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  {/* Zoomable Image Container */}
+                  <div className="w-full h-[580px] bg-slate-900/5 rounded-lg border border-slate-200 overflow-auto flex items-center justify-center p-4">
+                    <img
+                      src={`${API_BASE}/engagements/${engagementId}/documents/${viewingDoc.id}/file`}
+                      alt={viewingDoc.title}
+                      style={{
+                        transform: `scale(${imageZoom})`,
+                        transition: "transform 0.15s ease-out"
+                      }}
+                      className="max-w-full max-h-full object-contain rounded shadow-md"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Text / Markdown / Extracted Clauses Document Reader */
+                <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4 shadow-sm">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="space-y-0.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
+                        Document Content & Clauses
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        {docDetail?.content ? `${docDetail.content.length} characters` : "Content preview"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyText}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      {copiedText ? (
+                        <>
+                          <Check className="h-3 w-3 text-emerald-600" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3 w-3" />
+                          <span>Copy Text</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans selection:bg-blue-100">
+                    {docDetail?.content || "No text content available for this document."}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Viewer Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                Document ID: <strong className="font-mono text-slate-700">{viewingDoc.id}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleCloseViewer}
+                className="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-semibold text-xs hover:bg-slate-800 transition cursor-pointer"
+              >
+                Close Reader
+              </button>
+            </div>
           </div>
         </div>
       )}
