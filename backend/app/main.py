@@ -447,15 +447,31 @@ async def list_pending_approvals(db: Session = Depends(get_db)):
     result = []
     for appr in approvals:
         eng = db.query(Engagement).filter(Engagement.id == appr.engagement_id).first()
+        if appr.type == ApprovalType.CUSTOMER_UPDATE:
+            rec = f"Authorize Executive Customer Update release for {eng.customer_name if eng else 'customer'}."
+            why = "DELIVER Agent translated engineering progress into executive stakeholder summary requiring manager sign-off before client delivery."
+            evidence = ["AI privacy guardrail verified", "Executive summary draft generated"]
+            impact = "Unlocks PDF download and authorizes FDE or Manager to send update to client stakeholders."
+        elif appr.type == ApprovalType.OUTCOME_CHANGE:
+            rec = f"Upgrade Definition of Done criteria and outcome for {eng.customer_name if eng else 'customer'}."
+            why = "Customer requirement changed, gating production validation step."
+            evidence = ["Requirement input received", "Current outcome DoD affected"]
+            impact = "Updates DoD checklist and allows production rollout."
+        else:
+            rec = "Approve consequential action."
+            why = "Consequential operational update requiring authorization."
+            evidence = ["Action requested by engineer"]
+            impact = "Authorizes requested workflow progression."
+
         result.append({
             "id": appr.id,
             "engagement_id": appr.engagement_id,
             "customer_name": eng.customer_name if eng else "Customer",
             "type": appr.type,
-            "recommendation": f"Upgrade Definition of Done criteria and outcome for {eng.customer_name if eng else 'customer'}." if appr.type == ApprovalType.OUTCOME_CHANGE else "Approve consequential action.",
-            "why": "Customer requirement changed, gating production validation step.",
-            "evidence": [f"Requirement input received", f"Current outcome DoD affected"],
-            "impact": "Updates DoD checklist and allows production rollout.",
+            "recommendation": rec,
+            "why": why,
+            "evidence": evidence,
+            "impact": impact,
             "confidence": "High",
             "status": appr.status,
             "requested_by": appr.requested_by,
@@ -813,10 +829,124 @@ async def generate_customer_update(engagement_id: str, payload: GenerateCustomer
         format_type=payload.format_type
     )
 
+    # Ensure a pending Approval record exists for this Customer Update
+    existing_appr = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE,
+        Approval.status == ApprovalStatus.PENDING
+    ).first()
+    if not existing_appr:
+        new_appr = Approval(
+            id=f"appr-cu-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            type=ApprovalType.CUSTOMER_UPDATE,
+            target_id=engagement_id,
+            status=ApprovalStatus.PENDING,
+            requested_by="FDE (DELIVER Agent)",
+            created_at=datetime.utcnow()
+        )
+        db.add(new_appr)
+        db.commit()
+
     return {
         "success": True,
         "data": draft.model_dump(),
-        "message": "DELIVER Agent customer update draft generated successfully."
+        "message": "DELIVER Agent customer update draft generated successfully. Pending Manager Approval."
+    }
+
+
+@app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/customer-updates/approve", tags=["Delivery"])
+async def approve_customer_update(
+    engagement_id: str,
+    payload: Optional[ApprovalResponseRequest] = None,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+):
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    manager_name = current_user.get("name", "David Miller")
+    decision_note = payload.decision_note if payload and payload.decision_note else "Manager approved executive summary for client delivery."
+
+    # Mark all pending CUSTOMER_UPDATE approvals for this engagement as APPROVED
+    pending_apprs = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE,
+        Approval.status == ApprovalStatus.PENDING
+    ).all()
+
+    for appr in pending_apprs:
+        appr.status = ApprovalStatus.APPROVED
+        appr.reviewed_by = manager_name
+        appr.decision_note = decision_note
+        appr.reviewed_at = datetime.utcnow()
+
+    # If no pending approval was found, record one for complete audit trail
+    if not pending_apprs:
+        approved_record = Approval(
+            id=f"appr-cu-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            type=ApprovalType.CUSTOMER_UPDATE,
+            target_id=engagement_id,
+            status=ApprovalStatus.APPROVED,
+            requested_by="FDE (DELIVER Agent)",
+            reviewed_by=manager_name,
+            decision_note=decision_note,
+            reviewed_at=datetime.utcnow(),
+            created_at=datetime.utcnow()
+        )
+        db.add(approved_record)
+
+    # Log audit timeline event
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="CUSTOMER_UPDATE_APPROVED",
+        title="Executive Customer Update Approved",
+        description=f"Manager ({manager_name}) approved executive customer update. Release authorized for FDE or Manager client distribution.",
+        actor_type="MANAGER",
+        actor_id=current_user.get("id", "usr-mgr-002"),
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "engagement_id": engagement_id,
+            "status": "APPROVED",
+            "approved": True,
+            "approved_by": manager_name,
+            "approved_at": datetime.utcnow().isoformat()
+        },
+        "message": "Executive customer update approved successfully. Download and release authorized for FDE and Manager."
+    }
+
+
+@app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/customer-updates/status", tags=["Delivery"])
+async def get_customer_update_approval_status(engagement_id: str, db: Session = Depends(get_db)):
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    latest_approval = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE
+    ).order_by(Approval.created_at.desc()).first()
+
+    is_approved = (latest_approval.status == ApprovalStatus.APPROVED) if latest_approval else False
+
+    return {
+        "success": True,
+        "data": {
+            "engagement_id": engagement_id,
+            "approved": is_approved,
+            "status": latest_approval.status if latest_approval else "NO_DRAFT",
+            "reviewed_by": latest_approval.reviewed_by if latest_approval else None,
+            "reviewed_at": latest_approval.reviewed_at.isoformat() if latest_approval and latest_approval.reviewed_at else None
+        },
+        "message": "Customer update approval status retrieved."
     }
 
 
