@@ -140,7 +140,8 @@ function EngagementDetailContent() {
 
   const handleToggleCriterion = async (criterionId: string) => {
     try {
-      await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/dod/${criterionId}/toggle`, {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      await fetch(`${apiBase}/engagements/${engagementId}/dod/${criterionId}/toggle`, {
         method: "PATCH"
       });
       fetchEngagementDetail(engagementId);
@@ -148,6 +149,7 @@ function EngagementDetailContent() {
       console.warn("Failed to toggle criterion:", e);
     }
   };
+
 
   const nextActionText =
     activeEngagementData?.outcome?.work_plan?.next_actions?.[0] ||

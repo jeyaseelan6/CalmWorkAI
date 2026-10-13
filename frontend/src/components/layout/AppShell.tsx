@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useEngagement } from "@/context/EngagementContext";
 import { 
@@ -26,6 +26,8 @@ import {
   Plus
 } from "lucide-react";
 import RecordWorknoteDrawer from "@/components/layout/RecordWorknoteDrawer";
+import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
+
 
 export interface NavItem {
   id: string;
@@ -37,12 +39,14 @@ export interface NavItem {
 
 function NavLinks() {
   const { role } = useAuth();
-  const { approvedAcme } = useEngagement();
+  const { approvedAcme, activeCustomer } = useEngagement();
   const pathname = usePathname();
+
+  const engagementHref = `/engagements/${activeCustomer?.id || "eng-acme-001"}`;
 
   const fdeNav: NavItem[] = [
     { id: "my-work", label: "My Day", href: "/", icon: Briefcase },
-    { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
+    { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
     { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
     { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
@@ -52,7 +56,7 @@ function NavLinks() {
 
   const managerNav: NavItem[] = [
     { id: "control-center", label: "My Day", href: "/", icon: LayoutDashboard },
-    { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
+    { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
     { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
     { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
@@ -66,7 +70,10 @@ function NavLinks() {
     <nav className="space-y-0.5">
       {currentNav.map((item: NavItem) => {
         const Icon = item.icon;
-        const isActive = (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname?.startsWith(item.href));
+        const isActive =
+          item.id === "engagements"
+            ? pathname?.startsWith("/engagements")
+            : (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname?.startsWith(item.href));
         return (
           <Link
             key={item.id}
@@ -94,10 +101,20 @@ function NavLinks() {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { user, role, logout, isAuthenticated, isLoadingAuth } = useAuth();
   const { customers, activeCustomer, setActiveCustomer } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState(false);
+
+  const filteredCustomers = customers.filter(c => {
+    if (!customerSearch.trim()) return true;
+    const q = customerSearch.toLowerCase();
+    return c.customerName.toLowerCase().includes(q) || c.engagementName.toLowerCase().includes(q);
+  });
 
   // Route protection: If unauthenticated, redirect to login screen
   useEffect(() => {
@@ -141,14 +158,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
 
-          {/* Active Customer Switcher */}
+          {/* Active Customer Switcher (Sole dropdown for switching engagements) */}
           <div className="mb-3 relative px-1">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
               Active Engagement
             </label>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 flex items-center justify-between text-left hover:border-slate-300 transition-all text-xs"
+              className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 flex items-center justify-between text-left hover:border-slate-300 transition-all text-xs cursor-pointer"
             >
               <div className="truncate">
                 <span className="font-semibold text-slate-900 block truncate">{activeCustomer.customerName}</span>
@@ -158,38 +175,82 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-1 right-1 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-1 space-y-0.5">
-                <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-400">
-                  Switch Customer Workspace
+              <div className="absolute left-1 right-1 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1.5 space-y-1">
+                <div className="px-1.5 py-1 text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+                  <span>Switch Workspace</span>
+                  <span className="font-mono text-[9px] text-slate-500">{customers.length} total</span>
                 </div>
-                {customers.map((cust) => (
-                  <button
-                    key={cust.id}
-                    onClick={() => {
-                      setActiveCustomer(cust);
-                      setDropdownOpen(false);
-                    }}
-                    className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between ${
-                      cust.id === activeCustomer.id 
-                        ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-blue-600" 
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="truncate">
-                      <div className="font-semibold truncate">{cust.customerName}</div>
-                      <div className="text-[10px] text-slate-500 truncate">{cust.engagementName}</div>
+
+                {/* Search if there are multiple customers */}
+                {customers.length > 4 && (
+                  <div className="px-0.5 pb-1">
+                    <input
+                      type="text"
+                      placeholder="Search engagement..."
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    />
+                  </div>
+                )}
+
+                <div className="max-h-60 overflow-y-auto space-y-0.5">
+                  {filteredCustomers.map((cust) => (
+                    <button
+                      key={cust.id}
+                      onClick={() => {
+                        setActiveCustomer(cust);
+                        setDropdownOpen(false);
+                        setCustomerSearch("");
+                        if (pathname?.startsWith("/engagements")) {
+                          router.push(`/engagements/${cust.id}`);
+                        }
+                      }}
+                      className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                        cust.id === activeCustomer.id 
+                          ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-slate-900" 
+                          : "hover:bg-slate-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="truncate">
+                        <div className="font-semibold truncate">{cust.customerName}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{cust.engagementName}</div>
+                      </div>
+                      {cust.status === "NEEDS_REASSESSMENT" && (
+                        <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 ml-1.5" title="Needs Reassessment" />
+                      )}
+                      {cust.status === "HEALTHY" && (
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5" title="Healthy" />
+                      )}
+                    </button>
+                  ))}
+                  {filteredCustomers.length === 0 && (
+                    <div className="p-2 text-center text-xs text-slate-400">
+                      No matching engagements
                     </div>
-                    {cust.status === "NEEDS_REASSESSMENT" && (
-                      <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 ml-1.5" title="Needs Reassessment" />
-                    )}
-                    {cust.status === "HEALTHY" && (
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5" title="Healthy" />
-                    )}
-                  </button>
-                ))}
+                  )}
+                </div>
+
+                {/* Manager Action: Create New Engagement */}
+                {role === "MANAGER" && (
+                  <div className="pt-1 mt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setShowCreateModal(true);
+                      }}
+                      className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-slate-500" />
+                      <span>New Engagement...</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
+
 
           {/* Navigation Links wrapped in Suspense */}
           <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
@@ -296,7 +357,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           isOpen={isWorknoteDrawerOpen}
           onClose={() => setIsWorknoteDrawerOpen(false)}
         />
+
+        {/* Manager Create New Engagement Modal */}
+        <CreateEngagementModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+        />
       </div>
     </div>
+
   );
 }
