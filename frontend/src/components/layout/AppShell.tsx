@@ -44,6 +44,7 @@ function NavLinks() {
     { id: "my-work", label: "My Day", href: "/", icon: Briefcase },
     { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
     { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
     { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
     { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },

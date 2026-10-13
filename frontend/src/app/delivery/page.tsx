@@ -3,6 +3,7 @@
 import React from "react";
 import AppShell from "@/components/layout/AppShell";
 import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
+import AiLifecycleTracker from "@/components/engagement/AiLifecycleTracker";
 import { useEngagement } from "@/context/EngagementContext";
 import { CheckSquare, Send, Sparkles, MessageSquare, Mail, Copy, Lock } from "lucide-react";
 
@@ -25,6 +26,12 @@ export default function DeliveryPage() {
             </p>
           </div>
         </div>
+
+        {/* End-to-End Gen AI Lifecycle Tracker */}
+        <AiLifecycleTracker 
+          engagementId={activeCustomer.id} 
+          customerName={activeCustomer.customerName} 
+        />
 
         {/* Interactive Customer Update Studio Panel */}
         <CustomerUpdatePanel

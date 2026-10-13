@@ -8,26 +8,60 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-plus-jakarta), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-outfit), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-jetbrains-mono), monospace;
+}
+
+html {
+  font-size: 16px;
 }
 
 body {
   background-color: #f8fafc;
   color: #0f172a;
   font-family: var(--font-sans);
-  font-size: 0.875rem; /* 14px enterprise standard base size */
-  line-height: 1.5;
-  letter-spacing: -0.01em;
+  font-size: 0.9375rem; /* 15px enterprise comfortable base size */
+  line-height: 1.6;
+  letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6, .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: #0f172a;
+}
+
+/* Legible typography scaling for enterprise density */
+.text-xs {
+  font-size: 0.8125rem; /* 13px instead of 12px */
+  line-height: 1.25rem;
+}
+
+.text-sm {
+  font-size: 0.9375rem; /* 15px instead of 14px */
+  line-height: 1.45rem;
+}
+
+.text-base {
+  font-size: 1.0625rem; /* 17px */
+  line-height: 1.65rem;
+}
+
+/* Micro-text accessibility floor: prevents text from dropping below 12px */
+.text-\[10px\] {
+  font-size: 0.75rem !important; /* 12px WCAG-safe minimum */
+}
+
+.text-\[11px\] {
+  font-size: 0.78125rem !important; /* 12.5px */
+}
+
+/* Tabular figures for metrics, IDs, timestamps, and numbers */
+.tabular-nums, .font-mono {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Restrained Enterprise Scrollbar */
@@ -45,6 +79,7 @@ h1, h2, h3, h4, h5, h6, .font-display {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
 
 
 

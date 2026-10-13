@@ -8,6 +8,7 @@ import EvidenceReasoningCard from "@/components/engagement/EvidenceReasoningCard
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
 import WorkPlanSection from "@/components/engagement/WorkPlanSection";
+import AiLifecycleTracker from "@/components/engagement/AiLifecycleTracker";
 import { useEngagement } from "@/context/EngagementContext";
 import { 
   Building2, 
@@ -265,6 +266,12 @@ function EngagementDetailContent() {
             </button>
           </nav>
         </div>
+
+        {/* End-to-End Gen AI Lifecycle Tracker */}
+        <AiLifecycleTracker 
+          engagementId={activeCustomer.id} 
+          customerName={activeCustomer.customerName} 
+        />
 
         {/* 1. OVERVIEW TAB: Outcome + DoD + Action & Blockers */}
         {activeTab === "overview" && (

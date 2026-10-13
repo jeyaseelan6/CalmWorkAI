@@ -4,6 +4,7 @@ import React from "react";
 import AppShell from "@/components/layout/AppShell";
 import AskCalmWorkChat from "@/components/supervisor/AskCalmWorkChat";
 import SupervisorCard from "@/components/supervisor/SupervisorCard";
+import AiLifecycleTracker from "@/components/engagement/AiLifecycleTracker";
 import { useEngagement } from "@/context/EngagementContext";
 import { LayoutDashboard, ShieldCheck, Activity, Cpu, Lock, Radio, Sparkles } from "lucide-react";
 
@@ -26,6 +27,12 @@ export default function SupervisorPage() {
             </p>
           </div>
         </div>
+
+        {/* End-to-End Gen AI Lifecycle Tracker */}
+        <AiLifecycleTracker 
+          engagementId={activeCustomer.id} 
+          customerName={activeCustomer.customerName} 
+        />
 
         {/* Clean Conversational Chat Studio */}
         <AskCalmWorkChat />

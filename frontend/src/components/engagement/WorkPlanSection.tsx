@@ -1077,6 +1077,30 @@ export default function WorkPlanSection({
               </div>
             )}
           </div>
+
+          {/* Bridge to Deliver Agent */}
+          <div className="bg-slate-900 text-white rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded bg-white/10 flex items-center justify-center shrink-0">
+                <Send className="h-4 w-4 text-blue-300" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-white">
+                  Next Step: Draft Executive Customer Update
+                </p>
+                <p className="text-xs text-slate-300">
+                  DELIVER Agent can aggregate these milestones into an executive report for Manager sign-off and PDF release.
+                </p>
+              </div>
+            </div>
+            <a
+              href="/delivery"
+              className="bg-white hover:bg-slate-100 text-slate-900 font-semibold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition shrink-0 self-start sm:self-auto"
+            >
+              <span>Open Deliver Agent</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
         </div>
       )}
     </div>

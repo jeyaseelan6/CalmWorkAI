@@ -347,6 +347,9 @@ export function printCustomerUpdateDocument(data: CustomerUpdatePdfData): boolea
 <head>
   <meta charset="utf-8">
   <title>Executive Summary — ${data.customerName}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     @media print {
       body { margin: 0; padding: 20mm; font-size: 11pt; }
@@ -354,7 +357,7 @@ export function printCustomerUpdateDocument(data: CustomerUpdatePdfData): boolea
       @page { size: A4; margin: 15mm; }
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #0f172a;
       background: #ffffff;
       margin: 40px auto;

@@ -3,6 +3,7 @@
 import React from "react";
 import AppShell from "@/components/layout/AppShell";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
+import AiLifecycleTracker from "@/components/engagement/AiLifecycleTracker";
 import { useEngagement } from "@/context/EngagementContext";
 import { BookOpen, Database, ShieldCheck, FileCode, CheckCircle2, Lock } from "lucide-react";
 
@@ -25,6 +26,12 @@ export default function KnowledgePage() {
             </p>
           </div>
         </div>
+
+        {/* End-to-End Gen AI Lifecycle Tracker */}
+        <AiLifecycleTracker 
+          engagementId={activeCustomer.id} 
+          customerName={activeCustomer.customerName} 
+        />
 
         {/* Interactive RAG Panel */}
         <KnowledgePanel
