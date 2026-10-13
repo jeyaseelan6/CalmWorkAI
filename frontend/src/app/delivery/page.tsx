@@ -24,13 +24,6 @@ export default function DeliveryPage() {
               Draft, review, and authorize executive stakeholder updates and milestone summaries
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2.5 py-1 bg-slate-100 border border-slate-200 rounded text-slate-600 flex items-center gap-1.5 font-mono">
-              <Lock className="h-3.5 w-3.5 text-slate-500" />
-              <span>Privacy Guardrail Active</span>
-            </span>
-          </div>
         </div>
 
         {/* Interactive Customer Update Studio Panel */}

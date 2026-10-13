@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -93,10 +93,36 @@ function NavLinks() {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, role, logout, isAuthenticated } = useAuth();
+  const { user, role, logout, isAuthenticated, isLoadingAuth } = useAuth();
   const { customers, activeCustomer, setActiveCustomer } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState(false);
+
+  // Route protection: If unauthenticated, redirect to login screen
+  useEffect(() => {
+    if (!isLoadingAuth && !isAuthenticated) {
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    }
+  }, [isLoadingAuth, isAuthenticated]);
+
+  if (isLoadingAuth) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="text-center space-y-3">
+          <div className="h-9 w-9 rounded-lg bg-slate-900 text-white font-display font-bold flex items-center justify-center mx-auto animate-pulse text-sm shadow-md">
+            C
+          </div>
+          <p className="text-xs text-slate-500 font-medium">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
@@ -190,7 +216,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 onClick={logout}
-                className="w-full flex items-center justify-center gap-1 text-[11px] text-slate-500 hover:text-rose-600 py-0.5 transition font-medium"
+                className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 py-1 rounded transition font-medium cursor-pointer"
+                title="Sign out of current session and return to login"
               >
                 <LogOut className="h-3 w-3" />
                 <span>Sign Out</span>
@@ -205,24 +232,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span>Sign In</span>
             </Link>
           )}
-
-          {/* Developer Observability & Privacy Footer */}
-          <div className="p-2 bg-white rounded-md border border-slate-200 text-[11px]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 text-slate-600 font-medium">
-                <Lock className="h-3 w-3 text-slate-500" />
-                <span>AI Guardrail</span>
-              </div>
-              <Link
-                href="/supervisor"
-                className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-mono font-medium transition"
-                title="Supervisor Telemetry"
-              >
-                <Activity className="h-3 w-3 text-slate-500" />
-                <span>SUPERVISOR</span>
-              </Link>
-            </div>
-          </div>
         </div>
       </aside>
 
@@ -244,7 +253,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => setIsWorknoteDrawerOpen(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Record Note</span>
@@ -254,13 +263,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {role === "MANAGER" ? "Manager" : "Engineer"}
             </span>
 
-            <Link
-              href="/login"
-              className="text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded transition font-medium flex items-center gap-1"
-            >
-              <User className="h-3 w-3 text-slate-400" />
-              <span>{user ? user.name : "Account"}</span>
-            </Link>
+            {user && (
+              <div className="flex items-center gap-2 border-l border-slate-200 pl-2.5">
+                <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                  <div className="h-5 w-5 rounded bg-slate-800 text-white font-bold flex items-center justify-center text-[10px]">
+                    {user.name.split(" ").map(n => n[0]).join("")}
+                  </div>
+                  <span className="font-semibold text-slate-800">{user.name}</span>
+                </div>
+
+                <button
+                  onClick={logout}
+                  className="text-xs text-slate-500 hover:text-rose-600 px-2 py-1 rounded border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 transition font-medium flex items-center gap-1 cursor-pointer"
+                  title="Sign out of current session"
+                >
+                  <LogOut className="h-3 w-3" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

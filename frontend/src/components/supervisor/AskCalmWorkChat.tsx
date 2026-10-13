@@ -86,13 +86,6 @@ export default function AskCalmWorkChat() {
             <p className="text-[11px] text-slate-500 font-mono">Supervisor Multi-Agent Front Door</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-mono text-[10px] font-semibold flex items-center gap-1">
-            <ShieldCheck className="h-3 w-3 text-emerald-600" />
-            Privacy Boundary Enforced
-          </span>
-        </div>
       </div>
 
       {/* Suggested Prompt Chips */}

@@ -48,7 +48,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.auth import create_access_token, verify_password, DEMO_USERS, get_current_user, require_role
+from app.auth import create_access_token, verify_password, DEMO_USERS, get_current_user, require_role, decode_access_token, security_bearer
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.services import OutcomeService, StorageService, extract_text_from_file
 
@@ -98,15 +99,43 @@ async def login(payload: LoginRequest):
 
 
 @app.get(f"{settings.API_V1_STR}/auth/me", tags=["Authentication"])
-async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
+async def get_me(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)):
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated. Bearer token required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = credentials.credentials
+    if token == "demo-manager-token":
+        user = DEMO_USERS["manager@calmwork.ai"]
+    elif token == "demo-fde-token":
+        user = DEMO_USERS["fde@calmwork.ai"]
+    else:
+        payload = decode_access_token(token)
+        if not payload or "sub" not in payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired access token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        email = payload["sub"]
+        user = DEMO_USERS.get(email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     return {
         "success": True,
         "data": {
-            "id": current_user["id"],
-            "email": current_user["email"],
-            "name": current_user["name"],
-            "role": current_user["role"],
-            "title": current_user["title"]
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"],
+            "role": user["role"],
+            "title": user["title"]
         }
     }
 

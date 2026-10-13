@@ -72,13 +72,6 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
             Supervisor Coordinator — Telemetry & Status
           </h2>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded font-mono font-semibold">
-            <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-            <span>Privacy Guardrail Active</span>
-          </span>
-        </div>
       </div>
 
       {/* 4 Agent Status Grid */}
