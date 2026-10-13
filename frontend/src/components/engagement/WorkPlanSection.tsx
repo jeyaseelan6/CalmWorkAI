@@ -646,33 +646,35 @@ export default function WorkPlanSection({
                           </div>
                         </div>
 
-                        {/* Concrete Tasks */}
+                        {/* Concrete Tasks — Aligned Scannable List */}
                         {milestoneTasks.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block font-mono">
-                              Concrete Tasks:
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block font-mono">
+                              Work Items ({milestoneTasks.length}):
                             </span>
-                            <div className="space-y-1.5">
+                            <ul className="divide-y divide-slate-100 pl-3 border-l-2 border-slate-200">
                               {milestoneTasks.map((task) => (
-                                <div
+                                <li
                                   key={task.id}
-                                  className="p-2 rounded bg-slate-50 border border-slate-200 text-xs flex items-start justify-between gap-2"
+                                  className="py-2 flex items-start justify-between gap-3 text-xs"
                                 >
-                                  <div>
-                                    <span className="font-semibold text-slate-900 block">{task.title}</span>
-                                    <span className="text-slate-600 text-[11px]">{task.description}</span>
+                                  <div className="space-y-0.5 flex-1">
+                                    <span className="font-medium text-slate-900 block">{task.title}</span>
+                                    {task.description && (
+                                      <p className="text-slate-500 text-[11px] leading-relaxed">{task.description}</p>
+                                    )}
                                     {task.dependencies && task.dependencies.length > 0 && (
-                                      <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                                        Prerequisites: {task.dependencies.join(", ")}
+                                      <span className="text-[10px] text-slate-400 font-mono block">
+                                        Prerequisite: {task.dependencies.join(", ")}
                                       </span>
                                     )}
                                   </div>
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-200 text-slate-700 shrink-0">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-600 bg-slate-100 shrink-0">
                                     {task.status}
                                   </span>
-                                </div>
+                                </li>
                               ))}
-                            </div>
+                            </ul>
                           </div>
                         )}
                       </div>
@@ -1002,33 +1004,35 @@ export default function WorkPlanSection({
                           </div>
                         </div>
 
-                        {/* Concrete Tasks */}
+                        {/* Concrete Tasks — Aligned Scannable List */}
                         {milestoneTasks.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block font-mono">
-                              Work Items:
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block font-mono">
+                              Work Items ({milestoneTasks.length}):
                             </span>
-                            <div className="space-y-1.5">
+                            <ul className="divide-y divide-slate-100 pl-3 border-l-2 border-slate-200">
                               {milestoneTasks.map((task) => (
-                                <div
+                                <li
                                   key={task.id}
-                                  className="p-2.5 rounded bg-slate-50 border border-slate-200 text-xs flex items-start justify-between gap-2"
+                                  className="py-2 flex items-start justify-between gap-3 text-xs"
                                 >
-                                  <div>
-                                    <span className="font-semibold text-slate-900 block">{task.title}</span>
-                                    <span className="text-slate-600 text-[11px]">{task.description}</span>
+                                  <div className="space-y-0.5 flex-1">
+                                    <span className="font-medium text-slate-900 block">{task.title}</span>
+                                    {task.description && (
+                                      <p className="text-slate-500 text-[11px] leading-relaxed">{task.description}</p>
+                                    )}
                                     {task.dependencies && task.dependencies.length > 0 && (
-                                      <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                                        Prerequisites: {task.dependencies.join(", ")}
+                                      <span className="text-[10px] text-slate-400 font-mono block">
+                                        Prerequisite: {task.dependencies.join(", ")}
                                       </span>
                                     )}
                                   </div>
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-100 text-emerald-800 shrink-0">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-emerald-800 bg-emerald-50 border border-emerald-200/50 shrink-0">
                                     {task.status}
                                   </span>
-                                </div>
+                                </li>
                               ))}
-                            </div>
+                            </ul>
                           </div>
                         )}
                       </div>

@@ -41,20 +41,20 @@ function NavLinks() {
   const pathname = usePathname();
 
   const fdeNav: NavItem[] = [
-    { id: "my-work", label: "Today (Engineer Cockpit)", href: "/", icon: Briefcase },
+    { id: "my-work", label: "My Day", href: "/", icon: Briefcase },
     { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
-    { id: "knowledge", label: "Knowledge (KNOW)", href: "/knowledge", icon: BookOpen },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
-    { id: "approvals", label: "Approvals (FDE Review)", href: "/approvals", icon: Lock, badge: approvedAcme ? undefined : 1 },
     { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
   ];
 
   const managerNav: NavItem[] = [
-    { id: "control-center", label: "Today (Manager Control)", href: "/", icon: LayoutDashboard },
+    { id: "control-center", label: "My Day", href: "/", icon: LayoutDashboard },
     { id: "engagements", label: "Engagements", href: "/engagements", icon: Building2 },
-    { id: "approvals", label: "Approval Center (Authority)", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
-    { id: "delivery", label: "Delivery Sign-Off", href: "/delivery", icon: Send },
-    { id: "knowledge", label: "Knowledge (KNOW)", href: "/knowledge", icon: BookOpen },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
+    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
     { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
   ];
@@ -70,18 +70,18 @@ function NavLinks() {
           <Link
             key={item.id}
             href={item.href}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-all ${
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors ${
               isActive
-                ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-blue-600"
+                ? "bg-slate-100 text-slate-900 font-semibold"
                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium"
             }`}
           >
-            <div className="flex items-center gap-2.5">
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
+            <div className="flex items-center gap-2">
+              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-slate-900" : "text-slate-400"}`} />
               <span>{item.label}</span>
             </div>
             {item.badge ? (
-              <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded border border-amber-300 font-mono font-bold">
+              <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded font-mono font-medium">
                 {item.badge}
               </span>
             ) : null}
@@ -231,44 +231,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top Header Bar */}
         <header className="h-12 border-b border-slate-200 bg-white px-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
-            <div className="relative w-72">
-              <Search className="absolute left-3 top-2 w-3.5 h-3.5 text-slate-400" />
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder={`Search ${activeCustomer.customerName} engagement...`}
-                className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition"
+                placeholder="Search specs, tasks, decisions..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-300 transition"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={() => setIsWorknoteDrawerOpen(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 transition shadow-2xs"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>Record Worknote</span>
+              <span>Record Note</span>
             </button>
 
-            <span className={`text-xs px-2.5 py-1 rounded border font-mono font-medium flex items-center gap-1.5 ${
-              role === "MANAGER"
-                ? "bg-amber-50 text-amber-900 border-amber-200"
-                : "bg-teal-50 text-teal-900 border-teal-200"
-            }`}>
-              {role === "MANAGER" ? (
-                <ShieldCheck className="h-3.5 w-3.5 text-amber-700" />
-              ) : (
-                <Briefcase className="h-3.5 w-3.5 text-teal-700" />
-              )}
-              <span>
-                Role: <strong className="font-bold">{role}</strong> {role === "MANAGER" ? "(Manager Authority)" : "(FDE Execution)"}
-              </span>
+            <span className="text-xs px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700 font-medium">
+              {role === "MANAGER" ? "Manager" : "Engineer"}
             </span>
+
             <Link
               href="/login"
-              className="text-xs text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md flex items-center gap-1.5 transition font-medium"
+              className="text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded transition font-medium flex items-center gap-1"
             >
-              <User className="h-3.5 w-3.5 text-slate-500" />
+              <User className="h-3 w-3 text-slate-400" />
               <span>{user ? user.name : "Account"}</span>
             </Link>
           </div>

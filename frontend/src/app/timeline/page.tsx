@@ -78,62 +78,64 @@ export default function TimelinePage() {
 
   return (
     <AppShell>
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl relative">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-teal-400" />
-                <h1 className="text-xl font-bold text-slate-100">Audit Trail Timeline</h1>
-              </div>
-              <p className="text-xs text-slate-400">
-                Immutable evidence trail of requirement changes, AI impact analysis, manager approvals, and state shifts for {activeCustomer.customerName}.
-              </p>
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Calm Header */}
+        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold font-display text-slate-900">Timeline</h1>
+              <span className="text-slate-300">·</span>
+              <span className="text-sm text-slate-600 font-medium">{activeCustomer.customerName}</span>
             </div>
-
-            <button
-              onClick={() => fetchEngagementDetail(activeCustomer.id)}
-              className="flex items-center gap-1.5 text-xs bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition font-medium"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-teal-400" : ""}`} />
-              <span>Refresh Trail</span>
-            </button>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Chronological audit trail of requirement changes, approvals, and delivery milestones
+            </p>
           </div>
+
+          <button
+            onClick={() => fetchEngagementDetail(activeCustomer.id)}
+            className="flex items-center gap-1.5 text-xs bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 px-3 py-1.5 rounded-md transition font-medium cursor-pointer"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin text-slate-600" : ""}`} />
+            <span>Refresh</span>
+          </button>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-6">
+        {/* Clean Chronological List */}
+        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs">
           {timelineList.length === 0 ? (
             <div className="text-center py-10 space-y-2">
-              <Clock className="h-8 w-8 text-slate-600 mx-auto" />
-              <p className="text-slate-400 text-sm">No audit trail events recorded yet for {activeCustomer.customerName}.</p>
-              <p className="text-slate-600 text-xs">Events will automatically appear as work cycles, changes, and approvals are executed.</p>
+              <Clock className="h-6 w-6 text-slate-400 mx-auto" />
+              <p className="text-slate-700 text-xs font-medium">No audit events recorded yet for {activeCustomer.customerName}.</p>
+              <p className="text-slate-400 text-[11px]">Events will appear automatically as work cycles and approvals are logged.</p>
             </div>
           ) : (
-            <ul className="space-y-6 relative border-l-2 border-slate-800 ml-3 pl-6">
+            <ul className="relative pl-6 space-y-5 border-l border-slate-200 ml-3">
               {timelineList.map((evt) => {
-                const style = getEventBadge(evt.event_type);
+                const isImportant = evt.event_type.includes("APPROVED") || evt.event_type.includes("CHANGE");
                 return (
                   <li key={evt.id} className="relative">
-                    <span className={`absolute -left-[31px] top-0 h-4 w-4 rounded-full ${style.dot} border-4 border-slate-900`} />
-                    <div className="space-y-1.5">
+                    <span className={`absolute -left-[31px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ring-2 ${
+                      isImportant ? "bg-blue-600 ring-blue-100" : "bg-slate-400 ring-slate-100"
+                    }`} />
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
-                          <span className={`font-bold ${style.titleColor} uppercase tracking-wider`}>
+                          <span className={`font-semibold ${isImportant ? "text-slate-900" : "text-slate-800"}`}>
                             {evt.title}
                           </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${style.badge}`}>
+                          <span className="px-2 py-0.25 rounded text-[10px] font-mono text-slate-500 bg-slate-100 border border-slate-200">
                             {evt.event_type}
                           </span>
                         </div>
-                        <span className="text-slate-500 font-mono text-[11px]">{formatDate(evt.created_at)}</span>
+                        <span className="text-slate-400 font-mono text-[11px]">{formatDate(evt.created_at)}</span>
                       </div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
+                      <p className="text-xs text-slate-600 leading-relaxed">
                         {evt.description}
                       </p>
-                      <div className="text-[11px] text-slate-500 font-mono flex items-center gap-3">
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center gap-2">
                         <span>Actor: {evt.actor_type}</span>
-                        {evt.actor_id && <span>• ID: {evt.actor_id}</span>}
-                        <span>• Ref: {evt.id}</span>
+                        {evt.actor_id && <span>· ID: {evt.actor_id}</span>}
                       </div>
                     </div>
                   </li>
