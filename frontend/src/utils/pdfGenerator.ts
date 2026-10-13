@@ -367,7 +367,7 @@ export function printCustomerUpdateDocument(data: CustomerUpdatePdfData): boolea
     }
     .header-bar { height: 4px; background: #0f172a; margin-bottom: 24px; border-radius: 2px; }
     .brand { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
-    .subtitle { font-size: 11px; color: #64748b; font-family: monospace; text-transform: uppercase; margin-top: 2px; }
+    .subtitle { font-size: 11px; color: #64748b; font-family: 'Inter', sans-serif; text-transform: uppercase; margin-top: 2px; }
     .meta-card {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
@@ -380,14 +380,14 @@ export function printCustomerUpdateDocument(data: CustomerUpdatePdfData): boolea
       font-size: 12px;
     }
     .meta-item { display: flex; flex-direction: column; }
-    .meta-label { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; font-family: monospace; }
+    .meta-label { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; font-family: 'Inter', sans-serif; }
     .meta-val { color: #0f172a; font-weight: 600; margin-top: 2px; }
     .section-title {
       font-size: 11px;
       font-weight: 800;
       color: #475569;
       text-transform: uppercase;
-      font-family: monospace;
+      font-family: 'Inter', sans-serif;
       letter-spacing: 0.5px;
       margin-top: 22px;
       margin-bottom: 8px;
