@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { RefreshCw, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert, ArrowRight, Clock, MessageSquare, BookOpen, ShieldCheck, ChevronRight } from "lucide-react";
+import { RefreshCw, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert, ArrowRight, Clock, MessageSquare, BookOpen, ShieldCheck, ChevronRight, X, Sun } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
 import Link from "next/link";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export interface WhatChangedItem {
   summary: string;
@@ -69,7 +71,11 @@ export interface MorningBriefData {
   generated_at: string;
 }
 
-export default function DailyWorkBriefing() {
+interface DailyWorkBriefingProps {
+  onClose?: () => void;
+}
+
+export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = {}) {
   const { activeCustomer } = useEngagement();
   const [brief, setBrief] = useState<MorningBriefData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,13 +84,13 @@ export default function DailyWorkBriefing() {
   const fetchBrief = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/supervisor/brief`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
         method: "POST"
       });
       const data = await res.json();
       if (data.success) {
         setBrief(data.data);
-        setLastRefreshed(new Date().toLocaleTimeString());
+        setLastRefreshed(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       }
     } catch (err) {
       console.error("Failed to fetch Morning Brief:", err);
@@ -99,7 +105,7 @@ export default function DailyWorkBriefing() {
 
   if (!brief) {
     return (
-      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-3 animate-pulse">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-3 animate-pulse">
         <div className="h-4 bg-slate-200 rounded w-1/3"></div>
         <div className="h-20 bg-slate-100 rounded"></div>
       </div>
@@ -109,37 +115,51 @@ export default function DailyWorkBriefing() {
   const isWarning = brief.outcome_health === "NEEDS_REASSESSMENT";
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-5 text-xs">
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-5 text-xs">
       {/* Header Banner & Refresh Trigger */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-slate-900 text-white rounded-md shadow-2xs">
-            <Sparkles className="h-4 w-4" />
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3.5 gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 bg-amber-500 text-slate-950 rounded-lg shadow-2xs shrink-0">
+            <Sun className="h-4 w-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="font-display font-bold text-sm text-slate-900">
-                Morning Brief — {brief.customer_name}
+              <h2 className="font-display font-bold text-sm text-slate-900 truncate">
+                Morning Brief &mdash; {brief.customer_name}
               </h2>
-              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold shrink-0">
                 v{brief.source_state_version} Shared State
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-mono">
-              Sequential Intelligence: UNDERSTAND $\rightarrow$ KNOW $\rightarrow$ MOVE $\rightarrow$ Supervisor Work Plan | Refreshed {lastRefreshed || "Just now"}
+            <p className="text-[11px] text-slate-500 font-mono truncate">
+              Sequential Intelligence: UNDERSTAND &rarr; KNOW &rarr; MOVE &rarr; Supervisor Plan &middot; Refreshed {lastRefreshed || "Just now"}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={fetchBrief}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold text-xs transition shadow-2xs disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          <span>Refresh Morning Brief</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={fetchBrief}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-xs transition shadow-2xs disabled:opacity-50 cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              title="Close Morning Brief"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
+
 
       {/* Warnings & Partial Failures Notice */}
       {brief.warnings_or_partial_failures && brief.warnings_or_partial_failures.length > 0 && (

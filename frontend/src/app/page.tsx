@@ -12,9 +12,12 @@ import {
   ChevronDown,
   ChevronRight,
   ShieldCheck,
-  Check
+  Check,
+  Sun,
+  Sparkles
 } from "lucide-react";
 import Link from "next/link";
+import DailyWorkBriefing from "@/components/engagement/DailyWorkBriefing";
 
 export default function MyDayPage() {
   const { role } = useAuth();
@@ -28,6 +31,7 @@ export default function MyDayPage() {
   } = useEngagement();
 
   const [showEvidence, setShowEvidence] = useState(false);
+  const [showMorningBrief, setShowMorningBrief] = useState(false);
 
   const isAcme = activeCustomer.id === "eng-acme-001";
   const outcomeStatement =
@@ -140,7 +144,7 @@ export default function MyDayPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <span className={`text-[11px] font-mono font-medium px-2 py-0.5 rounded border ${
                 outcomeStatus === "HEALTHY"
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -148,6 +152,20 @@ export default function MyDayPage() {
               }`}>
                 {outcomeStatus === "HEALTHY" ? "Healthy" : "Reassessment"} &middot; v{outcomeVersion}
               </span>
+
+              {/* Morning Brief Action Button */}
+              <button
+                type="button"
+                onClick={() => setShowMorningBrief(!showMorningBrief)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
+                  showMorningBrief
+                    ? "bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold"
+                    : "bg-slate-900 hover:bg-slate-800 text-white"
+                }`}
+              >
+                <Sun className={`h-3.5 w-3.5 ${showMorningBrief ? "text-slate-950" : "text-amber-400"}`} />
+                <span>{showMorningBrief ? "Hide Morning Brief" : "Morning Brief"}</span>
+              </button>
 
               <button
                 onClick={() => fetchEngagementDetail(activeCustomer.id)}
@@ -168,6 +186,31 @@ export default function MyDayPage() {
             </div>
           </div>
         </div>
+
+        {/* Morning Brief Section */}
+        {showMorningBrief ? (
+          <div className="animate-fadeIn">
+            <DailyWorkBriefing onClose={() => setShowMorningBrief(false)} />
+          </div>
+        ) : (
+          <div
+            onClick={() => setShowMorningBrief(true)}
+            className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/90 rounded-xl flex items-center justify-between text-xs text-amber-950 transition cursor-pointer group"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-amber-500/20 text-amber-700 rounded-md">
+                <Sun className="h-4 w-4 text-amber-600" />
+              </div>
+              <span>
+                <strong>Morning Situational Brief:</strong> Overnight changes, active blockers, and supervisor daily work plan ready for <strong>{activeCustomer.customerName}</strong>.
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-amber-900 group-hover:translate-x-0.5 transition flex items-center gap-1 shrink-0 ml-2">
+              <span>View Brief</span>
+              <ArrowRight className="h-3 w-3" />
+            </span>
+          </div>
+        )}
 
         {/* 1. Primary Next Best Action (Highest-Impact Focus) */}
         <div className="space-y-2">
