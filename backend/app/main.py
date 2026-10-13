@@ -240,10 +240,23 @@ async def health_check():
 @app.get(f"{settings.API_V1_STR}/engagements", tags=["Engagements"])
 async def list_engagements(db: Session = Depends(get_db)):
     engagements = db.query(Engagement).all()
+    
+    # Cloud DB Optimization: Batch fetch outcomes & pending approvals in 2 queries instead of 228 roundtrips
+    outcome_ids = [eng.current_outcome_id for eng in engagements if eng.current_outcome_id]
+    outcomes = {o.id: o for o in db.query(Outcome).filter(Outcome.id.in_(outcome_ids)).all()} if outcome_ids else {}
+    
+    from sqlalchemy import func
+    pending_counts = dict(
+        db.query(Approval.engagement_id, func.count(Approval.id))
+        .filter(Approval.status == ApprovalStatus.PENDING)
+        .group_by(Approval.engagement_id)
+        .all()
+    )
+
     result = []
     for eng in engagements:
-        current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
-        pending_approvals = db.query(Approval).filter(Approval.engagement_id == eng.id, Approval.status == ApprovalStatus.PENDING).count()
+        current_outcome = outcomes.get(eng.current_outcome_id)
+        pending_approvals = pending_counts.get(eng.id, 0)
         result.append({
             "id": eng.id,
             "customer_name": eng.customer_name,
@@ -259,7 +272,7 @@ async def list_engagements(db: Session = Depends(get_db)):
             "has_work_plan": bool(current_outcome and current_outcome.work_plan),
             "work_plan": current_outcome.work_plan if current_outcome else None,
             "pending_approvals_count": pending_approvals,
-            "created_at": eng.created_at.isoformat()
+            "created_at": eng.created_at.isoformat() if eng.created_at else None
         })
     return {
         "success": True,
