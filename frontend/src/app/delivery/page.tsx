@@ -27,6 +27,7 @@ export default function DeliveryPage() {
 
         {/* Interactive Customer Update Studio Panel */}
         <CustomerUpdatePanel
+          key={activeCustomer.id}
           engagementId={activeCustomer.id}
           customerName={activeCustomer.customerName}
           engagementName={activeCustomer.engagementName}

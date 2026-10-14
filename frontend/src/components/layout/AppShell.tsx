@@ -39,7 +39,7 @@ export interface NavItem {
 
 function NavLinks() {
   const { role } = useAuth();
-  const { approvedAcme, activeCustomer } = useEngagement();
+  const { activeCustomer, pendingApprovalsCount } = useEngagement();
   const pathname = usePathname();
 
   const engagementHref = `/engagements/${activeCustomer?.id || "eng-acme-001"}`;
@@ -47,7 +47,7 @@ function NavLinks() {
   const fdeNav: NavItem[] = [
     { id: "my-work", label: "My Day", href: "/", icon: Briefcase },
     { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
     { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
@@ -57,7 +57,7 @@ function NavLinks() {
   const managerNav: NavItem[] = [
     { id: "control-center", label: "My Day", href: "/", icon: LayoutDashboard },
     { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: approvedAcme ? undefined : 1 },
+    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
     { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
@@ -104,7 +104,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, role, logout, isAuthenticated, isLoadingAuth } = useAuth();
-  const { customers, activeCustomer, setActiveCustomer } = useEngagement();
+  const { customers, activeCustomer, setActiveCustomer, switchEngagement } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -199,7 +199,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <button
                       key={cust.id}
                       onClick={() => {
-                        setActiveCustomer(cust);
+                        switchEngagement(cust);
                         setDropdownOpen(false);
                         setCustomerSearch("");
                         if (pathname?.startsWith("/engagements")) {

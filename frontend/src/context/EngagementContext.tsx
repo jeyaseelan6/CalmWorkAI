@@ -32,11 +32,12 @@ interface EngagementContextType {
   customers: CustomerEngagement[];
   activeCustomer: CustomerEngagement;
   setActiveCustomer: (cust: CustomerEngagement) => void;
+  switchEngagement: (cust: CustomerEngagement) => void;
   activeEngagementData: any;
   nextActionData: any;
   loading: boolean;
   approvedAcme: boolean;
-  fetchEngagementDetail: (id: string) => Promise<void>;
+  fetchEngagementDetail: (id: string, wipeOldState?: boolean) => Promise<void>;
   fetchEngagementsList: () => Promise<void>;
   createEngagement: (payload: {
     customerName: string;
@@ -45,6 +46,10 @@ interface EngagementContextType {
     initialOutcomeStatement?: string;
     successCriteria?: string[];
   }) => Promise<{ success: boolean; error?: string; data?: any }>;
+  pendingApprovals: any[];
+  pendingApprovalsCount: number;
+  fetchPendingApprovals: () => Promise<void>;
+  respondToApproval: (approvalId: string, action: "APPROVE" | "REJECT", decisionNote?: string) => Promise<boolean>;
   handleApproveChange: () => Promise<void>;
 }
 
@@ -57,6 +62,49 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
   const [nextActionData, setNextActionData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [approvedAcme, setApprovedAcme] = useState<boolean>(false);
+  const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
+
+  const fetchPendingApprovals = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/approvals`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setPendingApprovals(json.data);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch pending approvals from backend:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingApprovals();
+  }, []);
+
+  const respondToApproval = async (approvalId: string, action: "APPROVE" | "REJECT", decisionNote?: string): Promise<boolean> => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/approvals/${approvalId}/respond`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action, decision_note: decisionNote || `Manager ${action.toLowerCase()}d request` })
+      });
+
+      if (res.ok) {
+        await fetchPendingApprovals();
+        await fetchEngagementDetail(activeCustomer.id);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("Failed to respond to approval:", err);
+      return false;
+    }
+  };
 
   const fetchEngagementsList = async () => {
     try {
@@ -88,7 +136,12 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     fetchEngagementsList();
   }, []);
 
-  const fetchEngagementDetail = async (id: string) => {
+  const fetchEngagementDetail = async (id: string, wipeOldState: boolean = true) => {
+    if (wipeOldState) {
+      setActiveEngagementData(null);
+      setNextActionData(null);
+      setApprovedAcme(false);
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/engagements/${id}`);
@@ -113,6 +166,14 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false);
     }
+  };
+
+  const switchEngagement = (cust: CustomerEngagement) => {
+    setActiveCustomer(cust);
+    setActiveEngagementData(null);
+    setNextActionData(null);
+    setApprovedAcme(false);
+    setLoading(true);
   };
 
   useEffect(() => {
@@ -207,6 +268,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         customers,
         activeCustomer,
         setActiveCustomer,
+        switchEngagement,
         activeEngagementData,
         nextActionData,
         loading,
@@ -214,7 +276,11 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         fetchEngagementDetail,
         fetchEngagementsList,
         createEngagement,
-        handleApproveChange
+        handleApproveChange,
+        pendingApprovals,
+        pendingApprovalsCount: pendingApprovals.length,
+        fetchPendingApprovals,
+        respondToApproval
       }}
     >
       {children}

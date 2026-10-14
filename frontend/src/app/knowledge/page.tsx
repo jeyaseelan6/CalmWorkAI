@@ -27,6 +27,7 @@ export default function KnowledgePage() {
 
         {/* Interactive RAG Panel */}
         <KnowledgePanel
+          key={activeCustomer.id}
           engagementId={activeCustomer.id}
           customerName={activeCustomer.customerName}
         />

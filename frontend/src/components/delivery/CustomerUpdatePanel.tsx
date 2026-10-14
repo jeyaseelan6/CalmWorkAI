@@ -37,6 +37,12 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
 
   // Sync approval state from backend and localStorage
   useEffect(() => {
+    setDraft(null);
+    setNotes("");
+    setApproved(false);
+    setApprovedBy(null);
+    setError(null);
+
     const localApproved = typeof window !== "undefined" ? localStorage.getItem(`cu_approved_${engagementId}`) : null;
     const localApprover = typeof window !== "undefined" ? localStorage.getItem(`cu_approver_${engagementId}`) : null;
     if (localApproved === "true") {

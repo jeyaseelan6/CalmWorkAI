@@ -49,13 +49,14 @@ def list_pending_approvals(db: Session = Depends(get_db)):
             "id": appr.id,
             "engagement_id": appr.engagement_id,
             "customer_name": eng.customer_name if eng else "Customer",
-            "type": appr.type,
+            "engagement_name": eng.name if eng else "Workspace",
+            "type": appr.type.value if hasattr(appr.type, "value") else str(appr.type),
             "recommendation": rec,
             "why": why,
             "evidence": evidence,
             "impact": impact,
             "confidence": "High",
-            "status": appr.status,
+            "status": appr.status.value if hasattr(appr.status, "value") else str(appr.status),
             "requested_by": appr.requested_by,
             "created_at": appr.created_at.isoformat()
         })
@@ -156,4 +157,124 @@ def respond_to_approval(
             "success": True,
             "data": {"engagement_id": engagement_id, "status": "HEALTHY"},
             "message": "Outcome change proposal rejected."
+        }
+
+
+@router.post("/approvals/{approval_id}/respond")
+def respond_to_specific_approval(
+    approval_id: str,
+    payload: ApprovalResponseRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+):
+    """Respond to a specific pending approval by approval ID (Manager role required)."""
+    appr = db.query(Approval).filter(Approval.id == approval_id).first()
+    if not appr:
+        raise HTTPException(status_code=404, detail="Approval not found")
+
+    eng = db.query(Engagement).filter(Engagement.id == appr.engagement_id).first()
+    manager_name = current_user.get("name", payload.actor_id or "David Miller")
+    decision_note = payload.decision_note if payload and payload.decision_note else ("Approved by Manager" if payload.action == "APPROVE" else "Rejected by Manager")
+
+    if payload.action == "APPROVE":
+        appr.status = ApprovalStatus.APPROVED
+        appr.reviewed_by = manager_name
+        appr.decision_note = decision_note
+        appr.reviewed_at = datetime.utcnow()
+
+        if appr.type == ApprovalType.CUSTOMER_UPDATE:
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=appr.engagement_id,
+                event_type="CUSTOMER_UPDATE_APPROVED",
+                title="Executive Customer Update Approved",
+                description=f"Manager ({manager_name}) authorized customer update distribution for {eng.customer_name if eng else 'customer'}.",
+                actor_type="MANAGER",
+                actor_id=current_user.get("id", "usr-mgr-002"),
+                created_at=datetime.utcnow()
+            ))
+        elif appr.type == ApprovalType.OUTCOME_CHANGE:
+            if eng:
+                outcome_service = OutcomeService(db)
+                current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+                updated_criteria = list(current_outcome.success_criteria or []) if current_outcome else []
+                addition_title = decision_note if decision_note and decision_note != "Approved by Manager" else "Enterprise SSO configuration & validation (Added v2)"
+                new_crit_id = f"sc-{len(updated_criteria) + 1}"
+                if not any(c.get("title") == addition_title for c in updated_criteria if isinstance(c, dict)):
+                    updated_criteria.append({
+                        "id": new_crit_id,
+                        "title": addition_title,
+                        "completed": False
+                    })
+                new_v2 = outcome_service.propose_new_outcome_version(
+                    engagement_id=eng.id,
+                    new_statement=current_outcome.statement if current_outcome else eng.name,
+                    new_success_criteria=updated_criteria,
+                    proposed_by="understand_agent",
+                    reason=f"Manager approved scope expansion for {eng.customer_name}."
+                )
+                outcome_service.approve_outcome_version(
+                    engagement_id=eng.id,
+                    outcome_id=new_v2.id,
+                    approved_by=manager_name
+                )
+                db.add(TimelineEvent(
+                    id=f"evt-{uuid.uuid4().hex[:8]}",
+                    engagement_id=eng.id,
+                    event_type="OUTCOME_APPROVED",
+                    title="Outcome Version Approved",
+                    description=f"Manager ({manager_name}) approved transition to Outcome Version {new_v2.version}.",
+                    actor_type="MANAGER",
+                    actor_id=current_user.get("id", "usr-mgr-002"),
+                    created_at=datetime.utcnow()
+                ))
+        else:
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=appr.engagement_id,
+                event_type="APPROVAL_APPROVED",
+                title="Operational Approval Authorized",
+                description=f"Manager ({manager_name}) approved {appr.type} request.",
+                actor_type="MANAGER",
+                actor_id=current_user.get("id", "usr-mgr-002"),
+                created_at=datetime.utcnow()
+            ))
+
+        db.commit()
+        return {
+            "success": True,
+            "data": {
+                "id": appr.id,
+                "status": "APPROVED",
+                "engagement_id": appr.engagement_id,
+                "reviewed_by": manager_name
+            },
+            "message": f"Approval {appr.id} approved successfully."
+        }
+    else:
+        appr.status = ApprovalStatus.REJECTED
+        appr.reviewed_by = manager_name
+        appr.decision_note = decision_note
+        appr.reviewed_at = datetime.utcnow()
+
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=appr.engagement_id,
+            event_type="APPROVAL_REJECTED",
+            title="Approval Proposal Rejected",
+            description=f"Manager ({manager_name}) rejected approval proposal: {decision_note}",
+            actor_type="MANAGER",
+            actor_id=current_user.get("id", "usr-mgr-002"),
+            created_at=datetime.utcnow()
+        ))
+        db.commit()
+        return {
+            "success": True,
+            "data": {
+                "id": appr.id,
+                "status": "REJECTED",
+                "engagement_id": appr.engagement_id,
+                "reviewed_by": manager_name
+            },
+            "message": f"Approval {appr.id} rejected."
         }

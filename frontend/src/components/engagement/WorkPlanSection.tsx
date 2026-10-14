@@ -118,19 +118,22 @@ export default function WorkPlanSection({
 
   // Sync when initialWorkPlan or outcomeVersion changes
   useEffect(() => {
-    if (initialWorkPlan) {
-      setActivePlan(initialWorkPlan);
-      setShowInputForm(false);
-    }
+    setActivePlan(initialWorkPlan || null);
+    setShowInputForm(!initialWorkPlan);
     setVersion(outcomeVersion);
-  }, [initialWorkPlan, outcomeVersion]);
+    setDraftProposal(null);
+    setStreamEvent(null);
+    setStreamHistory([]);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+  }, [initialWorkPlan, outcomeVersion, engagementId]);
 
   // Initial fetch of plan if not provided
   useEffect(() => {
     if (!initialWorkPlan && engagementId) {
       fetchPlan();
     }
-  }, [engagementId]);
+  }, [engagementId, initialWorkPlan]);
 
   const fetchPlan = async () => {
     try {
@@ -141,10 +144,15 @@ export default function WorkPlanSection({
           setActivePlan(json.data.plan);
           setVersion(json.data.version || 1);
           setShowInputForm(false);
+        } else {
+          setActivePlan(null);
+          setShowInputForm(true);
         }
       }
     } catch (e) {
       console.warn("Could not fetch work plan from backend:", e);
+      setActivePlan(null);
+      setShowInputForm(true);
     }
   };
 

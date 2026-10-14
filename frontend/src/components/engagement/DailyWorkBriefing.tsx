@@ -17,10 +17,14 @@ export interface WhatChangedItem {
 }
 
 export interface BlockerItem {
-  title: string;
-  dependency_type: string;
-  evidence_snippet: string;
-  impact_description: string;
+  title?: string;
+  blocker?: string;
+  severity?: string;
+  owner_role?: string;
+  unblock_path?: string;
+  dependency_type?: string;
+  evidence_snippet?: string;
+  impact_description?: string;
 }
 
 export interface ProposedWorkItem {
@@ -74,6 +78,8 @@ export interface MorningBriefData {
   capabilities_invoked: string[];
   deliver_invoked: boolean;
   generated_at: string;
+  scope_drift_detected?: boolean;
+  scope_drift_explanation?: string;
 }
 
 interface DailyWorkBriefingProps {
