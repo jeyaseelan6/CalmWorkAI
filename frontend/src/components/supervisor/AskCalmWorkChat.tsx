@@ -117,9 +117,11 @@ function renderFormattedInline(str: string) {
 }
 
 function FormattedMessageBody({ rawText }: { rawText: string }) {
-  // Strip out duplicate bracketed banner if present since rendered in top handover pill
+  // Strip out redundant handover banners and trailing Source: lines
   const cleaned = rawText
-    .replace(/^[🎯⚡📢📚🧭]?\s*\*\*\[Handed over to [^\]]+\]\*\*\s*\n*/, "")
+    .replace(/^([🎯⚡📢📚🧭\s]*(\*{1,2})?\[Handed over to [^\]]+\](\*{1,2})?\s*\n*)+/i, "")
+    .replace(/^(\*{1,2})?\[Handed over to [^\]]+\](\*{1,2})?\s*\n*/i, "")
+    .replace(/\n+(\*|_)?Source[s]?:\s*.*$/i, "")
     .trim();
 
   const lines = cleaned.split("\n");
@@ -410,11 +412,8 @@ export default function AskCalmWorkChat() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+                        <span className="text-[10px] text-slate-400 font-mono">
                           {m.timestamp}
-                        </span>
-                        <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${meta.badgeBg}`}>
-                          {m.delegatedAgent?.badge_label || meta.badge}
                         </span>
                       </div>
                     </div>

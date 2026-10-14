@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 import json
 import logging
+import re
 
 from google.adk.agents import Agent
 from google.adk.runners import Runner
@@ -85,6 +86,7 @@ KNOW_INSTRUCTION = (
     "- Keep all dates and hours strictly in Indian Standard Time (IST) 24-hour clock notation (e.g. '14 Oct 2026, 16:30 IST').\n"
     "- Attribute facts to their verified sources.\n"
     "- If referring to timeline events, cite ONLY the single specific pertinent timeline record that contains the fact instead of listing or enumerating all timelines.\n"
+    "- Do NOT append trailing 'Source:' or 'Sources:' lines or citations at the end of the answer, as sources are automatically structured by the platform.\n"
     "- If the evidence does not contain enough facts to answer, reply exactly with: "
     "'I don't have enough verified engagement evidence to answer this confidently.'"
 )
@@ -503,6 +505,7 @@ class KnowAgent:
             f"- Supplement and answer from the Verified Engagement Context (worknotes, customer inputs, decisions, observations, outcomes, work plans) for execution facts and project history.\n"
             f"- Explicitly attribute facts to their source (e.g. 'According to the Architecture Guide...', 'In the customer input on...', 'Per the decision recorded on...').\n"
             f"- If referring to timeline events, mention ONLY the specific timeline record that contains the fact instead of listing or enumerating all timelines.\n"
+            f"- Do NOT append trailing 'Source:' citations or lines at the end of your answer, as sources are automatically structured by the platform.\n"
             f"- Do NOT hallucinate details not present in the verified evidence above.\n\n"
             f"Question: {anonymized_question}\n"
             f"Answer:"
@@ -543,6 +546,8 @@ class KnowAgent:
             )
 
         clean_answer = self.privacy_engine.sanitize_output(adk_answer, mapping)
+        # Strip redundant trailing Source: lines
+        clean_answer = re.sub(r'(?i)\n+(\*|_)?Source[s]?:\s*.*$', '', clean_answer).strip()
 
         top_confidence = 0.85
         if valid_doc_results:

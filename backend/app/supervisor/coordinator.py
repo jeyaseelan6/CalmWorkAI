@@ -462,9 +462,9 @@ class SupervisorCoordinator:
                     logger.debug(f"UNDERSTAND LLM call fallback: {e}")
 
             if llm_response:
-                answer = handover_banner + llm_response.strip()
+                answer = llm_response.strip()
             else:
-                parts = [handover_banner]
+                parts = []
                 if events:
                     parts.append(f"**Recent Timeline Activity for {customer_name}:**")
                     for ev in events[:4]:
@@ -515,7 +515,7 @@ class SupervisorCoordinator:
                     logger.debug(f"MOVE LLM call fallback: {e}")
 
             if llm_response:
-                answer = handover_banner + llm_response.strip()
+                answer = llm_response.strip()
             else:
                 next_act = self.move_agent.determine_next_action(
                     engagement_id=engagement_id,
@@ -526,7 +526,6 @@ class SupervisorCoordinator:
                     pending_approvals=pending_approvals
                 )
                 parts = [
-                    handover_banner,
                     f"**Next Best Action**: {next_act.action_title}\n",
                     f"**Why Now**: {next_act.why_now}\n",
                     f"**Impact**: {next_act.impact}\n",
@@ -580,7 +579,7 @@ class SupervisorCoordinator:
                     logger.debug(f"DELIVER LLM call fallback: {e}")
 
             if llm_response:
-                answer = handover_banner + llm_response.strip()
+                answer = llm_response.strip()
             else:
                 draft = self.deliver_agent.generate_customer_update(
                     engagement_id=engagement_id,
@@ -591,7 +590,6 @@ class SupervisorCoordinator:
                     current_work_cycle=current_work_cycle
                 )
                 parts = [
-                    handover_banner,
                     f"### {draft.subject}\n",
                     f"**Executive Summary**:\n{draft.executive_summary}\n",
                     "**Key Milestones Achieved**:"
@@ -636,9 +634,9 @@ class SupervisorCoordinator:
                 ))
 
             if know_response.evidence_sufficient:
-                answer = handover_banner + know_response.answer
+                answer = know_response.answer
             else:
-                answer = handover_banner + (
+                answer = (
                     f"I searched the verified documentation and engagement records for {customer_name}, "
                     f"but there is not enough specific evidence to answer this query with high confidence.\n\n"
                     f"**Recommendation**: Please upload the technical specification via the Documents tab, "
@@ -646,9 +644,7 @@ class SupervisorCoordinator:
                 )
 
         else:  # MULTI_AGENT / SUPERVISOR
-            handover_banner = "🧭 **[CalmWork Plan Agent — Central Multi-Agent Orchestration]**\n\n"
             parts = [
-                handover_banner,
                 f"### 360° Operational Briefing for {customer_name}\n",
                 f"**1. Scope & Requirements (UNDERSTAND)**:",
                 f"- Outcome Version {version}: *\"{outcome_statement}\"*",
