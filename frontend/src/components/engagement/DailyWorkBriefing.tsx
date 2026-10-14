@@ -133,7 +133,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
               </span>
             </div>
             <p className="text-[11px] text-slate-500 font-mono truncate">
-              Sequential Intelligence: UNDERSTAND &rarr; KNOW &rarr; MOVE &rarr; Supervisor Plan &middot; Refreshed {lastRefreshed || "Just now"}
+              Sequential Intelligence: UNDERSTAND &rarr; KNOW &rarr; MOVE &rarr; PLAN &middot; Refreshed {lastRefreshed || "Just now"}
             </p>
           </div>
         </div>
@@ -278,7 +278,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-amber-400" />
                 <span className="font-bold text-[11px] uppercase tracking-wider font-mono text-amber-400">
-                  D. Supervisor Proposed Daily Work Plan
+                  D. Plan Agent Proposed Daily Work Plan
                 </span>
               </div>
               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">

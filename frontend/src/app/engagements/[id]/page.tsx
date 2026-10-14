@@ -347,7 +347,7 @@ function EngagementDetailContent() {
               />
             ) : (
               <EvidenceReasoningCard
-                title="Supervisor Grounding & Alignment"
+                title="Plan Agent Grounding & Alignment"
                 evidence={[
                   activeEngagementData?.outcome?.work_plan
                     ? `Manager approved structured work plan with ${activeEngagementData.outcome.work_plan.milestones?.length || 3} milestones.`

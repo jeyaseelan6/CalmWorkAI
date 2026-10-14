@@ -302,7 +302,7 @@ export default function WorkPlanSection({
             )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Describe scope and deliverables in natural language; Supervisor formulates verified milestones, DoD, and task dependencies.
+            Describe scope and deliverables in natural language; Plan Agent formulates verified milestones, DoD, and task dependencies.
           </p>
         </div>
 
@@ -403,7 +403,7 @@ export default function WorkPlanSection({
               {isProposing ? (
                 <>
                   <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Supervisor Synthesizing Plan...</span>
+                  <span>Plan Agent Synthesizing Plan...</span>
                 </>
               ) : (
                 <>

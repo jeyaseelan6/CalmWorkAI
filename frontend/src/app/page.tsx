@@ -239,7 +239,7 @@ export default function MyDayPage() {
                   Daily Work Plan
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Synthesized by Supervisor &middot; {lastRefreshed ? `Refreshed at ${lastRefreshed}` : "Active"}
+                  Synthesized by Plan Agent &middot; {lastRefreshed ? `Refreshed at ${lastRefreshed}` : "Active"}
                 </p>
               </div>
             </div>

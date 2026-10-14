@@ -24,7 +24,7 @@ export default function AskCalmWorkChat() {
     {
       id: "msg-welcome",
       sender: "SUPERVISOR",
-      text: `Hello! I am the CalmWork Supervisor. Ask me anything about ${activeCustomer.customerName}'s current state, scope changes, blockers, or stakeholder communications.`,
+      text: `Hello! I am the CalmWork Plan Agent. Ask me anything about ${activeCustomer.customerName}'s current state, scope changes, blockers, or stakeholder communications.`,
       intent: "SUPERVISOR",
       capabilitiesUsed: ["UNDERSTAND", "KNOW", "MOVE", "DELIVER"],
       timestamp: "Just now"
@@ -84,7 +84,7 @@ export default function AskCalmWorkChat() {
           </div>
           <div>
             <h2 className="font-display font-bold text-sm text-slate-900">Ask CalmWork (Universal Assistant)</h2>
-            <p className="text-[11px] text-slate-500 font-mono">Supervisor Multi-Agent Front Door</p>
+            <p className="text-[11px] text-slate-500 font-mono">Plan Agent — Central Orchestration & Routing</p>
           </div>
         </div>
       </div>
@@ -166,7 +166,7 @@ export default function AskCalmWorkChat() {
         {loading && (
           <div className="flex items-center gap-2 text-slate-500 font-mono text-[11px] p-2 bg-white border border-slate-200 rounded w-fit animate-pulse">
             <Bot className="h-4 w-4 text-slate-700 animate-bounce" />
-            <span>Supervisor orchestrating specialists...</span>
+            <span>Plan Agent orchestrating specialists...</span>
           </div>
         )}
       </div>
