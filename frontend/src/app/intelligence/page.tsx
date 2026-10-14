@@ -74,7 +74,7 @@ export default function IntelligencePage() {
               <span className="text-sm text-slate-600 font-medium">{activeCustomer.customerName}</span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Scope drift detection, requirement impact propagation, and DoD recommendations
+              Scope drift detection, requirement impact propagation, and Outcome Goals recommendations
             </p>
           </div>
         </div>
@@ -222,7 +222,7 @@ export default function IntelligencePage() {
             {analysisData.suggested_success_criteria && (
               <div className="pt-3 border-t border-slate-100 space-y-2">
                 <span className="text-[11px] font-semibold uppercase text-slate-500 font-mono block">
-                  Proposed Definition of Done Checklist Preview
+                  Proposed Outcome Goals Preview
                 </span>
                 <ul className="divide-y divide-slate-100 text-xs">
                   {analysisData.suggested_success_criteria.map((sc: any) => (
@@ -264,7 +264,7 @@ export default function IntelligencePage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
             <div>
               <span className="text-xs font-semibold text-emerald-950 block">
-                Outcome Definition of Done — Version 2 Approved & Active
+                Outcome Goals — Version 2 Approved & Active
               </span>
               <p className="text-[11px] text-emerald-800">
                 Production validation criteria integrated for {activeCustomer.customerName}.

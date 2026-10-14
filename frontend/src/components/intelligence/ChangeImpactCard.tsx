@@ -29,7 +29,7 @@ export default function ChangeImpactCard({
   detectedAgo = "10 minutes ago",
   affectedDimensions = {
     outcome: "Production-ready authentication is now required.",
-    requirement: "Add enterprise SSO configuration and production DoD validation.",
+    requirement: "Add enterprise SSO configuration and production Outcome Goals validation.",
     technical: "Authentication integration and production validation flow require update.",
     dependency: "Customer security team configuration is required.",
     timeline: "Target deployment timeline at risk until SSO config received."
@@ -98,7 +98,7 @@ export default function ChangeImpactCard({
             <p className="text-slate-800 font-medium">{affectedDimensions.outcome}</p>
           </div>
           <div className="bg-slate-50 p-2.5 rounded-md border border-slate-200/80">
-            <span className="text-[10px] font-mono font-bold text-slate-500 block uppercase mb-0.5">DoD Criteria Impact</span>
+            <span className="text-[10px] font-mono font-bold text-slate-500 block uppercase mb-0.5">Outcome Goals Impact</span>
             <p className="text-slate-800 font-medium">{affectedDimensions.requirement}</p>
           </div>
           <div className="bg-slate-50 p-2.5 rounded-md border border-slate-200/80">

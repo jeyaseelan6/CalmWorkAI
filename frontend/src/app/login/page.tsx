@@ -114,7 +114,7 @@ export default function LoginPage() {
             <p className="text-xs text-slate-400 leading-relaxed">
               {selectedRole === "FDE"
                 ? "Access customer engagement cockpits, 6 work cycles, knowledge search & work plans."
-                : "Access manager governance, outcome version approvals, DoD checklist sign-off & customer updates."}
+                : "Access manager governance, outcome version approvals, Outcome Goals sign-off & customer updates."}
             </p>
           </div>
 

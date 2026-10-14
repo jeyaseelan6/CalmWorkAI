@@ -267,7 +267,7 @@ export default function WorkPlanSection({
     setActivePlan(updatedPlan);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/dod/${dodId}/toggle`, {
+      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/goals/${dodId}/toggle`, {
         method: "PATCH"
       });
       if (res.ok) {
@@ -276,7 +276,7 @@ export default function WorkPlanSection({
         }
       }
     } catch (err) {
-      console.warn("Failed to toggle DoD item in backend:", err);
+      console.warn("Failed to toggle Outcome Goal item in backend:", err);
     }
   };
 
@@ -302,7 +302,7 @@ export default function WorkPlanSection({
             )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Describe scope and deliverables in natural language; Plan Agent formulates verified milestones, DoD, and task dependencies.
+            Describe scope and deliverables in natural language; Plan Agent formulates verified milestones, Outcome Goals, and task dependencies.
           </p>
         </div>
 
@@ -683,11 +683,11 @@ export default function WorkPlanSection({
             </div>
           </div>
 
-          {/* Definition of Done Checklist Preview */}
+          {/* Outcome Goals Checklist Preview */}
           {draftProposal.definition_of_done && draftProposal.definition_of_done.length > 0 && (
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-600 font-mono block">
-                Target Definition of Done (DoD):
+                Target Outcome Goals:
               </span>
               <ul className="space-y-1 text-xs text-slate-700">
                 {draftProposal.definition_of_done.map((dod, idx) => {
@@ -792,7 +792,7 @@ export default function WorkPlanSection({
             </div>
           )}
 
-          {/* Target Definition of Done (DoD) Interactive Contract Checklist */}
+          {/* Target Outcome Goals Interactive Contract Checklist */}
           {activePlan.definition_of_done && activePlan.definition_of_done.length > 0 && (() => {
             const dodItems = activePlan.definition_of_done.map((item, idx) => {
               if (typeof item === "string") {
@@ -809,7 +809,7 @@ export default function WorkPlanSection({
                   <div className="flex items-center gap-2">
                     <CheckSquare className="h-4 w-4 text-blue-600" />
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
-                      Definition of Done (DoD) Criteria ({dodItems.length})
+                      Outcome Goals ({dodItems.length})
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

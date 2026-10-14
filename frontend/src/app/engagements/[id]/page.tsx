@@ -87,7 +87,7 @@ function EngagementDetailContent() {
     activeEngagementData?.engagement?.current_work_cycle || (isAcme ? "Step 4" : "Step 1")
   );
 
-  // Dynamic Definition of Done / Success Criteria list
+  // Dynamic Outcome Goals / Success Criteria list
   const currentSuccessCriteria = React.useMemo(() => {
     if (activeEngagementData?.outcome?.success_criteria && activeEngagementData.outcome.success_criteria.length > 0) {
       return activeEngagementData.outcome.success_criteria.map((c: any, idx: number) => {
@@ -142,7 +142,7 @@ function EngagementDetailContent() {
   const handleToggleCriterion = async (criterionId: string) => {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-      await fetch(`${apiBase}/engagements/${engagementId}/dod/${criterionId}/toggle`, {
+      await fetch(`${apiBase}/engagements/${engagementId}/goals/${criterionId}/toggle`, {
         method: "PATCH"
       });
       fetchEngagementDetail(engagementId);
@@ -199,7 +199,7 @@ function EngagementDetailContent() {
                 <span>{isHealthy ? "Healthy" : "Needs Review"}</span>
               </span>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-mono">
-                DoD v{currentOutcomeVersion}
+                Outcome Goals v{currentOutcomeVersion}
               </span>
             </div>
           </div>
@@ -269,7 +269,7 @@ function EngagementDetailContent() {
           </nav>
         </div>
 
-        {/* 1. OVERVIEW TAB: Outcome + DoD + Action & Blockers */}
+        {/* 1. OVERVIEW TAB: Outcome + Outcome Goals + Action & Blockers */}
         {activeTab === "overview" && (
           <div className="space-y-6">
             <OutcomeCard
@@ -329,17 +329,17 @@ function EngagementDetailContent() {
                 title="Change Impact Reasoning"
                 evidence={[
                   `Customer requirement: Enterprise SSO is mandatory prior to cutover.`,
-                  `Outcome v1 Definition of Done lacks authentication clause.`,
+                  `Outcome v1 Outcome Goals lack authentication clause.`,
                   `Production validation gated on security compliance.`
                 ]}
                 reasoning={[
                   `Adding Enterprise SSO is a mandatory gating requirement for customer IT security sign-off.`,
-                  `DoD completion progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
+                  `Outcome Goals progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
                 ]}
                 recommendation={
                   approvedAcme
-                    ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Definition of Done checklist."
-                    : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to DoD checklist and request Manager approval."
+                    ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Outcome Goals."
+                    : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to Outcome Goals and request Manager approval."
                 }
                 confidence="High (96.4%)"
                 approvalRequired={!approvedAcme}
@@ -353,11 +353,11 @@ function EngagementDetailContent() {
                     ? `Manager approved structured work plan with ${activeEngagementData.outcome.work_plan.milestones?.length || 3} milestones.`
                     : `Baseline engagement parameters initialized for ${activeCustomer.customerName}.`,
                   `Objective: ${currentOutcomeStatement.slice(0, 90)}...`,
-                  `Definition of Done: ${currentSuccessCriteria.length} acceptance conditions established.`
+                  `Outcome Goals: ${currentSuccessCriteria.length} acceptance conditions established.`
                 ]}
                 reasoning={[
                   `Target delivery stages are aligned with customer technical constraints.`,
-                  `Progress is tracked deterministically against DoD acceptance criteria.`
+                  `Progress is tracked deterministically against Outcome Goals acceptance criteria.`
                 ]}
                 recommendation={nextActionText}
                 confidence="High (98.2%)"
@@ -401,12 +401,12 @@ function EngagementDetailContent() {
               ]}
               reasoning={[
                 `Adding Enterprise SSO is a mandatory gating requirement for customer IT security sign-off.`,
-                `DoD completion progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
+                `Outcome Goals progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
               ]}
               recommendation={
                 approvedAcme
-                  ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Definition of Done checklist."
-                  : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to DoD checklist and request Manager approval."
+                  ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Outcome Goals."
+                  : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to Outcome Goals and request Manager approval."
               }
               confidence="High (96.4%)"
               approvalRequired={!approvedAcme}
@@ -456,7 +456,7 @@ function EngagementDetailContent() {
                 <li className="py-2.5 flex items-start justify-between gap-4">
                   <div className="space-y-0.5">
                     <span className="font-semibold text-slate-900 block">Outcome Version 1 established</span>
-                    <p className="text-slate-600">Initial Definition of Done criteria activated.</p>
+                    <p className="text-slate-600">Initial Outcome Goals criteria activated.</p>
                   </div>
                   <span className="text-[11px] text-slate-400 font-mono shrink-0">Initial</span>
                 </li>

@@ -31,6 +31,8 @@ export interface ProposedWorkItem {
   blockers: string[];
   decisions_or_approvals_required: string[];
   status: string;
+  due_date?: string;
+  linked_goal_id?: string;
 }
 
 export interface ProposedWorkPlan {
@@ -303,13 +305,27 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
               </span>
               {brief.proposed_work_plan.work_items.map((wi) => (
                 <div key={wi.id} className="p-2.5 bg-slate-800/90 border border-slate-700/80 rounded space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
+                  <div className="flex items-center justify-between text-[11px] gap-2">
                     <span className="font-bold text-amber-300 font-mono">
                       #{wi.sequence_order}. {wi.title}
                     </span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 bg-slate-900 text-slate-400 rounded">
-                      {wi.status}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {wi.due_date && (
+                        <span className="flex items-center gap-1 font-mono text-[9px] text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/60">
+                          <Clock className="h-2.5 w-2.5 text-amber-400" />
+                          <span>{wi.due_date}</span>
+                        </span>
+                      )}
+                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                        wi.status === "COMPLETED"
+                          ? "bg-emerald-950 text-emerald-300 border-emerald-700"
+                          : wi.status === "IN_PROGRESS"
+                          ? "bg-amber-950 text-amber-300 border-amber-700"
+                          : "bg-slate-900 text-slate-400 border-slate-700"
+                      }`}>
+                        {wi.status === "COMPLETED" ? "Done" : wi.status === "IN_PROGRESS" ? "In Progress" : wi.status}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
                     <strong>Why it matters:</strong> {wi.why_it_matters}

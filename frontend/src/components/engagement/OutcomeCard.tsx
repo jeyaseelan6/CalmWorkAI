@@ -24,7 +24,7 @@ interface OutcomeCardProps {
 export default function OutcomeCard({
   customerName = "Active Customer",
   engagementName = "Customer Initiative",
-  outcomeStatement = "Deliver customer outcomes with verified Definition of Done criteria.",
+  outcomeStatement = "Deliver customer outcomes with verified Outcome Goals criteria.",
   version = 1,
   status = "HEALTHY",
   progress = 0,
@@ -90,7 +90,7 @@ export default function OutcomeCard({
         <div className="flex items-center justify-between text-xs mb-1 font-medium">
           <span className="text-slate-600 flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5 text-slate-500" />
-            Outcome DoD Progress
+            Outcome Goals Progress
           </span>
           <span className="text-slate-900 font-mono font-bold text-xs">{progress}%</span>
         </div>
@@ -102,11 +102,11 @@ export default function OutcomeCard({
         </div>
       </div>
 
-      {/* Success Criteria / Definition of Done */}
+      {/* Success Criteria / Outcome Goals */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
-            Definition of Done (DoD) Criteria ({successCriteria.length})
+            Outcome Goals ({successCriteria.length})
           </h3>
           {onToggleCriterion && (
             <span className="text-[10px] text-slate-400 font-mono">Click to toggle status</span>

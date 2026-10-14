@@ -20,7 +20,7 @@ export const WORK_CYCLE_STEPS: WorkCycleStepItem[] = [
   {
     stepNumber: 2,
     title: "Define the Right Problem",
-    description: "Establish outcome, success criteria & DoD alignment",
+    description: "Establish outcome, success criteria & Outcome Goals alignment",
     icon: Target
   },
   {

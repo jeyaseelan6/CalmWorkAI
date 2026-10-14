@@ -20,7 +20,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
   const [outcomeStatement, setOutcomeStatement] = useState("");
   const [criteria1, setCriteria1] = useState("Discovery & baseline architecture completed");
   const [criteria2, setCriteria2] = useState("Core integration pipeline operational");
-  const [criteria3, setCriteria3] = useState("Production verification and DoD signoff");
+  const [criteria3, setCriteria3] = useState("Production verification and Outcome Goals signoff");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -161,7 +161,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
 
           <div className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-[11px] font-bold text-slate-700 block uppercase font-mono">
-              Initial Definition of Done (Success Criteria)
+              Initial Outcome Goals (Success Criteria)
             </label>
             <input
               type="text"

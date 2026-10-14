@@ -177,7 +177,7 @@ class MoveAgent:
                 situation = f"Outcome status for {customer_name} is currently NEEDS_REASSESSMENT due to pending gating dependency or requirement change."
                 recommendation = f"Review pending approval and obtain Manager authorization for Outcome Version {outcome_version + 1} for {customer_name}."
                 why_now = "Downstream work cycle progression is paused until this criteria and version transition are approved."
-                impact = "Manager authorization activates the updated Definition of Done and unlocks delivery execution."
+                impact = "Manager authorization activates the updated Outcome Goals and unlocks delivery execution."
                 evidence = [
                     f"Engagement status: {status}",
                     f"Pending approvals: {pending_approvals}",
@@ -220,7 +220,7 @@ class MoveAgent:
                 situation = f"Engagement is at Step 1 (Understand Business Reality) for {customer_name}."
                 recommendation = f"Conduct stakeholder discovery session to clarify operational constraints for {customer_name}."
                 why_now = "Accurate problem discovery in Step 1 prevents downstream architectural rework."
-                impact = f"Establishes grounded Definition of Done criteria for {customer_name}."
+                impact = f"Establishes grounded Outcome Goals criteria for {customer_name}."
                 evidence = [
                     f"Current Work Cycle: {current_work_cycle}",
                     f"Customer: {customer_name}"

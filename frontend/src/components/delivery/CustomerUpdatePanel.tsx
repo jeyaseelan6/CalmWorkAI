@@ -213,7 +213,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
       {!draft ? (
         <div className="space-y-3">
           <p className="text-xs text-slate-600 leading-relaxed font-medium">
-            DELIVER Agent translates engineering progress, completed DoD items, and blockers into manager-approved executive update summaries for <strong className="text-slate-900 font-semibold">{customerName}</strong>.
+            DELIVER Agent translates engineering progress, completed Outcome Goals, and blockers into manager-approved executive update summaries for <strong className="text-slate-900 font-semibold">{customerName}</strong>.
           </p>
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">

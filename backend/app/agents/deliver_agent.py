@@ -119,7 +119,7 @@ class DeliverAgent:
             subject = f"Technical Progress Log: {customer_name} — {engagement_name}"
             exec_summary = (
                 f"Technical status log for {engagement_name}. Active Work Cycle: {current_work_cycle}. "
-                f"DoD Progress: {len(completed_items)} / {len(success_criteria)} criteria verified."
+                f"Outcome Goals Progress: {len(completed_items)} / {len(success_criteria)} criteria verified."
             )
         elif format_type == "RELEASE_NOTE":
             subject = f"Release Note: {customer_name} — Milestone Verification"

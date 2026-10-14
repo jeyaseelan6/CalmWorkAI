@@ -6,6 +6,7 @@ over 1 centralized engagement state across the 6 FDE Work Cycles.
 
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
+import logging
 import json
 import re
 import uuid
@@ -76,7 +77,9 @@ class ProposedWorkItem(BaseModel):
     dependencies: List[str] = []
     blockers: List[str] = []
     decisions_or_approvals_required: List[str] = []
-    status: str = "PROPOSED"  # "PROPOSED" | "APPROVED" | "SUPERSEDED" | "REJECTED"
+    status: str = "PROPOSED"  # "PROPOSED" | "TODO" | "IN_PROGRESS" | "COMPLETED" | "APPROVED" | "SUPERSEDED" | "REJECTED"
+    due_date: Optional[str] = None  # Target due date in IST 24h clock (e.g. "14 Oct 2026, 17:00 IST")
+    linked_goal_id: Optional[str] = None  # ID of corresponding Outcome Goal criterion (e.g. "sc-1")
 
 
 class ProposedWorkPlan(BaseModel):
@@ -354,7 +357,7 @@ class SupervisorCoordinator:
                     logger.warning(f"Live understand eval fallback: {str(e)}")
                     answer_parts.append(f"**UNDERSTAND Analysis**: Analyzed requirement change for {customer_name}. Scope shift requires review.")
             elif status == "NEEDS_REASSESSMENT":
-                answer_parts.append(f"**UNDERSTAND Analysis**: Enterprise SSO requirement was identified, which shifted Outcome Version {version} status to NEEDS_REASSESSMENT pending Manager approval of Definition of Done v2.")
+                answer_parts.append(f"**UNDERSTAND Analysis**: Enterprise SSO requirement was identified, which shifted Outcome Version {version} status to NEEDS_REASSESSMENT pending Manager approval of Outcome Goals v2.")
             else:
                 answer_parts.append(f"**UNDERSTAND Analysis**: Outcome Version {version} ('{outcome_statement}') remains aligned with customer requirements.")
 
@@ -375,7 +378,7 @@ class SupervisorCoordinator:
         if "KNOW" in capabilities_used and know_response.evidence_sufficient and know_response.answer:
             answer_parts.append(f"**KNOW Evidence**: {know_response.answer}")
 
-        # If it's a general question or greeting, synthesize via Google ADK Supervisor Agent
+        # If it's a general question or greeting, synthesize via Google ADK Plan Agent
         if not answer_parts:
             prompt = (
                 f"Customer Engagement: {customer_name}\n"
@@ -393,7 +396,7 @@ class SupervisorCoordinator:
                 if adk_reply:
                     answer_parts.append(adk_reply)
             except Exception as e:
-                logger.warning(f"ADK Supervisor conversational runner fallback: {e}")
+                logger.warning(f"ADK Plan Agent conversational runner fallback: {e}")
 
             if not answer_parts:
                 answer_parts.append(know_response.answer)
@@ -412,7 +415,7 @@ class SupervisorCoordinator:
             capabilities_used=capabilities_used,
             sufficient_evidence=True,
             suggested_followups=[
-                "What is the current status of Definition of Done v2?",
+                "What is the current status of Outcome Goals v2?",
                 "Draft an executive customer status update",
                 "Who is the security team owner for OAuth configuration?"
             ],
@@ -555,7 +558,7 @@ class SupervisorCoordinator:
         if not what_changed:
             what_changed = [
                 WhatChangedItem(
-                    summary=f"Engagement '{customer_name}' initialized with Outcome v{version} Definition of Done.",
+                    summary=f"Engagement '{customer_name}' initialized with Outcome v{version} Outcome Goals.",
                     category="PROGRESS",
                     date_recorded=now_str,
                     timeline_ref=f"eng-{engagement_id}"
@@ -576,8 +579,8 @@ class SupervisorCoordinator:
             risks.append(f"Ensure active criteria adhere to agreed technical constraints for {customer_name}.")
 
         pending_decisions: List[str] = []
-        if pending_approvals > 0:
-            pending_decisions.append(f"Manager approval required for {customer_name} (Outcome v{version} / DoD change).")
+        if (pending_approvals or 0) > 0:
+            pending_decisions.append(f"Manager approval required for {customer_name} (Outcome v{version} / Outcome Goals change).")
 
         blockers: List[BlockerItem] = []
         if move_findings and move_findings.gating_blocker:
@@ -603,14 +606,53 @@ class SupervisorCoordinator:
                 impact_description="Prevents advancement to subsequent work cycle phase."
             ))
 
-        # Dynamic Work Items from approved_work_plan or success_criteria
+        # Dynamic Work Items with IST Due Dates & Outcome Goal Linkage
+        now_ist = datetime.now(IST_TZ)
+        def compute_ist_due_date(seq: int) -> str:
+            target = now_ist + timedelta(days=max(0, seq - 1))
+            hour = 17 if seq == 1 else (14 if seq % 2 == 0 else 18)
+            return target.replace(hour=hour, minute=0, second=0).strftime("%d %b %Y, %H:%M IST")
+
         work_items: List[ProposedWorkItem] = []
+        existing_task_map = {}
         if approved_work_plan and isinstance(approved_work_plan, dict) and approved_work_plan.get("tasks"):
+            for t in approved_work_plan.get("tasks", []):
+                if isinstance(t, dict):
+                    existing_task_map[t.get("id")] = t
+                    if t.get("linked_goal_id"):
+                        existing_task_map[t.get("linked_goal_id")] = t
+
+        if success_criteria:
+            for idx, crit in enumerate(success_criteria):
+                crit_id = crit.get("id", f"sc-{idx+1}") if isinstance(crit, dict) else f"sc-{idx+1}"
+                crit_title = crit.get("title", f"Deliver milestone criterion {idx+1}") if isinstance(crit, dict) else str(crit)
+                is_done = crit.get("completed", False) if isinstance(crit, dict) else False
+                crit_due = crit.get("due_date") or compute_ist_due_date(idx + 1)
+
+                matched_task = existing_task_map.get(crit_id) or existing_task_map.get(f"task-{idx+1}")
+                t_status = "COMPLETED" if is_done else (matched_task.get("status", "TODO") if matched_task else "TODO")
+                t_title = matched_task.get("title", crit_title) if (matched_task and matched_task.get("title") and not matched_task.get("title").startswith("task-")) else crit_title
+
+                work_items.append(ProposedWorkItem(
+                    id=crit_id,
+                    title=t_title,
+                    sequence_order=idx + 1,
+                    why_it_matters=f"Fulfills Outcome Goal criterion for {customer_name}.",
+                    dependencies=[],
+                    blockers=[],
+                    decisions_or_approvals_required=["Manager Signoff"] if status == "NEEDS_REASSESSMENT" and idx == 0 else [],
+                    status="COMPLETED" if (is_done or t_status == "COMPLETED") else t_status,
+                    due_date=crit_due,
+                    linked_goal_id=crit_id
+                ))
+        elif approved_work_plan and isinstance(approved_work_plan, dict) and approved_work_plan.get("tasks"):
             for idx, task in enumerate(approved_work_plan.get("tasks", [])):
-                t_id = task.get("id", f"wi-{idx+1}")
+                t_id = task.get("id", f"task-{idx+1}")
                 t_title = task.get("title", f"Task {idx+1}")
-                t_status = "COMPLETED" if task.get("status") == "COMPLETED" else "PROPOSED"
+                t_raw_status = str(task.get("status", "TODO")).upper()
+                t_status = "COMPLETED" if t_raw_status in ["COMPLETED", "DONE"] else ("IN_PROGRESS" if t_raw_status in ["IN_PROGRESS", "ACTIVE"] else "TODO")
                 t_deps = task.get("dependencies", [])
+                t_due = task.get("due_date") or compute_ist_due_date(idx + 1)
                 work_items.append(ProposedWorkItem(
                     id=t_id,
                     title=t_title,
@@ -619,22 +661,9 @@ class SupervisorCoordinator:
                     dependencies=t_deps,
                     blockers=[],
                     decisions_or_approvals_required=[],
-                    status=t_status
-                ))
-        elif success_criteria:
-            for idx, crit in enumerate(success_criteria):
-                crit_id = crit.get("id", f"wi-{idx+1}") if isinstance(crit, dict) else f"wi-{idx+1}"
-                crit_title = crit.get("title", f"Deliver milestone criterion {idx+1}") if isinstance(crit, dict) else str(crit)
-                is_done = crit.get("completed", False) if isinstance(crit, dict) else False
-                work_items.append(ProposedWorkItem(
-                    id=crit_id,
-                    title=crit_title,
-                    sequence_order=idx + 1,
-                    why_it_matters=f"Fulfills Definition of Done criterion for {customer_name}.",
-                    dependencies=[],
-                    blockers=[],
-                    decisions_or_approvals_required=["Manager Signoff"] if status == "NEEDS_REASSESSMENT" and idx == 0 else [],
-                    status="COMPLETED" if is_done else "PROPOSED"
+                    status=t_status,
+                    due_date=t_due,
+                    linked_goal_id=task.get("linked_goal_id")
                 ))
         if not work_items:
             work_items = [
@@ -646,14 +675,16 @@ class SupervisorCoordinator:
                     dependencies=[],
                     blockers=[],
                     decisions_or_approvals_required=[],
-                    status="PROPOSED"
+                    status="TODO",
+                    due_date=compute_ist_due_date(1),
+                    linked_goal_id="sc-1"
                 )
             ]
 
         rec_first_action = (
             move_findings.recommendation
             if (move_findings and move_findings.recommendation)
-            else f"Review Definition of Done criteria for {customer_name}."
+            else f"Review Outcome Goals criteria for {customer_name}."
         )
 
         plan_assumptions = [
@@ -858,12 +889,12 @@ class SupervisorCoordinator:
             "   - Unresolved questions or missing information gaps.\n"
             "5. If important information is missing, formulate 1-3 targeted clarifying questions.\n"
             "6. Formulate 2-4 ordered milestones with concrete tasks, deliverables, dependencies, and any required customer decisions/approvals.\n"
-            "7. Formulate a crisp Definition of Done list.\n\n"
+            "7. Formulate a crisp Outcome Goals (acceptance criteria) list.\n\n"
             "Output MUST be a single valid JSON object strictly matching this structure:\n"
             "{\n"
             '  "engagement_objective": "...",\n'
             '  "outcomes": ["..."],\n'
-            '  "definition_of_done": [{"id": "dod-1", "title": "...", "completed": false}],\n'
+            '  "definition_of_done": [{"id": "sc-1", "title": "...", "completed": false}],\n'
             '  "milestones": [\n'
             '    {\n'
             '      "id": "ms-1",\n'
@@ -945,18 +976,18 @@ class SupervisorCoordinator:
             unresolved_questions_or_gaps=faa_data.get("unresolved_questions_or_gaps", [])
         )
 
-        dod_list = parsed_data.get("definition_of_done", [])
+        dod_list = parsed_data.get("outcome_goals") or parsed_data.get("definition_of_done", [])
         formatted_dod = []
         for idx, item in enumerate(dod_list):
             if isinstance(item, dict):
                 formatted_dod.append({
-                    "id": item.get("id", f"dod-{idx+1}"),
-                    "title": item.get("title", f"DoD Criterion {idx+1}"),
+                    "id": item.get("id", f"sc-{idx+1}"),
+                    "title": item.get("title", f"Outcome Goal {idx+1}"),
                     "completed": item.get("completed", False)
                 })
             elif isinstance(item, str):
                 formatted_dod.append({
-                    "id": f"dod-{idx+1}",
+                    "id": f"sc-{idx+1}",
                     "title": item,
                     "completed": False
                 })
@@ -1123,8 +1154,8 @@ class SupervisorCoordinator:
             WorkTask(
                 id="task-5",
                 milestone_id="ms-3",
-                title="Environment Validation & DoD Verification",
-                description="Conduct end-to-end integration testing and verify all Definition of Done criteria.",
+                title="Environment Validation & Outcome Goals Verification",
+                description="Conduct end-to-end integration testing and verify all Outcome Goals criteria.",
                 dependencies=["Migration completed"],
                 owner=None,
                 status="PLANNED"
@@ -1140,11 +1171,11 @@ class SupervisorCoordinator:
             )
         ]
 
-        # 8. Definition of Done
+        # 8. Outcome Goals (Success Criteria)
         dod = [
-            {"id": "dod-1", "title": "Architecture assessment documented and approved by customer security", "completed": False},
-            {"id": "dod-2", "title": "Target environment provisioned and critical workflows migrated", "completed": False},
-            {"id": "dod-3", "title": "Production validation completed with zero critical blockers", "completed": False},
+            {"id": "sc-1", "title": "Architecture assessment documented and approved by customer security", "completed": False},
+            {"id": "sc-2", "title": "Target environment provisioned and critical workflows migrated", "completed": False},
+            {"id": "sc-3", "title": "Production validation completed with zero critical blockers", "completed": False},
             {"id": "dod-4", "title": "Handover documentation and enablement sessions completed", "completed": False}
         ]
 

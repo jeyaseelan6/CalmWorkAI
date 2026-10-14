@@ -86,7 +86,7 @@ export default function MyDayPage() {
   const rawStatus = brief?.outcome_health ?? activeEngagementData?.engagement?.status ?? activeCustomer.status;
   const outcomeStatus = rawStatus === "HEALTHY" ? "HEALTHY" : "NEEDS_REASSESSMENT";
 
-  // Success criteria / Definition of Done
+  // Success criteria / Outcome Goals
   const successCriteria = React.useMemo(() => {
     if (activeEngagementData?.outcome?.success_criteria && activeEngagementData.outcome.success_criteria.length > 0) {
       return activeEngagementData.outcome.success_criteria.map((c: any, idx: number) => {
@@ -122,10 +122,11 @@ export default function MyDayPage() {
 
   const handleToggleCriterion = async (criterionId: string) => {
     try {
-      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/dod/${criterionId}/toggle`, {
+      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/goals/${criterionId}/toggle`, {
         method: "PATCH"
       });
       fetchEngagementDetail(activeCustomer.id);
+      fetchBrief();
     } catch (e) {
       console.warn("Failed to toggle criterion:", e);
     }
@@ -142,6 +143,39 @@ export default function MyDayPage() {
     `Complete active delivery iteration for ${activeCustomer.customerName}.`;
 
   const workItems = proposedPlan?.work_items || [];
+  const [localTasks, setLocalTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (proposedPlan?.work_items) {
+      setLocalTasks(proposedPlan.work_items);
+    }
+  }, [proposedPlan?.work_items]);
+
+  const effectiveTasks = localTasks.length > 0 ? localTasks : workItems;
+
+  const handleToggleTaskStatus = async (task: any) => {
+    const isCurrentlyDone = task.status === "COMPLETED";
+    const nextStatus = isCurrentlyDone ? "TODO" : "COMPLETED";
+
+    setLocalTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t))
+    );
+
+    try {
+      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          linked_goal_id: task.linked_goal_id || task.id,
+          due_date: task.due_date
+        })
+      });
+      fetchEngagementDetail(activeCustomer.id);
+    } catch (e) {
+      console.warn("Failed to toggle task status:", e);
+    }
+  };
 
   // Active blockers from Morning Brief
   const briefBlockers = brief?.what_is_blocking_progress || [];
@@ -168,7 +202,7 @@ export default function MyDayPage() {
             <div className="flex items-center gap-2 text-amber-900">
               <ShieldCheck className="h-4 w-4 text-amber-700 shrink-0" />
               <span>
-                <strong>{pendingApprovalsCount} approval required:</strong> Scope or Definition of Done upgrade awaiting authorization.
+                <strong>{pendingApprovalsCount} approval required:</strong> Scope or Outcome Goals upgrade awaiting authorization.
               </span>
             </div>
             <Link
@@ -265,31 +299,87 @@ export default function MyDayPage() {
               </p>
             </div>
 
-            {/* Ordered Work Sequence */}
-            {workItems.length > 0 && (
+            {/* Ordered Work Sequence with Calm Task Tracking */}
+            {effectiveTasks.length > 0 && (
               <div className="space-y-2 pt-1">
-                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
-                  Ordered Task Sequence:
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                    Ordered Tasks & IST Due Targets:
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">
+                    {effectiveTasks.filter((t) => t.status === "COMPLETED").length}/{effectiveTasks.length} Done
+                  </span>
+                </div>
+
                 <div className="space-y-2">
-                  {workItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 bg-slate-800/90 border border-slate-700/80 rounded-lg space-y-1.5 text-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-amber-300 font-mono text-[11px]">
-                          #{item.sequence_order}. {item.title}
-                        </span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 bg-slate-900 text-slate-400 rounded border border-slate-700/60">
-                          {item.status}
-                        </span>
+                  {effectiveTasks.map((item) => {
+                    const isDone = item.status === "COMPLETED";
+                    const inProgress = item.status === "IN_PROGRESS";
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-3 rounded-lg space-y-2 text-xs transition border ${
+                          isDone
+                            ? "bg-slate-800/40 border-slate-700/40 text-slate-400"
+                            : "bg-slate-800/90 border-slate-700/80 text-white"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTaskStatus(item)}
+                              className="mt-0.5 shrink-0 focus:outline-none cursor-pointer"
+                              title={isDone ? "Mark as To Do" : "Mark as Completed"}
+                            >
+                              {isDone ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                              ) : (
+                                <Circle className="h-4 w-4 text-slate-500 hover:text-amber-400 transition" />
+                              )}
+                            </button>
+                            <div className="min-w-0">
+                              <span
+                                className={`font-semibold text-xs leading-snug block ${
+                                  isDone ? "line-through text-slate-400" : "text-slate-100"
+                                }`}
+                              >
+                                #{item.sequence_order}. {item.title}
+                              </span>
+                              {item.why_it_matters && (
+                                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                                  {item.why_it_matters}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.due_date && (
+                              <span className="flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60">
+                                <Clock className="h-3 w-3 text-amber-400" />
+                                <span>Due: {item.due_date}</span>
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTaskStatus(item)}
+                              className={`text-[9px] font-mono px-2 py-0.5 rounded border transition cursor-pointer font-bold ${
+                                isDone
+                                  ? "bg-emerald-950 text-emerald-300 border-emerald-700 hover:bg-emerald-900"
+                                  : inProgress
+                                  ? "bg-amber-950 text-amber-300 border-amber-700 hover:bg-amber-900"
+                                  : "bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800"
+                              }`}
+                            >
+                              {isDone ? "Done" : inProgress ? "In Progress" : "To Do"}
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        <strong className="text-slate-200">Why it matters:</strong> {item.why_it_matters}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -400,11 +490,11 @@ export default function MyDayPage() {
           </div>
         </div>
 
-        {/* 3. Definition of Done (DoD) Checklist */}
+        {/* 3. Outcome Goals Checklist */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-              Definition of Done Checklist ({completedCount}/{successCriteria.length})
+              Outcome Goals ({completedCount}/{successCriteria.length})
             </span>
             <span className="text-xs font-mono text-slate-500">{progressPct}% Complete</span>
           </div>

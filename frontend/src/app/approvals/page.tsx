@@ -18,23 +18,23 @@ export default function ApprovalsPage() {
 
   const nextVersion = (activeEngagementData?.outcome?.version || 1) + 1;
   const recommendationText = isAcme
-    ? `Upgrade Definition of Done checklist for ${activeCustomer.customerName} to Version 2 by adding "Enterprise SSO configuration & validation".`
-    : `Upgrade Definition of Done checklist for ${activeCustomer.customerName} to Version ${nextVersion} with updated requirement criteria.`;
+    ? `Upgrade Outcome Goals for ${activeCustomer.customerName} to Version 2 by adding "Enterprise SSO configuration & validation".`
+    : `Upgrade Outcome Goals for ${activeCustomer.customerName} to Version ${nextVersion} with updated requirement criteria.`;
 
   const whyNowText = isAcme
     ? "Customer IT security team added a mandatory authentication requirement. Production validation step is currently blocked until this criteria is satisfied."
-    : `New requirement criteria identified for ${activeCustomer.customerName}. Progression is paused until manager authorizes the updated Definition of Done.`;
+    : `New requirement criteria identified for ${activeCustomer.customerName}. Progression is paused until manager authorizes the updated Outcome Goals.`;
 
   const evidenceList = isAcme
     ? ["Customer requirement input received", "Current outcome v1 lacks SSO clause"]
     : [
         activeEngagementData?.timeline?.[0]?.description || "Customer requirement shift logged",
-        `Current outcome v${activeEngagementData?.outcome?.version || 1} Definition of Done affected`
+        `Current outcome v${activeEngagementData?.outcome?.version || 1} Outcome Goals affected`
       ];
 
   const impactText = isAcme
     ? "+2 days timeline shift; gates Step 4 production rollout cleanly."
-    : `Updates Definition of Done and unlocks execution in ${activeEngagementData?.engagement?.current_work_cycle || "active work cycle"}.`;
+    : `Updates Outcome Goals and unlocks execution in ${activeEngagementData?.engagement?.current_work_cycle || "active work cycle"}.`;
 
   return (
     <AppShell>
@@ -48,7 +48,7 @@ export default function ApprovalsPage() {
               <span className="text-sm text-slate-600 font-medium">{activeCustomer.customerName}</span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Outcome version transitions and Definition of Done authorization boundary
+              Outcome version transitions and Outcome Goals authorization boundary
             </p>
           </div>
 
@@ -70,7 +70,7 @@ export default function ApprovalsPage() {
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-slate-900 font-display">
-                    Proposed Definition of Done Upgrade
+                    Proposed Outcome Goals Upgrade
                   </span>
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
                     v{activeEngagementData?.outcome?.version || 1} &rarr; v{nextVersion}
@@ -141,7 +141,7 @@ export default function ApprovalsPage() {
                   </div>
                 ) : (
                   <div className="bg-slate-50 border border-slate-200 rounded-md p-3 flex items-center justify-between text-xs text-slate-600">
-                    <span>Manager sign-off required to authorize Definition of Done upgrades.</span>
+                    <span>Manager sign-off required to authorize Outcome Goals upgrades.</span>
                     <span className="text-slate-500 font-mono text-[11px]">FDE View</span>
                   </div>
                 )}

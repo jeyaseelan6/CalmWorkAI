@@ -50,9 +50,9 @@ class ChangeImpactAnalysis(BaseModel):
 UNDERSTAND_INSTRUCTION = (
     "You are the CalmWork UNDERSTAND Agent, an outcome-driven intelligence specialist for Forward-Deployed Engineers. "
     "Your objective is to evaluate incoming requirement changes, scope shifts, and technical constraints "
-    "against active engagement outcome statements and Definition of Done (DoD) success criteria. "
+    "against active engagement outcome statements and Outcome Goals success criteria. "
     "Always reason using the Evidence -> Reasoning -> Recommendation pattern. "
-    "Analyze whether the requirement introduces gating conditions, impacts existing success criteria, or requires DoD v2 expansion. "
+    "Analyze whether the requirement introduces gating conditions, impacts existing success criteria, or requires Outcome Goals v2 expansion. "
     "Never silently modify authoritative database state; produce structured change impact analysis with recommendations for Manager approval. "
     "Return JSON matching keys: change_title (string), evidence (list of strings), reasoning (list of strings), "
     "recommendation (string), suggested_outcome_statement (string), suggested_success_criteria (list of dicts with id, title, completed), "
@@ -79,7 +79,7 @@ class UnderstandAgent:
         # Build genuine Google ADK Agent
         self.adk_agent = Agent(
             name="understand_agent",
-            description="Evaluates requirement shifts and scope drift against Definition of Done criteria using Evidence -> Reasoning -> Recommendation pattern.",
+            description="Evaluates requirement shifts and scope drift against Outcome Goals criteria using Evidence -> Reasoning -> Recommendation pattern.",
             model=self.model,
             instruction=UNDERSTAND_INSTRUCTION,
             output_schema=ChangeImpactAnalysis,
@@ -134,7 +134,7 @@ class UnderstandAgent:
         prompt = (
             f"Anonymized Requirement Input: {anonymized_change}\n"
             f"Anonymized Outcome Statement: {anonymized_outcome}\n"
-            f"Current Success Criteria (DoD): {json.dumps(current_success_criteria)}"
+            f"Current Success Criteria (Outcome Goals): {json.dumps(current_success_criteria)}"
         )
 
         # 3. Execute ADK Runner if model credentials available
@@ -166,10 +166,10 @@ class UnderstandAgent:
 
                 parsed = json.loads(cleaned)
                 evidence = parsed.get("evidence", [f"Observed scope input: '{anonymized_change}'"])
-                reasoning = parsed.get("reasoning", ["Requirement shift impacts Definition of Done gating."])
-                recommendation = parsed.get("recommendation", f"Upgrade Outcome DoD checklist for '{anonymized_change}'.")
+                reasoning = parsed.get("reasoning", ["Requirement shift impacts Outcome Goals gating."])
+                recommendation = parsed.get("recommendation", f"Upgrade Outcome Goals checklist for '{anonymized_change}'.")
                 risk_score = parsed.get("risk_score", "HIGH")
-                affected_dims = parsed.get("affected_dimensions", ["Definition of Done", "Timeline Gating"])
+                affected_dims = parsed.get("affected_dimensions", ["Outcome Goals", "Timeline Gating"])
                 suggested_outcome = parsed.get("suggested_outcome_statement", current_outcome_statement)
                 suggested_criteria = parsed.get("suggested_success_criteria", list(current_success_criteria))
             except Exception as parse_err:
@@ -185,17 +185,17 @@ class UnderstandAgent:
             ]
             reasoning = [
                 f"The new requirement '{anonymized_change}' affects production success criteria and creates a customer dependency.",
-                "Definition of Done completion affected: Step 4 (Build Within Real Constraints) requires validation before Step 5 deployment."
+                "Outcome Goals completion affected: Step 4 (Build Within Real Constraints) requires validation before Step 5 deployment."
             ]
             recommendation = (
-                f"Upgrade Outcome to Version 2. Add '{anonymized_change}' to Definition of Done checklist "
+                f"Upgrade Outcome to Version 2. Add '{anonymized_change}' to Outcome Goals checklist "
                 "and request Manager approval for version transition."
             )
             risk_score = "HIGH"
-            affected_dims = ["Outcome DoD Checklist", "Dependencies & Blockers", "Timeline Gating"]
+            affected_dims = ["Outcome Goals Checklist", "Dependencies & Blockers", "Timeline Gating"]
             suggested_outcome = current_outcome_statement
 
-            # Reconstruct updated DoD checklist
+            # Reconstruct updated Outcome Goals checklist
             suggested_criteria = list(current_success_criteria)
             new_title = f"{raw_change_text} (Added v2)"
             if not any(c.get("title") == new_title for c in suggested_criteria):

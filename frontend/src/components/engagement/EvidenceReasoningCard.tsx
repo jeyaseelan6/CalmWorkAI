@@ -51,7 +51,7 @@ export default function EvidenceReasoningCard({
         <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1">
           <div className="text-[10px] font-mono uppercase font-bold text-slate-400 flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-teal-400" />
-            1. Evidence (Observed Requirements & Current DoD)
+            1. Evidence (Observed Requirements & Current Outcome Goals)
           </div>
           <ul className="space-y-1 text-slate-300 pl-3 list-disc text-[11px]">
             {evidence.map((item, i) => (
@@ -77,7 +77,7 @@ export default function EvidenceReasoningCard({
         <div className="bg-teal-500/10 border border-teal-500/30 p-3.5 rounded-lg space-y-1">
           <div className="text-[10px] font-mono uppercase font-bold text-teal-300 flex items-center gap-1.5">
             <CheckCircle className="h-3.5 w-3.5 text-teal-400" />
-            3. Recommendation (Action & DoD Version Shift)
+            3. Recommendation (Action & Outcome Goals Version Shift)
           </div>
           <p className="text-xs font-medium text-slate-100 leading-relaxed">
             {recommendation}

@@ -495,10 +495,10 @@ async def list_pending_approvals(db: Session = Depends(get_db)):
             evidence = ["AI privacy guardrail verified", "Executive summary draft generated"]
             impact = "Unlocks PDF download and authorizes FDE or Manager to send update to client stakeholders."
         elif appr.type == ApprovalType.OUTCOME_CHANGE:
-            rec = f"Upgrade Definition of Done criteria and outcome for {eng.customer_name if eng else 'customer'}."
+            rec = f"Upgrade Outcome Goals criteria and outcome for {eng.customer_name if eng else 'customer'}."
             why = "Customer requirement changed, gating production validation step."
-            evidence = ["Requirement input received", "Current outcome DoD affected"]
-            impact = "Updates DoD checklist and allows production rollout."
+            evidence = ["Requirement input received", "Current Outcome Goals affected"]
+            impact = "Updates Outcome Goals checklist and allows production rollout."
         else:
             rec = "Approve consequential action."
             why = "Consequential operational update requiring authorization."
@@ -1464,15 +1464,15 @@ async def approve_work_plan(
 
     outcome_service = OutcomeService(db)
 
-    # Convert plan outcomes / Definition of Done into success_criteria
-    dod_items = plan_dict.get("definition_of_done", [])
+    # Convert plan outcomes / Outcome Goals into success_criteria
+    dod_items = plan_dict.get("outcome_goals") or plan_dict.get("definition_of_done", [])
     updated_criteria = []
     if isinstance(dod_items, list):
         for idx, item in enumerate(dod_items):
             if isinstance(item, dict):
                 updated_criteria.append(item)
             elif isinstance(item, str) and item.strip():
-                updated_criteria.append({"id": f"dod-{idx+1}", "title": item.strip(), "completed": False})
+                updated_criteria.append({"id": f"sc-{idx+1}", "title": item.strip(), "completed": False})
 
     if not updated_criteria and plan_dict.get("outcomes"):
         for idx, o in enumerate(plan_dict.get("outcomes", [])):
@@ -1599,7 +1599,7 @@ async def approve_work_plan(
             for out in plan_dict.get("outcomes", []):
                 plan_doc_lines.append(f"- {out}")
 
-            plan_doc_lines.append("\n## Definition of Done:")
+            plan_doc_lines.append("\n## Outcome Goals:")
             for dod in updated_criteria:
                 t = dod.get("title") if isinstance(dod, dict) else str(dod)
                 plan_doc_lines.append(f"- [ ] {t}")
@@ -1692,11 +1692,12 @@ async def get_work_plan(engagement_id: str, db: Session = Depends(get_db)):
     }
 
 
-@app.patch(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/dod/{{dod_id}}/toggle", tags=["Engagements"])
-async def toggle_dod_criterion(engagement_id: str, dod_id: str, db: Session = Depends(get_db)):
+@app.patch(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/goals/{{goal_id}}/toggle", tags=["Engagements"])
+@app.patch(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/dod/{{goal_id}}/toggle", tags=["Engagements"])
+async def toggle_outcome_goal(engagement_id: str, goal_id: str, db: Session = Depends(get_db)):
     """
-    Toggle completion status of a Definition of Done criterion in active outcome.
-    Updates progress dynamically.
+    Toggle completion status of an Outcome Goal criterion in active outcome.
+    Updates progress dynamically and synchronizes linked work plan tasks.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
@@ -1708,9 +1709,11 @@ async def toggle_dod_criterion(engagement_id: str, dod_id: str, db: Session = De
     from sqlalchemy.orm.attributes import flag_modified
     criteria = list(current_outcome.success_criteria or [])
     updated = False
+    new_completed_val = False
     for item in criteria:
-        if isinstance(item, dict) and item.get("id") == dod_id:
+        if isinstance(item, dict) and item.get("id") == goal_id:
             item["completed"] = not item.get("completed", False)
+            new_completed_val = item["completed"]
             updated = True
             break
 
@@ -1722,10 +1725,17 @@ async def toggle_dod_criterion(engagement_id: str, dod_id: str, db: Session = De
             wp = dict(current_outcome.work_plan)
             dods = wp.get("definition_of_done", [])
             for d in dods:
-                if isinstance(d, dict) and d.get("id") == dod_id:
-                    d["completed"] = not d.get("completed", False)
+                if isinstance(d, dict) and d.get("id") == goal_id:
+                    d["completed"] = new_completed_val
                     break
             wp["definition_of_done"] = dods
+
+            # Also sync any linked routine tasks
+            tasks = list(wp.get("tasks", []))
+            for t in tasks:
+                if isinstance(t, dict) and (t.get("linked_goal_id") == goal_id or t.get("id") == goal_id):
+                    t["status"] = "COMPLETED" if new_completed_val else "TODO"
+            wp["tasks"] = tasks
             current_outcome.work_plan = wp
             flag_modified(current_outcome, "work_plan")
 
@@ -1739,7 +1749,7 @@ async def toggle_dod_criterion(engagement_id: str, dod_id: str, db: Session = De
             "success_criteria": current_outcome.success_criteria,
             "progress": eng.progress
         },
-        "message": "DoD criterion toggled successfully."
+        "message": "Outcome Goal criterion toggled successfully."
     }
 
 
@@ -1753,17 +1763,18 @@ async def update_routine_task(
 ):
     """
     Update a routine task within the active work plan.
+    Synchronizes with Outcome Goals and updates engagement progress.
     Does NOT require manager approval for ordinary task updates within scope.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
-    if not current_outcome or not current_outcome.work_plan:
-        raise HTTPException(status_code=404, detail="Active work plan not found")
+    if not current_outcome:
+        raise HTTPException(status_code=404, detail="Outcome not found")
 
     from sqlalchemy.orm.attributes import flag_modified
-    wp = dict(current_outcome.work_plan)
+    wp = dict(current_outcome.work_plan or {})
     tasks = list(wp.get("tasks", []))
     target_task = None
     for t in tasks:
@@ -1773,12 +1784,46 @@ async def update_routine_task(
             target_task = t
             break
 
+    # If not yet in wp["tasks"], create or match corresponding success criterion
     if not target_task:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found in active work plan")
+        crit_match = None
+        for c in (current_outcome.success_criteria or []):
+            if isinstance(c, dict) and c.get("id") == task_id:
+                crit_match = c
+                break
+        target_task = {
+            "id": task_id,
+            "title": (crit_match.get("title") if crit_match else payload.get("title", task_id)),
+            "status": payload.get("status", "IN_PROGRESS"),
+            "linked_goal_id": task_id if crit_match else payload.get("linked_goal_id"),
+            "due_date": payload.get("due_date")
+        }
+        for k, v in payload.items():
+            target_task[k] = v
+        tasks.append(target_task)
 
     wp["tasks"] = tasks
     current_outcome.work_plan = wp
     flag_modified(current_outcome, "work_plan")
+
+    # If status changed, synchronize linked Outcome Goal criterion
+    new_status = str(payload.get("status", "")).upper()
+    if new_status:
+        is_completed = (new_status in ["COMPLETED", "DONE"])
+        linked_id = target_task.get("linked_goal_id") or task_id
+        criteria = list(current_outcome.success_criteria or [])
+        crit_updated = False
+        for c in criteria:
+            if isinstance(c, dict) and (c.get("id") == linked_id or c.get("id") == task_id):
+                c["completed"] = is_completed
+                crit_updated = True
+                break
+        if crit_updated:
+            current_outcome.success_criteria = criteria
+            flag_modified(current_outcome, "success_criteria")
+            completed_count = sum(1 for c in criteria if isinstance(c, dict) and c.get("completed"))
+            eng.progress = int((completed_count / len(criteria)) * 100) if criteria else eng.progress
+
     eng.updated_at = datetime.utcnow()
 
     user_role = current_user.get("role", "FDE")
@@ -1789,7 +1834,7 @@ async def update_routine_task(
         engagement_id=engagement_id,
         event_type="TASK_UPDATED",
         title=f"Task Updated: {target_task.get('title', task_id)}",
-        description=f"{user_role} {actor_name} updated routine task '{task_id}' within approved scope.",
+        description=f"{user_role} {actor_name} updated task '{task_id}' to status '{target_task.get('status')}'.",
         actor_type=user_role,
         actor_id=actor_id,
         created_at=datetime.utcnow()
@@ -1799,6 +1844,7 @@ async def update_routine_task(
     return {
         "success": True,
         "data": target_task,
+        "progress": eng.progress,
         "message": "Routine task updated successfully."
     }
 
