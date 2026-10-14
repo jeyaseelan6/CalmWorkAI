@@ -211,10 +211,6 @@ export default function MyDayPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-display font-bold text-slate-900">My Day</h1>
-                <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800">
-                  <Sun className="h-3 w-3 text-amber-600" />
-                  <span>Morning Brief Synchronized</span>
-                </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 {activeCustomer.customerName} &middot; {activeCustomer.engagementName}
