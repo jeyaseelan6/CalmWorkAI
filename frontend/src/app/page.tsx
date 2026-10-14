@@ -81,34 +81,99 @@ export default function MyDayPage() {
   const [briefLoading, setBriefLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
   const [showEvidence, setShowEvidence] = useState(false);
+  const [streamEvent, setStreamEvent] = useState<{
+    agent?: string;
+    stage?: string;
+    message?: string;
+    step?: number;
+    total_steps?: number;
+  } | null>(null);
 
-  // Fetch sequential Morning Brief from Supervisor Coordinator
-  const fetchBrief = useCallback(async () => {
-    if (!activeCustomer?.id) return;
-    setBriefLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
-        method: "POST"
-      });
-      const data = await res.json();
-      if (data.success && data.data) {
-        setBrief(data.data);
-        setLastRefreshed(getNowISTTime(true));
-      }
-    } catch (err) {
-      console.warn("Failed to fetch Morning Brief:", err);
-    } finally {
-      setBriefLoading(false);
-    }
+  // Clear brief when active customer changes so it never auto-runs
+  useEffect(() => {
+    setBrief(null);
+    setLastRefreshed("");
+    setStreamEvent(null);
   }, [activeCustomer?.id]);
 
-  useEffect(() => {
-    fetchBrief();
-  }, [fetchBrief]);
+  // Run sequential Morning Brief (UNDERSTAND -> PLAN/KNOW -> MOVE) only on explicit click
+  const runMorningBrief = useCallback(async () => {
+    if (!activeCustomer?.id) return;
+    setBriefLoading(true);
+    setStreamEvent({
+      agent: "SUPERVISOR",
+      stage: "INIT",
+      message: "Starting sequential Morning Brief across UNDERSTAND, PLAN, and MOVE agents...",
+      step: 1,
+      total_steps: 5
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/stream`, {
+        method: "POST"
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error("Stream not available, using fallback");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(trimmed.slice(6));
+              if (event.type === "progress") {
+                setStreamEvent(event);
+              } else if (event.type === "complete" && event.data) {
+                setBrief(event.data);
+                setLastRefreshed(getNowISTTime(true));
+                setStreamEvent(null);
+                fetchEngagementDetail(activeCustomer.id);
+              }
+            } catch (e) {
+              console.warn("SSE parse error in brief stream:", e);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Streaming morning brief encountered error, using standard fallback:", err);
+      try {
+        const fallbackRes = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
+          method: "POST"
+        });
+        const fallbackData = await fallbackRes.json();
+        if (fallbackData.success && fallbackData.data) {
+          setBrief(fallbackData.data);
+          setLastRefreshed(getNowISTTime(true));
+          fetchEngagementDetail(activeCustomer.id);
+        }
+      } catch (fallbackErr) {
+        console.error("Failed to generate Morning Brief:", fallbackErr);
+      }
+    } finally {
+      setBriefLoading(false);
+      setStreamEvent(null);
+    }
+  }, [activeCustomer?.id, fetchEngagementDetail]);
 
   const handleSyncAll = () => {
     fetchEngagementDetail(activeCustomer.id);
-    fetchBrief();
+    if (brief) {
+      runMorningBrief();
+    }
   };
 
   const isAcme = activeCustomer.id === "eng-acme-001";
@@ -223,7 +288,9 @@ export default function MyDayPage() {
         })
       });
       await fetchEngagementDetail(activeCustomer.id);
-      await fetchBrief();
+      if (brief) {
+        await runMorningBrief();
+      }
     } catch (e) {
       console.warn("Failed to update task due date:", e);
     }
@@ -269,7 +336,9 @@ export default function MyDayPage() {
         })
       });
       await fetchEngagementDetail(activeCustomer.id);
-      await fetchBrief();
+      if (brief) {
+        await runMorningBrief();
+      }
     } catch (e) {
       console.warn("Failed to toggle task status:", e);
     }
@@ -334,14 +403,26 @@ export default function MyDayPage() {
                 {outcomeStatus === "HEALTHY" ? "Healthy" : "Reassessment"} &middot; v{outcomeVersion}
               </span>
 
+              {/* On-Demand Morning Brief Action Button */}
+              <button
+                type="button"
+                onClick={runMorningBrief}
+                disabled={briefLoading}
+                title="Run UNDERSTAND, PLAN, and MOVE agents to generate Morning Brief"
+                className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
+              >
+                <Sun className={`h-3.5 w-3.5 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
+                <span>{briefLoading ? "Running Agents..." : brief ? "Re-run Brief" : "Morning Brief"}</span>
+              </button>
+
               <button
                 onClick={handleSyncAll}
                 disabled={isLoading}
-                title="Refresh State & Morning Brief"
+                title="Refresh State"
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
-                <span>{isLoading ? "Refreshing..." : "Refresh"}</span>
+                <span>Refresh</span>
               </button>
 
               <Link
@@ -355,6 +436,132 @@ export default function MyDayPage() {
           </div>
         </div>
 
+        {/* Live Multi-Agent Execution Progress Banner (UNDERSTAND -> PLAN/KNOW -> MOVE) */}
+        {briefLoading && (
+          <div className="p-5 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-md space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                </span>
+                <div>
+                  <h3 className="text-sm font-display font-bold text-white flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-amber-400 animate-pulse" />
+                    Running Morning Brief Multi-Agent Orchestration
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Executing UNDERSTAND, PLAN (KNOW), and MOVE agents sequentially
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-950/80 border border-amber-800/60">
+                Step {streamEvent?.step || 1} of {streamEvent?.total_steps || 5}
+              </span>
+            </div>
+
+            {/* 3 Core Agent Stages */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Agent 1: UNDERSTAND */}
+              <div className={`p-3 rounded-lg border transition ${
+                streamEvent?.agent === "UNDERSTAND"
+                  ? "bg-sky-950/70 border-sky-500 text-sky-100 shadow-sm"
+                  : streamEvent?.step && streamEvent.step > 2
+                  ? "bg-slate-800/40 border-slate-700/60 text-slate-300"
+                  : "bg-slate-800/20 border-slate-800 text-slate-500"
+              }`}>
+                <div className="flex items-center justify-between text-xs font-bold mb-1">
+                  <span>1. UNDERSTAND</span>
+                  {streamEvent?.agent === "UNDERSTAND" ? (
+                    <span className="text-[10px] font-mono text-sky-300 animate-pulse">Analyzing...</span>
+                  ) : streamEvent?.step && streamEvent.step > 2 ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : null}
+                </div>
+                <p className="text-[11px] leading-snug">
+                  Evaluates requirement shifts and scope drift.
+                </p>
+              </div>
+
+              {/* Agent 2: PLAN & KNOW */}
+              <div className={`p-3 rounded-lg border transition ${
+                streamEvent?.agent === "KNOW" || (streamEvent?.agent === "SUPERVISOR" && streamEvent?.stage === "SYNTHESIS")
+                  ? "bg-emerald-950/70 border-emerald-500 text-emerald-100 shadow-sm"
+                  : streamEvent?.step && streamEvent.step > 3
+                  ? "bg-slate-800/40 border-slate-700/60 text-slate-300"
+                  : "bg-slate-800/20 border-slate-800 text-slate-500"
+              }`}>
+                <div className="flex items-center justify-between text-xs font-bold mb-1">
+                  <span>2. PLAN &amp; KNOW</span>
+                  {streamEvent?.agent === "KNOW" || (streamEvent?.agent === "SUPERVISOR" && streamEvent?.stage === "SYNTHESIS") ? (
+                    <span className="text-[10px] font-mono text-emerald-300 animate-pulse">Synthesizing...</span>
+                  ) : streamEvent?.step && streamEvent.step > 4 ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : null}
+                </div>
+                <p className="text-[11px] leading-snug">
+                  Grounded evidence retrieval &amp; daily work sequence.
+                </p>
+              </div>
+
+              {/* Agent 3: MOVE */}
+              <div className={`p-3 rounded-lg border transition ${
+                streamEvent?.agent === "MOVE"
+                  ? "bg-amber-950/70 border-amber-500 text-amber-100 shadow-sm"
+                  : streamEvent?.step && streamEvent.step > 4
+                  ? "bg-slate-800/40 border-slate-700/60 text-slate-300"
+                  : "bg-slate-800/20 border-slate-800 text-slate-500"
+              }`}>
+                <div className="flex items-center justify-between text-xs font-bold mb-1">
+                  <span>3. MOVE</span>
+                  {streamEvent?.agent === "MOVE" ? (
+                    <span className="text-[10px] font-mono text-amber-300 animate-pulse">Evaluating...</span>
+                  ) : streamEvent?.step && streamEvent.step > 4 ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : null}
+                </div>
+                <p className="text-[11px] leading-snug">
+                  Identifies gating blockers &amp; next best action.
+                </p>
+              </div>
+            </div>
+
+            {streamEvent?.message && (
+              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-mono text-amber-300 flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>{streamEvent.message}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Morning Brief On-Demand CTA Banner (Shown when not run yet) */}
+        {!brief && !briefLoading && (
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500 text-slate-950 rounded-lg shrink-0 shadow-2xs">
+                <Sun className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  Morning Brief
+                </h3>
+                <p className="text-xs text-amber-800/90 mt-0.5">
+                  Click <strong>Morning Brief</strong> to run <strong>UNDERSTAND</strong>, <strong>PLAN</strong>, and <strong>MOVE</strong> agents and synthesize today&apos;s prioritized plan.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={runMorningBrief}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer shrink-0"
+            >
+              <Sun className="h-3.5 w-3.5" />
+              <span>Run Morning Brief</span>
+            </button>
+          </div>
+        )}
+
         {/* 1. Daily Work Plan (Priority Focus — Powered by Morning Brief) */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -367,16 +574,29 @@ export default function MyDayPage() {
                   Daily Work Plan
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Synthesized by Plan Agent &middot; {lastRefreshed ? `Refreshed at ${lastRefreshed}` : "Active"}
+                  {brief
+                    ? `Synthesized by Plan Agent &middot; Refreshed at ${lastRefreshed}`
+                    : "On-demand &middot; Click 'Morning Brief' to run agents"}
                 </p>
               </div>
             </div>
 
-            {proposedPlan?.plan_id && (
-              <span className="font-mono text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">
-                Plan {proposedPlan.plan_id}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {proposedPlan?.plan_id && (
+                <span className="font-mono text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">
+                  Plan {proposedPlan.plan_id}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={runMorningBrief}
+                disabled={briefLoading}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
+              >
+                <Sun className={`h-3 w-3 ${briefLoading ? "animate-spin" : ""}`} />
+                <span>{briefLoading ? "Running..." : brief ? "Re-run Brief" : "Run Morning Brief"}</span>
+              </button>
+            </div>
           </div>
 
           <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-xs space-y-3">
@@ -402,6 +622,23 @@ export default function MyDayPage() {
                 {primaryAction}
               </p>
             </div>
+
+            {/* When brief not run yet, prompt user */}
+            {!brief && !briefLoading && (
+              <div className="p-3 bg-slate-800/60 border border-slate-700/60 rounded-lg flex items-center justify-between text-xs">
+                <span className="text-slate-300">
+                  Ordered task sequence &amp; IST due targets are synthesized on-demand.
+                </span>
+                <button
+                  type="button"
+                  onClick={runMorningBrief}
+                  disabled={briefLoading}
+                  className="text-amber-400 hover:text-amber-300 font-bold text-xs inline-flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+                >
+                  <span>Run Morning Brief &rarr;</span>
+                </button>
+              </div>
+            )}
 
             {/* Ordered Work Sequence with Calm Task Tracking */}
             {effectiveTasks.length > 0 && (

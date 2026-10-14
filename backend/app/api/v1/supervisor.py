@@ -192,6 +192,20 @@ async def get_daily_work_brief_stream(engagement_id: str, db: Session = Depends(
                     approved_work_plan=work_plan,
                     progress_callback=sync_progress_callback
                 )
+                def persist_timeline_event():
+                    db.add(TimelineEvent(
+                        id=f"evt-{uuid.uuid4().hex[:8]}",
+                        engagement_id=engagement_id,
+                        event_type="MORNING_BRIEF_GENERATED",
+                        title=f"Morning Brief Generated (v{version})",
+                        description=f"Supervisor synthesized sequential Morning Brief (UNDERSTAND → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
+                        actor_type="SUPERVISOR",
+                        actor_id="supervisor_coordinator",
+                        created_at=datetime.utcnow()
+                    ))
+                    db.commit()
+                await asyncio.to_thread(persist_timeline_event)
+
                 loop.call_soon_threadsafe(
                     queue.put_nowait,
                     {"type": "complete", "success": True, "data": brief.model_dump()}
