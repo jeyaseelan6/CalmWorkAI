@@ -525,7 +525,8 @@ class SupervisorCoordinator:
             "OUTCOME_CHANGE_PROPOSED": "OUTCOME",
             "OUTCOME_APPROVED": "OUTCOME",
             "CHANGE_DETECTED": "REQUIREMENT",
-            "WORKNOTE_LOGGED": "PROGRESS",
+            "WORKNOTE_LOGGED": "WORKNOTE",
+            "WORKNOTE": "WORKNOTE",
             "APPROVAL_CREATED": "GOVERNANCE",
             "BLOCKER_IDENTIFIED": "BLOCKER",
             "MORNING_BRIEF_GENERATED": "SYSTEM"
@@ -533,8 +534,8 @@ class SupervisorCoordinator:
         if timeline_events:
             for evt in timeline_events:
                 evt_type = getattr(evt, "event_type", "PROGRESS")
-                # Exclude internal morning brief system events so only real business/milestone events appear
-                if evt_type == "MORNING_BRIEF_GENERATED":
+                # Exclude internal morning brief system events and minor task updates so worknotes and major changes shine
+                if evt_type in ("MORNING_BRIEF_GENERATED", "TASK_UPDATED"):
                     continue
                 summary_text = getattr(evt, "description", None) or getattr(evt, "title", "Milestone recorded")
                 evt_date = getattr(evt, "created_at", None)
@@ -552,7 +553,7 @@ class SupervisorCoordinator:
                     date_recorded=date_str,
                     timeline_ref=str(getattr(evt, "id", f"evt-{engagement_id}"))
                 ))
-                if len(what_changed) >= 3:
+                if len(what_changed) >= 5:
                     break
 
         if not what_changed:
@@ -627,9 +628,8 @@ class SupervisorCoordinator:
                 crit_id = crit.get("id", f"sc-{idx+1}") if isinstance(crit, dict) else f"sc-{idx+1}"
                 crit_title = crit.get("title", f"Deliver milestone criterion {idx+1}") if isinstance(crit, dict) else str(crit)
                 is_done = crit.get("completed", False) if isinstance(crit, dict) else False
-                crit_due = crit.get("due_date") or compute_ist_due_date(idx + 1)
-
                 matched_task = existing_task_map.get(crit_id) or existing_task_map.get(f"task-{idx+1}")
+                crit_due = (matched_task.get("due_date") if matched_task else None) or (crit.get("due_date") if isinstance(crit, dict) else None) or compute_ist_due_date(idx + 1)
                 t_status = "COMPLETED" if is_done else (matched_task.get("status", "TODO") if matched_task else "TODO")
                 t_title = matched_task.get("title", crit_title) if (matched_task and matched_task.get("title") and not matched_task.get("title").startswith("task-")) else crit_title
 

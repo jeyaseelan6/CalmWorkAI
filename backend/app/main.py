@@ -1806,39 +1806,72 @@ async def update_routine_task(
     current_outcome.work_plan = wp
     flag_modified(current_outcome, "work_plan")
 
-    # If status changed, synchronize linked Outcome Goal criterion
+    # If status or due_date changed, synchronize linked Outcome Goal criterion
     new_status = str(payload.get("status", "")).upper()
-    if new_status:
-        is_completed = (new_status in ["COMPLETED", "DONE"])
-        linked_id = target_task.get("linked_goal_id") or task_id
-        criteria = list(current_outcome.success_criteria or [])
-        crit_updated = False
-        for c in criteria:
-            if isinstance(c, dict) and (c.get("id") == linked_id or c.get("id") == task_id):
-                c["completed"] = is_completed
+    new_due_date = payload.get("due_date")
+    linked_id = target_task.get("linked_goal_id") or task_id
+    criteria = list(current_outcome.success_criteria or [])
+    crit_updated = False
+
+    for c in criteria:
+        if isinstance(c, dict) and (c.get("id") == linked_id or c.get("id") == task_id):
+            if new_status:
+                c["completed"] = (new_status in ["COMPLETED", "DONE"])
                 crit_updated = True
-                break
-        if crit_updated:
-            current_outcome.success_criteria = criteria
-            flag_modified(current_outcome, "success_criteria")
-            completed_count = sum(1 for c in criteria if isinstance(c, dict) and c.get("completed"))
-            eng.progress = int((completed_count / len(criteria)) * 100) if criteria else eng.progress
+            if new_due_date:
+                c["due_date"] = new_due_date
+                crit_updated = True
+            break
+
+    if crit_updated:
+        current_outcome.success_criteria = criteria
+        flag_modified(current_outcome, "success_criteria")
+        completed_count = sum(1 for c in criteria if isinstance(c, dict) and c.get("completed"))
+        eng.progress = int((completed_count / len(criteria)) * 100) if criteria else eng.progress
 
     eng.updated_at = datetime.utcnow()
 
     user_role = current_user.get("role", "FDE")
     actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
     actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
-    db.add(TimelineEvent(
-        id=f"evt-{uuid.uuid4().hex[:8]}",
-        engagement_id=engagement_id,
-        event_type="TASK_UPDATED",
-        title=f"Task Updated: {target_task.get('title', task_id)}",
-        description=f"{user_role} {actor_name} updated task '{task_id}' to status '{target_task.get('status')}'.",
-        actor_type=user_role,
-        actor_id=actor_id,
-        created_at=datetime.utcnow()
-    ))
+
+    is_completed = (new_status in ["COMPLETED", "DONE"])
+    task_title = target_task.get("title") or task_id
+
+    if is_completed:
+        # User requirement: When a task is marked 'done', record it as a worknote
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="WORKNOTE_LOGGED",
+            title=f"Worknote: {task_title} completed",
+            description=f"Worknote: {user_role} {actor_name} marked task '{task_title}' as completed.",
+            actor_type=user_role,
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
+    elif new_due_date and not new_status:
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="TASK_UPDATED",
+            title=f"Due Date Rescheduled: {task_title}",
+            description=f"{user_role} {actor_name} updated due date for '{task_title}' to {new_due_date}.",
+            actor_type=user_role,
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
+    else:
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="TASK_UPDATED",
+            title=f"Task Updated: {task_title}",
+            description=f"{user_role} {actor_name} updated task '{task_id}' to status '{target_task.get('status')}'.",
+            actor_type=user_role,
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
     db.commit()
 
     return {

@@ -18,13 +18,48 @@ import {
   Sparkles,
   BookOpen,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Calendar,
+  Edit2,
+  X
 } from "lucide-react";
 import Link from "next/link";
-import { MorningBriefData } from "@/components/engagement/DailyWorkBriefing";
+import { MorningBriefData, WhatChangedItem } from "@/components/engagement/DailyWorkBriefing";
 import { formatISTTime, formatISTDate, formatISTDateTime, getNowISTTime } from "@/utils/date";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+function computePresetDue(offsetDays: number, hour: number, minute: number = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayPadded = String(d.getDate()).padStart(2, "0");
+  const monthName = months[d.getMonth()];
+  const year = d.getFullYear();
+  const hourPadded = String(hour).padStart(2, "0");
+  const minPadded = String(minute).padStart(2, "0");
+  return `${dayPadded} ${monthName} ${year}, ${hourPadded}:${minPadded} IST`;
+}
+
+function formatCustomISTDueDate(dateStr: string, timeStr: string = "17:00"): string {
+  if (!dateStr) return "";
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hour, min] = (timeStr || "17:00").split(":").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayPadded = String(day).padStart(2, "0");
+  const monthName = months[month - 1] || "Oct";
+  const hourPadded = String(hour || 17).padStart(2, "0");
+  const minPadded = String(min || 0).padStart(2, "0");
+  return `${dayPadded} ${monthName} ${year}, ${hourPadded}:${minPadded} IST`;
+}
+
+const getTodayDateStr = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 export default function MyDayPage() {
   const { role } = useAuth();
@@ -143,6 +178,43 @@ export default function MyDayPage() {
 
   const effectiveTasks = localTasks.length > 0 ? localTasks : workItems;
 
+  const duePresets = [
+    { label: "Today EOD", shortTime: "18:00 IST", val: computePresetDue(0, 18, 0) },
+    { label: "Tomorrow Midday", shortTime: "14:00 IST", val: computePresetDue(1, 14, 0) },
+    { label: "Tomorrow EOD", shortTime: "18:00 IST", val: computePresetDue(1, 18, 0) },
+    { label: "+2 Days", shortTime: "17:00 IST", val: computePresetDue(2, 17, 0) },
+    { label: "+3 Days", shortTime: "17:00 IST", val: computePresetDue(3, 17, 0) },
+    { label: "+1 Week", shortTime: "17:00 IST", val: computePresetDue(7, 17, 0) }
+  ];
+
+  const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
+  const [customDate, setCustomDate] = useState<string>(getTodayDateStr());
+  const [customTime, setCustomTime] = useState<string>("17:00");
+
+  const handleUpdateDueDate = async (task: any, newDueDate: string) => {
+    setEditingDueDateTaskId(null);
+
+    setLocalTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, due_date: newDueDate } : t))
+    );
+
+    try {
+      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          due_date: newDueDate,
+          status: task.status,
+          linked_goal_id: task.linked_goal_id || task.id
+        })
+      });
+      await fetchEngagementDetail(activeCustomer.id);
+      await fetchBrief();
+    } catch (e) {
+      console.warn("Failed to update task due date:", e);
+    }
+  };
+
   const handleToggleTaskStatus = async (task: any) => {
     const isCurrentlyDone = task.status === "COMPLETED";
     const nextStatus = isCurrentlyDone ? "TODO" : "COMPLETED";
@@ -150,6 +222,24 @@ export default function MyDayPage() {
     setLocalTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t))
     );
+
+    // If marked as done, immediately surface a Worknote in Latest Updates & Worknotes
+    if (nextStatus === "COMPLETED") {
+      const nowISTStr = formatISTDateTime(new Date(), { shortMonth: false, includeZone: false }) || "Just now";
+      const newWorknote: WhatChangedItem = {
+        summary: `Worknote: ${role || "FDE"} marked task '${task.title}' as completed.`,
+        category: "WORKNOTE",
+        date_recorded: nowISTStr,
+        timeline_ref: `temp-${Date.now()}`
+      };
+      setBrief((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          what_changed: [newWorknote, ...(prev.what_changed || [])]
+        };
+      });
+    }
 
     try {
       await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
@@ -161,7 +251,8 @@ export default function MyDayPage() {
           due_date: task.due_date
         })
       });
-      fetchEngagementDetail(activeCustomer.id);
+      await fetchEngagementDetail(activeCustomer.id);
+      await fetchBrief();
     } catch (e) {
       console.warn("Failed to toggle task status:", e);
     }
@@ -351,12 +442,18 @@ export default function MyDayPage() {
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            {item.due_date && (
-                              <span className="flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60">
-                                <Clock className="h-3 w-3 text-amber-400" />
-                                <span>Due: {item.due_date}</span>
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDueDateTaskId(editingDueDateTaskId === item.id ? null : item.id);
+                              }}
+                              className="flex items-center gap-1.5 font-mono text-[10px] text-amber-300 bg-amber-950/60 hover:bg-amber-900/90 px-2 py-0.5 rounded border border-amber-800/60 hover:border-amber-600 transition cursor-pointer group"
+                              title="Click to edit IST due date"
+                            >
+                              <Clock className="h-3 w-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
+                              <span>Due: {item.due_date || "Set target"}</span>
+                              <Edit2 className="h-2.5 w-2.5 text-amber-400/60 group-hover:text-amber-200 transition shrink-0" />
+                            </button>
 
                             <button
                               type="button"
@@ -373,6 +470,71 @@ export default function MyDayPage() {
                             </button>
                           </div>
                         </div>
+
+                        {/* Inline Due Date Editor */}
+                        {editingDueDateTaskId === item.id && (
+                          <div className="mt-2.5 p-3 rounded-lg bg-slate-950/95 border border-amber-500/40 space-y-2.5 text-xs animate-fadeIn">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-[11px]">
+                                <Calendar className="h-3.5 w-3.5" />
+                                <span>Change IST Due Target</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setEditingDueDateTaskId(null)}
+                                className="text-slate-400 hover:text-white p-0.5 transition cursor-pointer"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+
+                            {/* 1-Click IST Presets */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-slate-400 font-mono">1-Click IST Presets:</span>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                {duePresets.map((preset, pIdx) => (
+                                  <button
+                                    key={pIdx}
+                                    type="button"
+                                    onClick={() => handleUpdateDueDate(item, preset.val)}
+                                    className="px-2 py-1 bg-slate-900 hover:bg-amber-950/80 border border-slate-700 hover:border-amber-600/70 text-slate-200 hover:text-amber-300 rounded text-[10px] font-mono text-left transition flex items-center justify-between cursor-pointer"
+                                  >
+                                    <span>{preset.label}</span>
+                                    <span className="text-[9px] text-slate-500 font-mono">{preset.shortTime}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Custom Date & Time Picker */}
+                            <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                              <span className="text-[10px] text-slate-400 font-mono">Custom:</span>
+                              <input
+                                type="date"
+                                value={customDate}
+                                onChange={(e) => setCustomDate(e.target.value)}
+                                className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[11px] text-white focus:outline-none focus:border-amber-500 font-mono"
+                              />
+                              <input
+                                type="time"
+                                value={customTime}
+                                onChange={(e) => setCustomTime(e.target.value)}
+                                className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[11px] text-white focus:outline-none focus:border-amber-500 font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!customDate) return;
+                                  const formatted = formatCustomISTDueDate(customDate, customTime || "17:00");
+                                  handleUpdateDueDate(item, formatted);
+                                }}
+                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-[10px] font-bold font-mono transition cursor-pointer"
+                              >
+                                Set Target
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -455,17 +617,33 @@ export default function MyDayPage() {
             <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5 min-h-[140px]">
               {briefChanges.length > 0 ? (
                 <div className="space-y-2 text-xs">
-                  {briefChanges.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-mono font-bold px-1.5 py-0.5 bg-white text-slate-700 rounded border border-slate-200">
-                          {item.category}
-                        </span>
-                        <span className="text-slate-400 font-mono">{item.date_recorded}</span>
+                  {briefChanges.slice(0, 5).map((item, idx) => {
+                    const isWorknote = item.category === "WORKNOTE";
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded-lg border space-y-1 transition ${
+                          isWorknote
+                            ? "bg-emerald-50/70 border-emerald-200/90 text-emerald-950"
+                            : "bg-slate-50 border-slate-200 text-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span
+                            className={`font-mono font-bold px-1.5 py-0.5 rounded border ${
+                              isWorknote
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : "bg-white text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            {item.category}
+                          </span>
+                          <span className="text-slate-400 font-mono">{item.date_recorded}</span>
+                        </div>
+                        <p className="font-medium text-xs leading-snug">{item.summary}</p>
                       </div>
-                      <p className="font-medium text-xs text-slate-900 leading-snug">{item.summary}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : fallbackEvents.length > 0 ? (
                 <ul className="space-y-2 text-xs">
