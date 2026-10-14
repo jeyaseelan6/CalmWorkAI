@@ -61,6 +61,15 @@ const getTodayDateStr = (): string => {
   return `${y}-${m}-${day}`;
 };
 
+const DUE_PRESET_CONFIG = [
+  { label: "Today EOD", shortTime: "18:00 IST", offsetDays: 0, hour: 18, minute: 0 },
+  { label: "Tomorrow Midday", shortTime: "14:00 IST", offsetDays: 1, hour: 14, minute: 0 },
+  { label: "Tomorrow EOD", shortTime: "18:00 IST", offsetDays: 1, hour: 18, minute: 0 },
+  { label: "+2 Days", shortTime: "17:00 IST", offsetDays: 2, hour: 17, minute: 0 },
+  { label: "+3 Days", shortTime: "17:00 IST", offsetDays: 3, hour: 17, minute: 0 },
+  { label: "+1 Week", shortTime: "17:00 IST", offsetDays: 7, hour: 17, minute: 0 }
+];
+
 export default function MyDayPage() {
   const { role } = useAuth();
   const {
@@ -178,19 +187,14 @@ export default function MyDayPage() {
 
   const effectiveTasks = localTasks.length > 0 ? localTasks : workItems;
 
-  const duePresets = [
-    { label: "Today EOD", shortTime: "18:00 IST", val: computePresetDue(0, 18, 0) },
-    { label: "Tomorrow Midday", shortTime: "14:00 IST", val: computePresetDue(1, 14, 0) },
-    { label: "Tomorrow EOD", shortTime: "18:00 IST", val: computePresetDue(1, 18, 0) },
-    { label: "+2 Days", shortTime: "17:00 IST", val: computePresetDue(2, 17, 0) },
-    { label: "+3 Days", shortTime: "17:00 IST", val: computePresetDue(3, 17, 0) },
-    { label: "+1 Week", shortTime: "17:00 IST", val: computePresetDue(7, 17, 0) }
-  ];
-
   const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
-  const [customDate, setCustomDate] = useState<string>(getTodayDateStr());
+  const [customDate, setCustomDate] = useState<string>("");
   const [customTime, setCustomTime] = useState<string>("17:00");
   const [alertNotification, setAlertNotification] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCustomDate(getTodayDateStr());
+  }, []);
 
   useEffect(() => {
     if (alertNotification) {
@@ -698,11 +702,14 @@ export default function MyDayPage() {
                   1-Click IST Presets:
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {duePresets.map((preset, pIdx) => (
+                  {DUE_PRESET_CONFIG.map((preset, pIdx) => (
                     <button
                       key={pIdx}
                       type="button"
-                      onClick={() => handleUpdateDueDate(editingTask, preset.val)}
+                      onClick={() => {
+                        const computedVal = computePresetDue(preset.offsetDays, preset.hour, preset.minute);
+                        handleUpdateDueDate(editingTask, computedVal);
+                      }}
                       className="p-2.5 bg-slate-800/90 hover:bg-amber-950/70 border border-slate-700 hover:border-amber-500/70 text-slate-200 hover:text-amber-300 rounded-lg text-xs font-mono text-left transition flex items-center justify-between cursor-pointer group"
                     >
                       <span className="font-medium group-hover:text-white">{preset.label}</span>
