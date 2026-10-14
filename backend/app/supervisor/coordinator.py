@@ -34,8 +34,10 @@ from app.agents.adk_runtime import (
     create_privacy_guardrail_callback,
     create_adk_runner,
     execute_adk_runner,
-    _MOCK_ADK_RESPONSES
+    _MOCK_ADK_RESPONSES,
+    is_live_inference_enabled
 )
+from app.ai.groq_service import groq_service
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,14 @@ class SourceCitation(BaseModel):
     snippet: str
 
 
+class DelegatedAgentInfo(BaseModel):
+    id: str  # "UNDERSTAND" | "MOVE" | "DELIVER" | "KNOW" | "MULTI_AGENT"
+    name: str  # e.g. "UNDERSTAND Agent"
+    role: str  # e.g. "Requirements & Scope Intelligence"
+    badge_label: str  # e.g. "Scope & Contract Specialist"
+    color: str  # "purple" | "amber" | "rose" | "blue" | "slate"
+
+
 class SupervisorQueryResponse(BaseModel):
     engagement_id: str
     query: str
@@ -68,6 +78,7 @@ class SupervisorQueryResponse(BaseModel):
     capabilities_used: List[str]
     sufficient_evidence: bool = True
     suggested_followups: List[str]
+    delegated_agent: Optional[DelegatedAgentInfo] = None
     timestamp: str
 
 
@@ -271,142 +282,428 @@ class SupervisorCoordinator:
         outcome_statement: str = "",
         success_criteria: List[Dict[str, Any]] = None,
         version: int = 1,
-        pending_approvals: int = 0
+        pending_approvals: int = 0,
+        timeline_events: Optional[List[Any]] = None,
+        approved_work_plan: Optional[Dict[str, Any]] = None,
+        pending_approvals_list: Optional[List[Any]] = None,
+        engagement_progress: int = 0
     ) -> SupervisorQueryResponse:
         """
         Universal Conversational Interface ('Ask CalmWork'):
-        Interprets intent, prepares context over shared memory, orchestrates specialists,
-        and enforces strict privacy & anti-hallucination policies.
+        1. Classifies the intent of the message (UNDERSTAND, MOVE, DELIVER, KNOW, MULTI_AGENT).
+        2. Explicitly hands over execution to the relevant specialist agent.
+        3. Generates rich, context-aware responses utilizing real engagement timeline,
+           work plan tasks, definition of done, and blockers.
         """
         logger.info(f"Supervisor processing query for engagement {engagement_id}: '{raw_query}'")
 
-        # Apply Privacy Boundary
+        # 1. Apply Defense-in-Depth Privacy Boundary
         sanitized_query, mapping = self.privacy_engine.process_llm_input(raw_query, session_id=engagement_id)
+        q_lower = sanitized_query.lower().strip()
 
-        q_lower = sanitized_query.lower()
-        capabilities_used = []
-        sources = []
-
-        # Intent Detection Logic
-        if any(w in q_lower for w in ["changed", "requirement", "impact", "scope", "biometric", "scan", "tablet", "iris"]):
-            intent = "UNDERSTAND"
-            capabilities_used.append("UNDERSTAND")
-        elif any(w in q_lower for w in ["blocking", "blocker", "do next", "action", "focus"]):
-            intent = "MOVE"
-            capabilities_used.append("MOVE")
-        elif any(w in q_lower for w in ["customer", "update", "tell them", "share", "email"]):
-            intent = "DELIVER"
-            capabilities_used.append("DELIVER")
-        else:
-            intent = "KNOW"
-            capabilities_used.append("KNOW")
-
-        # Check for multi-agent questions (e.g. "What changed and what is blocking production?")
-        if len([word for word in ["changed", "blocking", "customer", "next"] if word in q_lower]) >= 2:
-            intent = "MULTI_AGENT"
-            capabilities_used = ["UNDERSTAND", "MOVE", "KNOW", "DELIVER"]
-
-        # Run Grounded RAG search via KNOW agent
-        know_response = self.know_agent.answer_question(
-            engagement_id=engagement_id,
-            raw_question=sanitized_query,
-            top_k=3
-        )
-
-        for cit in know_response.citations:
-            sources.append(SourceCitation(
-                title=cit.document_title,
-                source_type="DOCUMENT",
-                snippet=cit.snippet
-            ))
-
-        # Check for anti-hallucination fallback requirement
-        sufficient = know_response.evidence_sufficient
-        if not sufficient and intent == "KNOW" and not (self.gemini_service and self.gemini_service.api_key):
-            answer = "I don't have enough verified engagement evidence to answer this confidently."
-            return SupervisorQueryResponse(
-                engagement_id=engagement_id,
-                query=raw_query,
-                intent_detected=intent,
-                answer=answer,
-                sources=[],
-                capabilities_used=capabilities_used,
-                sufficient_evidence=False,
-                suggested_followups=["Record a worknote with additional context", "Upload official technical specification document"],
-                timestamp=datetime.now(timezone.utc).isoformat()
-            )
-
-        # Synthesize Multi-Agent Answer
-        answer_parts = []
-
-        if "UNDERSTAND" in capabilities_used:
-            # If user provided a specific requirement text in query, run dynamic analysis
-            if any(term in q_lower for term in ["requires", "mandate", "iris", "tablet", "nurse", "biometric", "sso", "security", "hipaa", "audit"]):
-                try:
-                    eval_res = self.understand_agent.analyze_change(
-                        raw_change_text=raw_query,
-                        current_outcome_statement=outcome_statement,
-                        current_success_criteria=[]
-                    )
-                    answer_parts.append(
-                        f"**UNDERSTAND Agent Analysis**:\n"
-                        f"- **Evidence**: {'; '.join(eval_res.evidence[:2])}\n"
-                        f"- **Reasoning**: {'; '.join(eval_res.reasoning[:2])}\n"
-                        f"- **Recommendation**: {eval_res.recommendation}\n"
-                        f"- **Risk Score**: {eval_res.risk_score}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Live understand eval fallback: {str(e)}")
-                    answer_parts.append(f"**UNDERSTAND Analysis**: Analyzed requirement change for {customer_name}. Scope shift requires review.")
-            elif status == "NEEDS_REASSESSMENT":
-                answer_parts.append(f"**UNDERSTAND Analysis**: Enterprise SSO requirement was identified, which shifted Outcome Version {version} status to NEEDS_REASSESSMENT pending Manager approval of Outcome Goals v2.")
+        # 2. Extract & Format Grounded Engagement Context
+        crit_items = success_criteria or []
+        completed_crits = [c for c in crit_items if isinstance(c, dict) and c.get("completed")]
+        total_crits = len(crit_items)
+        crit_lines = []
+        for c in crit_items:
+            if isinstance(c, dict):
+                crit_lines.append(f"- [{'x' if c.get('completed') else ' '}] {c.get('title', 'Criterion')}")
             else:
-                answer_parts.append(f"**UNDERSTAND Analysis**: Outcome Version {version} ('{outcome_statement}') remains aligned with customer requirements.")
+                crit_lines.append(f"- [ ] {str(c)}")
+        crit_formatted = "\n".join(crit_lines) if crit_lines else "No formal success criteria recorded."
 
-        if "MOVE" in capabilities_used:
-            next_act = self.move_agent.determine_next_action(
-                engagement_id=engagement_id,
-                customer_name=customer_name,
-                current_work_cycle=current_work_cycle,
-                status=status,
-                outcome_version=version,
-                pending_approvals=pending_approvals
-            )
-            answer_parts.append(f"**MOVE Action**: Next Best Action is '{next_act.action_title}'. {next_act.why_now}")
+        wp = approved_work_plan or {}
+        tasks = wp.get("tasks", []) if isinstance(wp, dict) else []
+        task_lines = []
+        in_progress_tasks = []
+        for t in tasks:
+            if isinstance(t, dict):
+                t_stat = str(t.get("status", "TODO")).upper()
+                t_title = t.get("title", "Task")
+                t_due = t.get("due_date", "Unscheduled")
+                task_lines.append(f"- [{t_stat}] {t_title} (Due: {t_due})")
+                if t_stat in ["IN_PROGRESS", "ACTIVE"]:
+                    in_progress_tasks.append(t)
+        tasks_formatted = "\n".join(task_lines[:6]) if task_lines else "No work plan tasks initialized."
 
-        if "DELIVER" in capabilities_used:
-            answer_parts.append(f"**DELIVER Communication**: Customer update draft generated.")
+        events = timeline_events or []
+        recent_event_lines = []
+        for ev in events[:6]:
+            t = getattr(ev, "title", None) or (ev.get("title") if isinstance(ev, dict) else "")
+            d = getattr(ev, "description", None) or (ev.get("description") if isinstance(ev, dict) else "")
+            ev_type = getattr(ev, "event_type", None) or (ev.get("event_type") if isinstance(ev, dict) else "")
+            dt = getattr(ev, "created_at", None) or (ev.get("created_at") if isinstance(ev, dict) else "")
+            dt_str = dt.strftime("%Y-%m-%d %H:%M") if hasattr(dt, "strftime") else str(dt)[:16]
+            recent_event_lines.append(f"- [{dt_str}] ({ev_type}) {t}: {d}")
+        timeline_formatted = "\n".join(recent_event_lines) if recent_event_lines else "No recent worknotes or events recorded."
 
-        if "KNOW" in capabilities_used and know_response.evidence_sufficient and know_response.answer:
-            answer_parts.append(f"**KNOW Evidence**: {know_response.answer}")
+        apprs = pending_approvals_list or []
+        pending_desc_lines = []
+        for a in apprs:
+            a_type = getattr(a, "type", None) or (a.get("type") if isinstance(a, dict) else "APPROVAL")
+            a_req = getattr(a, "requested_by", None) or (a.get("requested_by") if isinstance(a, dict) else "FDE")
+            pending_desc_lines.append(f"{a_type} (Requested by {a_req})")
+        pending_approvals_desc = "; ".join(pending_desc_lines) if pending_desc_lines else ("None" if pending_approvals == 0 else f"{pending_approvals} pending approval(s)")
 
-        # If it's a general question or greeting, synthesize via Google ADK Plan Agent
-        if not answer_parts:
-            prompt = (
-                f"Customer Engagement: {customer_name}\n"
-                f"Active Outcome: {outcome_statement}\n"
-                f"Status: {status}\n"
-                f"User Message: {sanitized_query}"
+        # 3. Intent Detection: AI Classification with Semantic Pattern Fallback
+        intent = None
+        if groq_service.is_configured() or is_live_inference_enabled():
+            classification_prompt = (
+                f"You are the intent router for CalmWork AI multi-agent platform.\n"
+                f"Classify the user message into EXACTLY ONE category:\n"
+                f"- UNDERSTAND: Questions about requirements, scope changes, what changed today/recently, contract drift, additions/deletions, or new customer mandates.\n"
+                f"- MOVE: Questions about immediate next actions, what to do next, priorities, blockers, overdue tasks, or why production/progress is blocked.\n"
+                f"- DELIVER: Requests to prepare or draft a customer update, stakeholder communication, email, progress report, or status memo.\n"
+                f"- KNOW: Questions about technical architecture, specs, database schemas, cutover windows, runbooks, documentation, or how systems work.\n"
+                f"- MULTI_AGENT: Inquiries spanning multiple areas or asking for a general project status overview.\n\n"
+                f"User Message: \"{sanitized_query}\"\n\n"
+                f"Return ONLY the single word category name: UNDERSTAND, MOVE, DELIVER, KNOW, or MULTI_AGENT."
             )
             try:
-                adk_reply = execute_adk_runner(
-                    runner=self.runner,
-                    user_id="fde_user",
-                    session_id=engagement_id,
-                    message_text=prompt
+                raw_cat = groq_service.generate_chat_completion(
+                    prompt=classification_prompt,
+                    system_instruction="You are an intent classification router. Return only one category name.",
+                    max_tokens=15
                 )
-                if adk_reply:
-                    answer_parts.append(adk_reply)
-            except Exception as e:
-                logger.warning(f"ADK Plan Agent conversational runner fallback: {e}")
+                if raw_cat:
+                    candidate = raw_cat.strip().upper()
+                    for cat in ["UNDERSTAND", "MOVE", "DELIVER", "KNOW", "MULTI_AGENT"]:
+                        if cat in candidate:
+                            intent = cat
+                            break
+            except Exception as ex:
+                logger.debug(f"LLM intent classification fallback to rule matching: {ex}")
 
-            if not answer_parts:
-                answer_parts.append(know_response.answer)
+        # Semantic pattern matching fallback
+        if not intent:
+            if any(term in q_lower for term in [
+                "what should i do", "what to do next", "do next", "what next", "next action",
+                "next step", "what's next", "why is production blocked", "why is it blocked",
+                "blocked", "blocking", "blocker", "priority", "priorities", "focus on",
+                "tasks today", "what task", "task to work on"
+            ]):
+                intent = "MOVE"
+            elif any(term in q_lower for term in [
+                "what changed", "what's changed", "changed today", "recent change", "scope change",
+                "scope drift", "new requirement", "requirement shift", "contract drift", "added",
+                "mandate", "in scope", "out of scope", "changed", "requirements"
+            ]):
+                intent = "UNDERSTAND"
+            elif any(term in q_lower for term in [
+                "customer update", "client update", "stakeholder update", "prepare an update",
+                "prepare update", "draft update", "draft an update", "tell the customer",
+                "share with the client", "email update", "status memo", "email to the customer"
+            ]):
+                intent = "DELIVER"
+            elif any(term in q_lower for term in [
+                "cutover", "window", "spec", "architecture", "encryption", "database",
+                "runbook", "schema", "debezium", "cdc", "how does", "what is the", "policy",
+                "documentation", "technical"
+            ]):
+                intent = "KNOW"
+            elif len([w for w in ["changed", "blocking", "customer", "next", "spec", "update"] if w in q_lower]) >= 2:
+                intent = "MULTI_AGENT"
+            else:
+                intent = "KNOW"
 
-        final_answer = "\n\n".join(answer_parts) if answer_parts else know_response.answer
+        capabilities_used = [intent] if intent != "MULTI_AGENT" else ["UNDERSTAND", "MOVE", "KNOW", "DELIVER"]
+        sources: List[SourceCitation] = []
+        answer = ""
 
-        # Restore de-anonymized names if needed
-        final_answer = self.privacy_engine.sanitize_output(final_answer, mapping)
+        # 4. Handover to Relevant Specialist Agent & Context-Aware Execution
+
+        if intent == "UNDERSTAND":
+            handover_banner = "🎯 **[Handed over to UNDERSTAND Agent — Requirements & Scope Intelligence]**\n\n"
+
+            llm_response = None
+            if groq_service.is_configured() or is_live_inference_enabled():
+                understand_prompt = (
+                    f"You are the UNDERSTAND Agent in CalmWork AI. You protect scope integrity and track requirement evolution.\n\n"
+                    f"Engagement Context:\n"
+                    f"- Customer: {customer_name} ({engagement_id})\n"
+                    f"- Current Work Cycle: {current_work_cycle}\n"
+                    f"- Status: {status}\n"
+                    f"- Outcome Version {version}: \"{outcome_statement}\"\n"
+                    f"- Progress: {engagement_progress}% ({len(completed_crits)}/{total_crits} criteria completed)\n\n"
+                    f"Success Criteria (Outcome Goals):\n{crit_formatted}\n\n"
+                    f"Recent Timeline Events & Worknotes:\n{timeline_formatted}\n\n"
+                    f"User Query: \"{sanitized_query}\"\n\n"
+                    f"Provide a concise, direct, professional response answering the user's question with full context of recent timeline events, worknotes, and whether current work remains strictly within approved scope."
+                )
+                try:
+                    llm_response = groq_service.generate_chat_completion(
+                        prompt=understand_prompt,
+                        system_instruction="You are the CalmWork UNDERSTAND Agent. Respond concisely and professionally based on factual context.",
+                        max_tokens=600
+                    )
+                except Exception as e:
+                    logger.debug(f"UNDERSTAND LLM call fallback: {e}")
+
+            if llm_response:
+                answer = handover_banner + llm_response.strip()
+            else:
+                parts = [handover_banner]
+                if events:
+                    parts.append(f"**Recent Timeline Activity for {customer_name}:**")
+                    for ev in events[:4]:
+                        t = getattr(ev, "title", None) or (ev.get("title") if isinstance(ev, dict) else "")
+                        d = getattr(ev, "description", None) or (ev.get("description") if isinstance(ev, dict) else "")
+                        parts.append(f"- **{t}**: {d}")
+                    parts.append("")
+
+                parts.append(f"**Outcome Goals Alignment (v{version}):**")
+                parts.append(f"Outcome statement: *\"{outcome_statement}\"* (Progress: {engagement_progress}%, {len(completed_crits)}/{total_crits} criteria completed).")
+                if crit_items:
+                    parts.append("\n**Definition of Done Status:**")
+                    for c in crit_items[:4]:
+                        if isinstance(c, dict):
+                            box = "✅" if c.get("completed") else "⏳"
+                            parts.append(f"- {box} {c.get('title', 'Criterion')}")
+                if status == "NEEDS_REASSESSMENT":
+                    parts.append("\n⚠️ **Scope Alert**: Engagement is flagged as `NEEDS_REASSESSMENT`. An unapproved scope addition or contract shift was detected requiring Manager authorization.")
+                else:
+                    parts.append("\n✅ Current engineering trajectory remains aligned with approved contractual scope.")
+                answer = "\n".join(parts)
+
+        elif intent == "MOVE":
+            handover_banner = "⚡ **[Handed over to MOVE Agent — Operational Velocity & Next Actions]**\n\n"
+
+            llm_response = None
+            if groq_service.is_configured() or is_live_inference_enabled():
+                move_prompt = (
+                    f"You are the MOVE Agent in CalmWork AI. You specialize in operational velocity, eliminating blockers, and recommending the single highest-leverage next action.\n\n"
+                    f"Engagement Context:\n"
+                    f"- Customer: {customer_name}\n"
+                    f"- Current Work Cycle: {current_work_cycle}\n"
+                    f"- Status: {status}\n"
+                    f"- Pending Approvals: {pending_approvals_desc}\n\n"
+                    f"Active Work Plan Tasks:\n{tasks_formatted}\n\n"
+                    f"Recent Activity:\n{timeline_formatted}\n\n"
+                    f"User Query: \"{sanitized_query}\"\n\n"
+                    f"Identify the Next Best Action for the engineer, explain WHY NOW, address any gating approvals or blockers, and specify immediate next steps."
+                )
+                try:
+                    llm_response = groq_service.generate_chat_completion(
+                        prompt=move_prompt,
+                        system_instruction="You are the CalmWork MOVE Agent. Provide high-clarity operational guidance.",
+                        max_tokens=600
+                    )
+                except Exception as e:
+                    logger.debug(f"MOVE LLM call fallback: {e}")
+
+            if llm_response:
+                answer = handover_banner + llm_response.strip()
+            else:
+                next_act = self.move_agent.determine_next_action(
+                    engagement_id=engagement_id,
+                    customer_name=customer_name,
+                    current_work_cycle=current_work_cycle,
+                    status=status,
+                    outcome_version=version,
+                    pending_approvals=pending_approvals
+                )
+                parts = [
+                    handover_banner,
+                    f"**Next Best Action**: {next_act.action_title}\n",
+                    f"**Why Now**: {next_act.why_now}\n",
+                    f"**Impact**: {next_act.impact}\n",
+                    f"**Priority**: `{next_act.priority_level}` (Confidence: {next_act.confidence})"
+                ]
+                if any(b in q_lower for b in ["blocked", "blocker", "blocking"]):
+                    parts.append("\n### Blocker Analysis:")
+                    if pending_approvals > 0:
+                        parts.append(f"⚠️ **Primary Blocker**: {pending_approvals_desc} is pending Manager approval before progression.")
+                    else:
+                        parts.append("✅ **No Workflow Blockers**: There are no active blocking approvals halting execution.")
+                elif pending_approvals > 0:
+                    parts.append(f"\n⚠️ **Blocker Gate**: {pending_approvals_desc} is pending Manager approval before progression.")
+
+                if in_progress_tasks:
+                    parts.append(f"\n**Immediate Task in Flight**: {in_progress_tasks[0].get('title')} (Due: {in_progress_tasks[0].get('due_date', 'Unscheduled')})")
+                elif tasks:
+                    parts.append(f"\n**Next Task in Queue**: {tasks[0].get('title')} (Status: {tasks[0].get('status', 'TODO')})")
+                answer = "\n".join(parts)
+
+        elif intent == "DELIVER":
+            handover_banner = "📢 **[Handed over to DELIVER Agent — Stakeholder Communications]**\n\n"
+
+            llm_response = None
+            if groq_service.is_configured() or is_live_inference_enabled():
+                deliver_prompt = (
+                    f"You are the DELIVER Agent in CalmWork AI. You translate engineering progress into calm, high-trust executive stakeholder communication.\n\n"
+                    f"Engagement Context:\n"
+                    f"- Customer: {customer_name}\n"
+                    f"- Current Stage: {current_work_cycle}\n"
+                    f"- Outcome Objective: \"{outcome_statement}\"\n"
+                    f"- Progress: {engagement_progress}%\n"
+                    f"- Completed Criteria:\n{crit_formatted}\n\n"
+                    f"Recent Engineering Worknotes:\n{timeline_formatted}\n\n"
+                    f"User Query: \"{sanitized_query}\"\n\n"
+                    f"Draft a clean, professional stakeholder update containing:\n"
+                    f"1. Executive Summary\n"
+                    f"2. Key Milestones Achieved\n"
+                    f"3. Next Milestones & Commitments\n"
+                    f"4. Customer Action Items (if any)\n"
+                    f"Note: Remind the user that manager approval is required before external distribution."
+                )
+                try:
+                    llm_response = groq_service.generate_chat_completion(
+                        prompt=deliver_prompt,
+                        system_instruction="You are the CalmWork DELIVER Agent. Write clear, executive-grade customer communications.",
+                        max_tokens=700
+                    )
+                except Exception as e:
+                    logger.debug(f"DELIVER LLM call fallback: {e}")
+
+            if llm_response:
+                answer = handover_banner + llm_response.strip()
+            else:
+                draft = self.deliver_agent.generate_customer_update(
+                    engagement_id=engagement_id,
+                    customer_name=customer_name,
+                    engagement_name=customer_name,
+                    outcome_statement=outcome_statement,
+                    success_criteria=crit_items,
+                    current_work_cycle=current_work_cycle
+                )
+                parts = [
+                    handover_banner,
+                    f"### {draft.subject}\n",
+                    f"**Executive Summary**:\n{draft.executive_summary}\n",
+                    "**Key Milestones Achieved**:"
+                ]
+                for m in draft.key_milestones_achieved:
+                    parts.append(f"- {m}")
+                parts.append(f"\n**Next Milestone Target**: {draft.next_milestone_target}")
+                if draft.customer_action_items:
+                    parts.append("\n**Customer Action Items**:")
+                    for a in draft.customer_action_items:
+                        parts.append(f"- {a}")
+                parts.append("\n*Note: Customer updates require Manager authorization in the Approvals queue prior to client distribution.*")
+                answer = "\n".join(parts)
+
+        elif intent == "KNOW":
+            handover_banner = "📚 **[Handed over to KNOW Agent — Grounded Technical Documentation]**\n\n"
+            know_response = self.know_agent.answer_question(
+                engagement_id=engagement_id,
+                raw_question=sanitized_query,
+                top_k=3
+            )
+            for cit in know_response.citations:
+                sources.append(SourceCitation(
+                    title=cit.document_title,
+                    source_type="DOCUMENT",
+                    snippet=cit.snippet
+                ))
+
+            if know_response.evidence_sufficient:
+                answer = handover_banner + know_response.answer
+            else:
+                answer = handover_banner + (
+                    f"I searched the verified documentation for {customer_name}, but there is not enough specific evidence "
+                    f"in the knowledge base to answer this query with high confidence.\n\n"
+                    f"**Recommendation**: Please upload the technical specification, runbook, or architecture document "
+                    f"via the Documents tab to index this information into the KNOW Agent."
+                )
+
+        else:  # MULTI_AGENT / SUPERVISOR
+            handover_banner = "🧭 **[CalmWork Plan Agent — Central Multi-Agent Orchestration]**\n\n"
+            parts = [
+                handover_banner,
+                f"### 360° Operational Briefing for {customer_name}\n",
+                f"**1. Scope & Requirements (UNDERSTAND)**:",
+                f"- Outcome Version {version}: *\"{outcome_statement}\"*",
+                f"- Definition of Done: {len(completed_crits)}/{total_crits} criteria complete ({engagement_progress}% progress).",
+                f"- Status: `{status}`\n",
+                f"**2. Velocity & Active Tasks (MOVE)**:",
+                f"- Current Work Cycle: {current_work_cycle}",
+                f"- Pending Approvals: {pending_approvals_desc}"
+            ]
+            if in_progress_tasks:
+                parts.append(f"- Task in Progress: {in_progress_tasks[0].get('title')}")
+
+            parts.append("\n**3. Recent Shared Timeline Activity**:")
+            for ev in events[:3]:
+                t = getattr(ev, "title", None) or (ev.get("title") if isinstance(ev, dict) else "")
+                parts.append(f"- {t}")
+
+            answer = "\n".join(parts)
+
+        # 5. Restore de-anonymized names if needed
+        final_answer = self.privacy_engine.sanitize_output(answer, mapping)
+
+        # 6. Dynamic Suggested Followups based on intent
+        if intent == "UNDERSTAND":
+            suggested_followups = [
+                "What success criteria are still incomplete?",
+                "Record a worknote on scope discussion",
+                "What should I do next?"
+            ]
+        elif intent == "MOVE":
+            suggested_followups = [
+                "What approvals are currently pending?",
+                "Show active tasks in work plan",
+                "Prepare a customer update"
+            ]
+        elif intent == "DELIVER":
+            suggested_followups = [
+                "Submit update for Manager approval",
+                "Download executive summary PDF",
+                "What should I do next?"
+            ]
+        elif intent == "KNOW":
+            suggested_followups = [
+                "Search engagement architecture docs",
+                "Upload official specification document",
+                "What changed today?"
+            ]
+        else:
+            suggested_followups = [
+                "What changed today?",
+                "What should I do next?",
+                "Prepare a customer update"
+            ]
+
+        # 7. Delegated Specialist Agent Metadata
+        agent_directory = {
+            "UNDERSTAND": DelegatedAgentInfo(
+                id="UNDERSTAND",
+                name="UNDERSTAND Agent",
+                role="Requirements & Scope Intelligence",
+                badge_label="Scope & Contract Specialist",
+                color="purple"
+            ),
+            "MOVE": DelegatedAgentInfo(
+                id="MOVE",
+                name="MOVE Agent",
+                role="Operational Velocity & Next Actions",
+                badge_label="Velocity & Blocker Specialist",
+                color="amber"
+            ),
+            "DELIVER": DelegatedAgentInfo(
+                id="DELIVER",
+                name="DELIVER Agent",
+                role="Stakeholder Communications",
+                badge_label="Executive Communication Specialist",
+                color="rose"
+            ),
+            "KNOW": DelegatedAgentInfo(
+                id="KNOW",
+                name="KNOW Agent",
+                role="Grounded Technical Documentation",
+                badge_label="Verified Technical Knowledge",
+                color="blue"
+            ),
+            "MULTI_AGENT": DelegatedAgentInfo(
+                id="MULTI_AGENT",
+                name="CalmWork Plan Agent",
+                role="Central Multi-Agent Orchestration",
+                badge_label="Universal Orchestrator",
+                color="slate"
+            )
+        }
+        delegated_agent = agent_directory.get(intent, agent_directory["MULTI_AGENT"])
 
         return SupervisorQueryResponse(
             engagement_id=engagement_id,
@@ -416,11 +713,8 @@ class SupervisorCoordinator:
             sources=sources,
             capabilities_used=capabilities_used,
             sufficient_evidence=True,
-            suggested_followups=[
-                "What is the current status of Outcome Goals v2?",
-                "Draft an executive customer status update",
-                "Who is the security team owner for OAuth configuration?"
-            ],
+            suggested_followups=suggested_followups,
+            delegated_agent=delegated_agent,
             timestamp=datetime.now(timezone.utc).isoformat()
         )
 

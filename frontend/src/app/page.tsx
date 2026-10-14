@@ -543,7 +543,7 @@ export default function MyDayPage() {
                 </div>
               ) : fallbackBlockers.length > 0 ? (
                 <ul className="space-y-2 text-xs">
-                  {fallbackBlockers.map((blocker, idx) => (
+                  {fallbackBlockers.map((blocker: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-2 text-slate-800">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
                       <span className="leading-relaxed">{blocker}</span>

@@ -71,6 +71,8 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
     criteria = current_outcome.success_criteria if current_outcome else []
     version = current_outcome.version if current_outcome else 1
     approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
+    timeline = db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).order_by(TimelineEvent.created_at.desc()).limit(15).all()
+    work_plan = current_outcome.work_plan if current_outcome else None
 
     response = supervisor_coordinator.query_supervisor(
         engagement_id=engagement_id,
@@ -81,7 +83,11 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
         outcome_statement=statement,
         success_criteria=criteria,
         version=version,
-        pending_approvals=len(approvals)
+        pending_approvals=len(approvals),
+        timeline_events=timeline,
+        approved_work_plan=work_plan,
+        pending_approvals_list=approvals,
+        engagement_progress=eng.progress
     )
 
     return {

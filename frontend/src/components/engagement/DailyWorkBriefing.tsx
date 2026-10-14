@@ -157,7 +157,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
         <AgentProgressStream
           currentEvent={streamEvent}
           history={streamHistory}
-          title={`Supervisor Synthesizing Morning Brief for ${activeCustomer.name}`}
+          title={`Supervisor Synthesizing Morning Brief for ${activeCustomer.customerName}`}
         />
       </div>
     );
@@ -216,7 +216,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
         <AgentProgressStream
           currentEvent={streamEvent}
           history={streamHistory}
-          title={`Supervisor Updating Morning Brief for ${activeCustomer.name}`}
+          title={`Supervisor Updating Morning Brief for ${activeCustomer.customerName}`}
         />
       )}
 
