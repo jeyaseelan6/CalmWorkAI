@@ -535,33 +535,6 @@ export default function MyDayPage() {
           </div>
         )}
 
-        {/* Morning Brief On-Demand CTA Banner (Shown when not run yet) */}
-        {!brief && !briefLoading && (
-          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500 text-slate-950 rounded-lg shrink-0 shadow-2xs">
-                <Sun className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                  Morning Brief
-                </h3>
-                <p className="text-xs text-amber-800/90 mt-0.5">
-                  Click <strong>Morning Brief</strong> to run <strong>UNDERSTAND</strong>, <strong>PLAN</strong>, and <strong>MOVE</strong> agents and synthesize today&apos;s prioritized plan.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={runMorningBrief}
-              className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer shrink-0"
-            >
-              <Sun className="h-3.5 w-3.5" />
-              <span>Run Morning Brief</span>
-            </button>
-          </div>
-        )}
-
         {/* 1. Daily Work Plan (Priority Focus — Powered by Morning Brief) */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -576,27 +549,16 @@ export default function MyDayPage() {
                 <p className="text-[11px] text-slate-500">
                   {brief
                     ? `Synthesized by Plan Agent &middot; Refreshed at ${lastRefreshed}`
-                    : "On-demand &middot; Click 'Morning Brief' to run agents"}
+                    : "Click 'Morning Brief' in the header to synthesize today's plan"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {proposedPlan?.plan_id && (
-                <span className="font-mono text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">
-                  Plan {proposedPlan.plan_id}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={runMorningBrief}
-                disabled={briefLoading}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
-              >
-                <Sun className={`h-3 w-3 ${briefLoading ? "animate-spin" : ""}`} />
-                <span>{briefLoading ? "Running..." : brief ? "Re-run Brief" : "Run Morning Brief"}</span>
-              </button>
-            </div>
+            {proposedPlan?.plan_id && (
+              <span className="font-mono text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">
+                Plan {proposedPlan.plan_id}
+              </span>
+            )}
           </div>
 
           <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-xs space-y-3">
@@ -623,20 +585,10 @@ export default function MyDayPage() {
               </p>
             </div>
 
-            {/* When brief not run yet, prompt user */}
+            {/* When brief not run yet, calm guidance */}
             {!brief && !briefLoading && (
-              <div className="p-3 bg-slate-800/60 border border-slate-700/60 rounded-lg flex items-center justify-between text-xs">
-                <span className="text-slate-300">
-                  Ordered task sequence &amp; IST due targets are synthesized on-demand.
-                </span>
-                <button
-                  type="button"
-                  onClick={runMorningBrief}
-                  disabled={briefLoading}
-                  className="text-amber-400 hover:text-amber-300 font-bold text-xs inline-flex items-center gap-1 cursor-pointer shrink-0 ml-2"
-                >
-                  <span>Run Morning Brief &rarr;</span>
-                </button>
+              <div className="p-3 bg-slate-800/50 border border-slate-700/60 rounded-lg text-xs text-slate-400">
+                Ordered task sequence &amp; IST due targets will be synthesized when Morning Brief runs.
               </div>
             )}
 
