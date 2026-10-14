@@ -245,7 +245,7 @@ def execute_adk_runner(
                 prompt=message_text,
                 system_instruction=instruction,
                 json_mode=json_mode,
-                max_tokens=700
+                max_tokens=2048
             )
             if groq_response:
                 return groq_response

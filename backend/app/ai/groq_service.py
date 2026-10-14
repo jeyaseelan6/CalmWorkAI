@@ -27,7 +27,7 @@ class GroqService:
         prompt: str,
         system_instruction: Optional[str] = None,
         json_mode: bool = False,
-        max_tokens: Optional[int] = 700
+        max_tokens: Optional[int] = 2048
     ) -> Optional[str]:
         """
         Executes a chat completion against Groq API.
@@ -50,7 +50,7 @@ class GroqService:
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
-            "max_tokens": max_tokens or 700
+            "max_tokens": max_tokens or 2048
         }
 
         if json_mode:
