@@ -120,17 +120,7 @@ export default function MyDayPage() {
     ? Math.round((completedCount / successCriteria.length) * 100)
     : 0;
 
-  const handleToggleCriterion = async (criterionId: string) => {
-    try {
-      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/goals/${criterionId}/toggle`, {
-        method: "PATCH"
-      });
-      fetchEngagementDetail(activeCustomer.id);
-      fetchBrief();
-    } catch (e) {
-      console.warn("Failed to toggle criterion:", e);
-    }
-  };
+
 
   const pendingApprovalsCount = activeEngagementData?.pending_approvals_count ?? (approvedAcme ? 0 : 1);
 
@@ -286,6 +276,16 @@ export default function MyDayPage() {
           </div>
 
           <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-xs space-y-3">
+            {/* Active Engagement Outcome Goal Statement */}
+            <div className="flex items-center justify-between text-xs pb-2.5 border-b border-slate-800/80">
+              <span className="text-slate-300 italic text-xs leading-snug">
+                &ldquo;{outcomeStatement}&rdquo;
+              </span>
+              <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-3">
+                {progressPct}% Progress
+              </span>
+            </div>
+
             {/* Recommended First Action Highlight */}
             <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-1">
               <div className="flex items-center gap-1.5">
@@ -489,54 +489,7 @@ export default function MyDayPage() {
             </div>
           </div>
         </div>
-
-        {/* 3. Outcome Goals Checklist */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-              Outcome Goals ({completedCount}/{successCriteria.length})
-            </span>
-            <span className="text-xs font-mono text-slate-500">{progressPct}% Complete</span>
-          </div>
-
-          <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3">
-            <p className="text-xs text-slate-600 italic">
-              &ldquo;{outcomeStatement}&rdquo;
-            </p>
-
-            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-              <div
-                className="bg-slate-900 h-full transition-all duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-
-            <ul className="space-y-1.5 pt-1 text-xs">
-              {successCriteria.map((item: any) => (
-                <li
-                  key={item.id}
-                  onClick={() => handleToggleCriterion(item.id)}
-                  className={`flex items-start gap-2.5 p-2 rounded-lg transition cursor-pointer hover:bg-slate-50 ${
-                    item.completed ? "text-slate-400" : "text-slate-800"
-                  }`}
-                >
-                  <button type="button" className="mt-0.5 shrink-0 focus:outline-none">
-                    {item.completed ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-slate-300 hover:text-slate-500 transition" />
-                    )}
-                  </button>
-                  <span className={`flex-1 leading-snug ${item.completed ? "line-through text-slate-400" : "font-medium"}`}>
-                    {item.title}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        {/* 4. Traceability & Reasoning (Progressive Disclosure) */}
+        {/* 3. Traceability & Reasoning (Progressive Disclosure) */}
         {brief?.evidence_and_confidence && brief.evidence_and_confidence.length > 0 && (
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
             <button
