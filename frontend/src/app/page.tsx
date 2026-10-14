@@ -25,10 +25,13 @@ import {
   Compass,
   X,
   Target,
-  FileText
+  FileText,
+  Plus,
+  Building2
 } from "lucide-react";
 import Link from "next/link";
 import { MorningBriefData, WhatChangedItem } from "@/components/engagement/DailyWorkBriefing";
+import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
 import { formatISTTime, formatISTDate, formatISTDateTime, getNowISTTime } from "@/utils/date";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -346,7 +349,81 @@ export default function MyDayPage() {
     }
   }, [alertNotification]);
 
+  const [showCreateEngagementModal, setShowCreateEngagementModal] = useState(false);
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskWhy, setNewTaskWhy] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState(computePresetDue(0, 18, 0));
+  const [addTaskSubmitting, setAddTaskSubmitting] = useState(false);
+  const [adoptingTasks, setAdoptingTasks] = useState(false);
+
   const editingTask = effectiveTasks.find((t: any) => t.id === editingDueDateTaskId);
+
+  // Manager & FDE Manual Task Creation
+  const handleCreateManualTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    setAddTaskSubmitting(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: newTaskTitle.trim(),
+          why_it_matters: newTaskWhy.trim() || `Operational task for ${activeCustomer.customerName}`,
+          due_date: newTaskDueDate || computePresetDue(0, 18, 0),
+          status: "TODO"
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const created = json.data;
+        setLocalTasks((prev) => [...prev, created]);
+        setAlertNotification(`Task added: '${created.title}'`);
+        setIsAddTaskModalOpen(false);
+        setNewTaskTitle("");
+        setNewTaskWhy("");
+        await fetchEngagementDetail(activeCustomer.id);
+      }
+    } catch (err) {
+      console.error("Failed to add task:", err);
+    } finally {
+      setAddTaskSubmitting(false);
+    }
+  };
+
+  // Adding Plan Agent Generated Tasks directly without Manager approval
+  const handleAdoptPlanAgentTasks = async () => {
+    if (!brief?.proposed_work_plan?.work_items || brief.proposed_work_plan.work_items.length === 0) return;
+    setAdoptingTasks(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          tasks: brief.proposed_work_plan.work_items
+        })
+      });
+
+      if (res.ok) {
+        setAlertNotification(`${brief.proposed_work_plan.work_items.length} Plan Agent tasks added to work plan!`);
+        await fetchEngagementDetail(activeCustomer.id);
+      }
+    } catch (err) {
+      console.error("Failed to adopt Plan Agent tasks:", err);
+    } finally {
+      setAdoptingTasks(false);
+    }
+  };
 
   const handleUpdateDueDate = async (task: any, newDueDate: string) => {
     setEditingDueDateTaskId(null);
@@ -512,6 +589,16 @@ export default function MyDayPage() {
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
                 <span>Refresh</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowCreateEngagementModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs"
+                title="Create a new customer engagement (Manager & FDE)"
+              >
+                <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                <span>+ New Engagement</span>
               </button>
 
               <Link
@@ -726,11 +813,34 @@ export default function MyDayPage() {
                       : "Active Engagement Work Plan &middot; Click 'Morning Brief' to re-prioritize"}
                   </p>
                 </div>
-                {proposedPlan?.plan_id && (
-                  <span className="font-mono text-xs px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200">
-                    Plan {proposedPlan.plan_id}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {brief?.proposed_work_plan?.work_items && brief.proposed_work_plan.work_items.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleAdoptPlanAgentTasks}
+                      disabled={adoptingTasks}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                      title="Add tasks generated by Plan Agent directly to work plan without manager approval"
+                    >
+                      <Sparkles className="h-3 w-3 text-emerald-600" />
+                      <span>{adoptingTasks ? "Adding..." : `Add ${brief.proposed_work_plan.work_items.length} Plan Tasks`}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsAddTaskModalOpen(true)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-md bg-slate-900 hover:bg-slate-800 text-white transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="Add a new work task to this engagement (Manager &amp; FDE authorized)"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Add Task</span>
+                  </button>
+                  {proposedPlan?.plan_id && (
+                    <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200 hidden sm:inline-block">
+                      Plan {proposedPlan.plan_id}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {effectiveTasks.length === 0 && !briefLoading && (
@@ -887,68 +997,7 @@ export default function MyDayPage() {
               </div>
             </div>
 
-            {/* Latest Updates & Worknotes on the side */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-slate-500" />
-                  <span className="text-xs uppercase tracking-wider font-mono font-bold text-slate-600 block">
-                    Latest Worknotes &amp; Updates
-                  </span>
-                </div>
-                <span className="text-xs font-mono text-slate-400">
-                  {uniqueChanges.length > 0 ? `${uniqueChanges.length} Recorded` : "Baseline"}
-                </span>
-              </div>
 
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-                {uniqueChanges.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {uniqueChanges.slice(0, 4).map((item, idx) => {
-                      const isWorknote = item.category === "WORKNOTE";
-                      return (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-xl border space-y-1.5 transition ${
-                            isWorknote
-                              ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
-                              : "bg-slate-50 border-slate-200 text-slate-900"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-xs">
-                            <span
-                              className={`font-mono font-bold px-1.5 py-0.5 rounded border text-[10px] ${
-                                isWorknote
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : "bg-white text-slate-700 border-slate-200"
-                              }`}
-                            >
-                              {item.category}
-                            </span>
-                            <span className="text-slate-500 font-mono text-xs">{item.date_recorded}</span>
-                          </div>
-                          <p className="font-medium text-xs sm:text-sm leading-snug">{item.summary}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : fallbackEvents.length > 0 ? (
-                  <ul className="space-y-2.5 text-sm">
-                    {fallbackEvents.map((evt: any) => (
-                      <li key={evt.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-800">
-                        <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
-                          <span className="font-bold">{evt.actor_type}</span>
-                          <span>{formatISTTime(evt.created_at, true)}</span>
-                        </div>
-                        <p className="font-medium text-xs sm:text-sm leading-snug">{evt.title}</p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-500 py-3 text-center">Baseline engagement parameters active.</p>
-                )}
-              </div>
-            </div>
           </div>
         </div>
         {/* 3. Traceability & Reasoning (Progressive Disclosure) */}
@@ -1096,6 +1145,125 @@ export default function MyDayPage() {
             </div>
           </div>
         )}
+
+        {/* Add Work Task Modal (Manager & FDE) */}
+        {isAddTaskModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 animate-fadeIn"
+            onClick={() => setIsAddTaskModalOpen(false)}
+          >
+            <div
+              className="bg-white border border-slate-200 rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4 text-slate-900 relative animate-scaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                    <Plus className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-sm text-slate-900">Add Work Task</h3>
+                    <p className="text-[11px] text-slate-500">
+                      Creates an authoritative task in {activeCustomer.customerName}&apos;s work plan
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddTaskModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition cursor-pointer"
+                  title="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateManualTask} className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700 block uppercase font-mono">
+                    Task Title *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Verify Redis cache failover cluster"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-slate-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700 block uppercase font-mono">
+                    Why It Matters / Operational Note
+                  </label>
+                  <textarea
+                    placeholder="e.g. Fulfills security audit checklist item for production milestone."
+                    value={newTaskWhy}
+                    onChange={(e) => setNewTaskWhy(e.target.value)}
+                    rows={2}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-slate-400 resize-none"
+                  />
+                </div>
+
+                {/* 1-Click IST Due Target Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
+                    Target IST Due Date:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DUE_PRESET_CONFIG.slice(0, 3).map((preset, pIdx) => {
+                      const presetVal = computePresetDue(preset.offsetDays, preset.hour, preset.minute);
+                      const isSelected = newTaskDueDate === presetVal;
+                      return (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => setNewTaskDueDate(presetVal)}
+                          className={`p-2 rounded-lg text-xs font-mono text-left transition border cursor-pointer ${
+                            isSelected
+                              ? "bg-amber-50 border-amber-300 text-amber-900 font-bold"
+                              : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          <div className="font-semibold text-[11px]">{preset.label}</div>
+                          <div className="text-[10px] text-slate-500">{preset.shortTime}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[11px] font-mono text-amber-800 bg-amber-50/60 p-2 rounded border border-amber-200/60">
+                    Selected Target: {newTaskDueDate || "None"}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddTaskModalOpen(false)}
+                    className="px-3 py-1.5 rounded-md text-xs text-slate-600 hover:text-slate-800 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addTaskSubmitting || !newTaskTitle.trim()}
+                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-md transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>{addTaskSubmitting ? "Adding..." : "Add Task to Work Plan"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Create New Engagement Modal (Manager & FDE) */}
+        <CreateEngagementModal
+          isOpen={showCreateEngagementModal}
+          onClose={() => setShowCreateEngagementModal(false)}
+        />
 
         {/* Alert Notification Toast */}
         {alertNotification && (

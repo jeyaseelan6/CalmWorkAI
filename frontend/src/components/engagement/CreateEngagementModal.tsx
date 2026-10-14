@@ -77,7 +77,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
             </div>
             <div>
               <h3 className="text-sm font-bold font-display text-slate-900">Create New Customer Engagement</h3>
-              <p className="text-[11px] text-slate-500">Manager Authority: Immediately syncs to FDE cockpit</p>
+              <p className="text-[11px] text-slate-500">Manager &amp; FDE Grounding: Immediately syncs to workspace &amp; daily work sequence</p>
             </div>
           </div>
           <button 

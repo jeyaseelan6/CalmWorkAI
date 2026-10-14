@@ -74,9 +74,9 @@ def list_engagements(db: Session = Depends(get_db)):
 def create_engagement(
     payload: CreateEngagementRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
 ):
-    """Create a new customer engagement initiative (Manager role required)."""
+    """Create a new customer engagement initiative (Manager & FDE authorized)."""
     if not payload.customer_name.strip() or not payload.name.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -106,6 +106,10 @@ def create_engagement(
         else f"Successfully deliver {payload.name} for {payload.customer_name}."
     )
 
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+
     # 1. Create initial Outcome (v1)
     outcome = Outcome(
         id=outcome_id,
@@ -114,8 +118,8 @@ def create_engagement(
         statement=statement,
         success_criteria=criteria,
         status=OutcomeStatus.APPROVED,
-        created_by=current_user["name"],
-        approved_by=current_user["name"],
+        created_by=actor_name,
+        approved_by=actor_name,
         created_at=datetime.utcnow(),
         approved_at=datetime.utcnow()
     )
@@ -131,7 +135,7 @@ def create_engagement(
         current_work_cycle=WorkCycleStep.STEP_1_UNDERSTAND_BUSINESS_REALITY,
         progress=10,
         current_outcome_id=outcome_id,
-        created_by=current_user["name"],
+        created_by=actor_name,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -143,9 +147,9 @@ def create_engagement(
         engagement_id=engagement_id,
         event_type="ENGAGEMENT_CREATED",
         title="Engagement Initialized",
-        description=f"Manager {current_user['name']} initialized new engagement for {payload.customer_name}.",
-        actor_type="MANAGER",
-        actor_id=current_user["name"],
+        description=f"{user_role} {actor_name} initialized new engagement for {payload.customer_name}.",
+        actor_type=user_role,
+        actor_id=actor_id,
         created_at=datetime.utcnow()
     )
     db.add(timeline_evt)
@@ -457,24 +461,93 @@ def create_routine_task(
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(require_role(["FDE", "MANAGER"]))
 ):
-    """Create a routine task in the active work plan within approved scope."""
+    """
+    Create routine tasks in the active work plan within approved scope.
+    Supports single task creation as well as batch task ingestion (e.g. from Plan Agent).
+    Authorized for both Manager and FDE.
+    """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
-    if not current_outcome or not current_outcome.work_plan:
-        raise HTTPException(status_code=400, detail="Active work plan must be established before adding tasks")
+    if not current_outcome:
+        raise HTTPException(status_code=404, detail="Active outcome not found")
 
     from sqlalchemy.orm.attributes import flag_modified
-    wp = dict(current_outcome.work_plan)
-    tasks = list(wp.get("tasks", []))
+    wp = dict(current_outcome.work_plan or {})
+    if "milestones" not in wp or not wp["milestones"]:
+        wp["milestones"] = [{"id": "m-1", "title": "Milestone 1", "sequence_order": 1}]
+    if "tasks" not in wp or not isinstance(wp["tasks"], list):
+        wp["tasks"] = []
 
+    tasks = list(wp["tasks"])
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+
+    # Check for batch tasks (e.g. from Plan Agent)
+    batch_tasks = payload.get("tasks")
+    if isinstance(batch_tasks, list) and len(batch_tasks) > 0:
+        added_tasks = []
+        default_ms = wp["milestones"][0].get("id", "m-1") if wp["milestones"] else "m-1"
+        for idx, item in enumerate(batch_tasks):
+            if not isinstance(item, dict):
+                continue
+            title = item.get("title") or item.get("name") or f"Task {len(tasks)+1}"
+            task_id = item.get("id") or f"task-{len(tasks)+1}-{uuid.uuid4().hex[:4]}"
+            # Deduplicate by task_id or title
+            if any(t.get("id") == task_id or t.get("title") == title for t in tasks):
+                continue
+            new_item = {
+                "id": task_id,
+                "milestone_id": item.get("milestone_id") or default_ms,
+                "title": title,
+                "description": item.get("description", item.get("why_it_matters", "")),
+                "status": item.get("status", "TODO"),
+                "sequence_order": item.get("sequence_order", len(tasks) + 1),
+                "due_date": item.get("due_date"),
+                "linked_goal_id": item.get("linked_goal_id") or task_id,
+                "dependencies": item.get("dependencies", []),
+                "estimated_days": item.get("estimated_days", 1)
+            }
+            tasks.append(new_item)
+            added_tasks.append(new_item)
+
+        wp["tasks"] = tasks
+        current_outcome.work_plan = wp
+        flag_modified(current_outcome, "work_plan")
+        eng.updated_at = datetime.utcnow()
+
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="TASKS_INGESTED",
+            title=f"Plan Agent Tasks Added ({len(added_tasks)} tasks)",
+            description=f"{user_role} {actor_name} added {len(added_tasks)} tasks generated by Plan Agent to work plan.",
+            actor_type=user_role,
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
+        db.commit()
+
+        return {
+            "success": True,
+            "data": added_tasks,
+            "tasks": tasks,
+            "message": f"{len(added_tasks)} tasks added to work plan successfully."
+        }
+
+    # Single task creation (Manager or FDE manual add task)
+    default_ms = wp["milestones"][0].get("id", "m-1") if wp["milestones"] else "m-1"
     new_task = {
         "id": payload.get("id") or f"task-{len(tasks)+1}-{uuid.uuid4().hex[:4]}",
-        "milestone_id": payload.get("milestone_id") or (wp.get("milestones", [{}])[0].get("id") if wp.get("milestones") else "m-1"),
+        "milestone_id": payload.get("milestone_id") or default_ms,
         "title": payload.get("title", "New Task"),
-        "description": payload.get("description", ""),
-        "status": payload.get("status", "NOT_STARTED"),
+        "description": payload.get("description", payload.get("why_it_matters", "")),
+        "status": payload.get("status", "TODO"),
+        "sequence_order": payload.get("sequence_order", len(tasks) + 1),
+        "due_date": payload.get("due_date"),
+        "linked_goal_id": payload.get("linked_goal_id"),
         "dependencies": payload.get("dependencies", []),
         "estimated_days": payload.get("estimated_days", 1)
     }
@@ -484,9 +557,6 @@ def create_routine_task(
     flag_modified(current_outcome, "work_plan")
     eng.updated_at = datetime.utcnow()
 
-    user_role = current_user.get("role", "FDE")
-    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
-    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
     db.add(TimelineEvent(
         id=f"evt-{uuid.uuid4().hex[:8]}",
         engagement_id=engagement_id,
@@ -502,5 +572,6 @@ def create_routine_task(
     return {
         "success": True,
         "data": new_task,
+        "tasks": tasks,
         "message": "Routine task created successfully."
     }

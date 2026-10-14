@@ -231,22 +231,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
 
-                {/* Manager Action: Create New Engagement */}
-                {role === "MANAGER" && (
-                  <div className="pt-1 mt-1 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        setShowCreateModal(true);
-                      }}
-                      className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-slate-500" />
-                      <span>New Engagement...</span>
-                    </button>
-                  </div>
-                )}
+                {/* Manager & FDE Action: Create New Engagement */}
+                <div className="pt-1 mt-1 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      setShowCreateModal(true);
+                    }}
+                    className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-slate-500" />
+                    <span>New Engagement...</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -312,7 +310,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+              title="Create a new customer engagement (Manager & FDE)"
+            >
+              <Building2 className="h-3.5 w-3.5 text-slate-500" />
+              <span>+ New Engagement</span>
+            </button>
+
             <button
               onClick={() => setIsWorknoteDrawerOpen(true)}
               className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition cursor-pointer"

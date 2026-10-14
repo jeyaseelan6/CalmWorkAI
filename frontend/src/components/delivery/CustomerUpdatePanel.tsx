@@ -155,12 +155,23 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
     }
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!draft) return;
     if (!approved) {
-      alert("Manager Approval Required: This executive summary must be approved by an Engineering Manager before downloading the PDF.");
+      alert("Manager Approval Required: This DELIVER agent report cannot be downloaded as PDF until approved by an Engineering Manager.");
       return;
     }
+
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`);
+      if (!res.ok) {
+        alert("Manager Approval Required: The DELIVER agent report cannot be downloaded as PDF until approved by an Engineering Manager.");
+        return;
+      }
+    } catch (e) {
+      if (!approved) return;
+    }
+
     downloadCustomerUpdatePdf({
       customerName,
       engagementName,
@@ -175,12 +186,23 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
     });
   };
 
-  const handlePrintPdf = () => {
+  const handlePrintPdf = async () => {
     if (!draft) return;
     if (!approved) {
-      alert("Manager Approval Required: This executive summary must be approved by an Engineering Manager before viewing or printing the PDF.");
+      alert("Manager Approval Required: This DELIVER agent report cannot be viewed as PDF until approved by an Engineering Manager.");
       return;
     }
+
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`);
+      if (!res.ok) {
+        alert("Manager Approval Required: The DELIVER agent report cannot be viewed as PDF until approved by an Engineering Manager.");
+        return;
+      }
+    } catch (e) {
+      if (!approved) return;
+    }
+
     printCustomerUpdateDocument({
       customerName,
       engagementName,
@@ -312,7 +334,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
                 </p>
                 {isFDE && (
                   <p className="text-amber-700 text-[10px] font-mono mt-1">
-                    * Currently logged in as FDE. Switch role to Manager in the top navbar to authorize release, or wait for Manager sign-off.
+                    * Currently logged in as FDE. An Engineering Manager must authorize this executive report before PDF viewing or download is unlocked.
                   </p>
                 )}
               </div>

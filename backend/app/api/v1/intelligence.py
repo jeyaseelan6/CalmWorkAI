@@ -259,3 +259,41 @@ def get_customer_update_approval_status(engagement_id: str, db: Session = Depend
         },
         "message": "Customer update approval status retrieved."
     }
+
+
+@router.get("/engagements/{engagement_id}/customer-updates/pdf-status", tags=["Delivery"])
+def verify_customer_update_pdf_export_authorization(
+    engagement_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Enforces strict Manager Approval Gating for Deliver Agent Executive Customer Update PDF export.
+    Returns 403 Forbidden until an Engineering Manager has authorized the report release.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    latest_approval = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE
+    ).order_by(Approval.created_at.desc()).first()
+
+    if not latest_approval or latest_approval.status != ApprovalStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager approval required: The DELIVER agent report cannot be downloaded or viewed as PDF until approved by an Engineering Manager."
+        )
+
+    return {
+        "success": True,
+        "data": {
+            "engagement_id": engagement_id,
+            "pdf_authorized": True,
+            "status": "APPROVED",
+            "approved_by": latest_approval.reviewed_by or "Engineering Manager",
+            "approved_at": latest_approval.reviewed_at.isoformat() if latest_approval.reviewed_at else None
+        },
+        "message": "DELIVER agent executive report release authorized for PDF download by Engineering Manager."
+    }
+
