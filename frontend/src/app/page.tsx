@@ -190,6 +190,18 @@ export default function MyDayPage() {
   const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
   const [customDate, setCustomDate] = useState<string>(getTodayDateStr());
   const [customTime, setCustomTime] = useState<string>("17:00");
+  const [alertNotification, setAlertNotification] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (alertNotification) {
+      const timer = setTimeout(() => {
+        setAlertNotification(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [alertNotification]);
+
+  const editingTask = effectiveTasks.find((t) => t.id === editingDueDateTaskId);
 
   const handleUpdateDueDate = async (task: any, newDueDate: string) => {
     setEditingDueDateTaskId(null);
@@ -197,6 +209,8 @@ export default function MyDayPage() {
     setLocalTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, due_date: newDueDate } : t))
     );
+
+    setAlertNotification(`Due date updated for '${task.title}' to ${newDueDate}.`);
 
     try {
       await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
@@ -225,6 +239,7 @@ export default function MyDayPage() {
 
     // If marked as done, immediately surface a Worknote in Latest Updates & Worknotes
     if (nextStatus === "COMPLETED") {
+      setAlertNotification(`Worknote logged: '${task.title}' marked as Done.`);
       const nowISTStr = formatISTDateTime(new Date(), { shortMonth: false, includeZone: false }) || "Just now";
       const newWorknote: WhatChangedItem = {
         summary: `Worknote: ${role || "FDE"} marked task '${task.title}' as completed.`,
@@ -239,6 +254,8 @@ export default function MyDayPage() {
           what_changed: [newWorknote, ...(prev.what_changed || [])]
         };
       });
+    } else {
+      setAlertNotification(`Task '${task.title}' reopened as To Do.`);
     }
 
     try {
@@ -470,71 +487,6 @@ export default function MyDayPage() {
                             </button>
                           </div>
                         </div>
-
-                        {/* Inline Due Date Editor */}
-                        {editingDueDateTaskId === item.id && (
-                          <div className="mt-2.5 p-3 rounded-lg bg-slate-950/95 border border-amber-500/40 space-y-2.5 text-xs animate-fadeIn">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-[11px]">
-                                <Calendar className="h-3.5 w-3.5" />
-                                <span>Change IST Due Target</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setEditingDueDateTaskId(null)}
-                                className="text-slate-400 hover:text-white p-0.5 transition cursor-pointer"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-
-                            {/* 1-Click IST Presets */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] text-slate-400 font-mono">1-Click IST Presets:</span>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                                {duePresets.map((preset, pIdx) => (
-                                  <button
-                                    key={pIdx}
-                                    type="button"
-                                    onClick={() => handleUpdateDueDate(item, preset.val)}
-                                    className="px-2 py-1 bg-slate-900 hover:bg-amber-950/80 border border-slate-700 hover:border-amber-600/70 text-slate-200 hover:text-amber-300 rounded text-[10px] font-mono text-left transition flex items-center justify-between cursor-pointer"
-                                  >
-                                    <span>{preset.label}</span>
-                                    <span className="text-[9px] text-slate-500 font-mono">{preset.shortTime}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Custom Date & Time Picker */}
-                            <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
-                              <span className="text-[10px] text-slate-400 font-mono">Custom:</span>
-                              <input
-                                type="date"
-                                value={customDate}
-                                onChange={(e) => setCustomDate(e.target.value)}
-                                className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[11px] text-white focus:outline-none focus:border-amber-500 font-mono"
-                              />
-                              <input
-                                type="time"
-                                value={customTime}
-                                onChange={(e) => setCustomTime(e.target.value)}
-                                className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[11px] text-white focus:outline-none focus:border-amber-500 font-mono"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!customDate) return;
-                                  const formatted = formatCustomISTDueDate(customDate, customTime || "17:00");
-                                  handleUpdateDueDate(item, formatted);
-                                }}
-                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-[10px] font-bold font-mono transition cursor-pointer"
-                              >
-                                Set Target
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -706,6 +658,119 @@ export default function MyDayPage() {
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
+
+        {/* Modal Alert Box: Change IST Due Target */}
+        {editingDueDateTaskId && editingTask && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 animate-fadeIn"
+            onClick={() => setEditingDueDateTaskId(null)}
+          >
+            <div
+              className="bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4 text-white relative animate-scaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Alert Box Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-sm text-white">Change IST Due Target</h3>
+                    <p className="text-[11px] text-slate-400 truncate max-w-[340px]">
+                      #{editingTask.sequence_order}. {editingTask.title}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingDueDateTaskId(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition cursor-pointer"
+                  title="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* 1-Click IST Presets */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                  1-Click IST Presets:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {duePresets.map((preset, pIdx) => (
+                    <button
+                      key={pIdx}
+                      type="button"
+                      onClick={() => handleUpdateDueDate(editingTask, preset.val)}
+                      className="p-2.5 bg-slate-800/90 hover:bg-amber-950/70 border border-slate-700 hover:border-amber-500/70 text-slate-200 hover:text-amber-300 rounded-lg text-xs font-mono text-left transition flex items-center justify-between cursor-pointer group"
+                    >
+                      <span className="font-medium group-hover:text-white">{preset.label}</span>
+                      <span className="text-[10px] text-slate-400 font-mono group-hover:text-amber-400">{preset.shortTime}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Date & Time Picker */}
+              <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                  Or Custom IST Target:
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                  <input
+                    type="time"
+                    value={customTime}
+                    onChange={(e) => setCustomTime(e.target.value)}
+                    className="w-28 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Alert Box Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setEditingDueDateTaskId(null)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!customDate) return;
+                    const formatted = formatCustomISTDueDate(customDate, customTime || "17:00");
+                    handleUpdateDueDate(editingTask, formatted);
+                  }}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold font-mono transition cursor-pointer shadow-sm"
+                >
+                  Set Target
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Alert Notification Toast */}
+        {alertNotification && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 bg-slate-900 border border-emerald-500/60 text-white rounded-xl shadow-2xl text-xs font-mono animate-fadeIn">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span>{alertNotification}</span>
+            <button
+              onClick={() => setAlertNotification(null)}
+              className="ml-2 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </AppShell>
   );
