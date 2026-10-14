@@ -106,11 +106,12 @@ export default function MyDayPage() {
     total_steps?: number;
   } | null>(null);
 
-  // Clear brief when active customer changes so it never auto-runs
+  // Clear brief and local tasks when active customer changes so it never auto-runs
   useEffect(() => {
     setBrief(null);
     setLastRefreshed("");
     setStreamEvent(null);
+    setLocalTasks([]);
   }, [activeCustomer?.id]);
 
   // Run sequential Morning Brief (UNDERSTAND -> PLAN/KNOW -> MOVE) only on explicit click
@@ -259,16 +260,73 @@ export default function MyDayPage() {
     nextActionData?.recommendation ||
     `Complete active delivery iteration for ${activeCustomer.customerName}.`;
 
+  // Baseline tasks directly from active engagement data so tasks are always visible on load
+  const baselineTasks = React.useMemo(() => {
+    const outcome = activeEngagementData?.outcome;
+    const wp = outcome?.work_plan;
+    const criteria = outcome?.success_criteria || [];
+
+    const existingTaskMap: Record<string, any> = {};
+    if (wp?.tasks && Array.isArray(wp.tasks)) {
+      wp.tasks.forEach((t: any) => {
+        if (t && typeof t === "object") {
+          if (t.id) existingTaskMap[t.id] = t;
+          if (t.linked_goal_id) existingTaskMap[t.linked_goal_id] = t;
+        }
+      });
+    }
+
+    if (criteria.length > 0) {
+      return criteria.map((c: any, idx: number) => {
+        const critId = typeof c === "object" && c.id ? c.id : `sc-${idx + 1}`;
+        const critTitle = typeof c === "object" ? (c.title || c.statement || `Milestone ${idx + 1}`) : String(c);
+        const isDone = typeof c === "object" ? Boolean(c.completed) : false;
+        const matched = existingTaskMap[critId] || existingTaskMap[`task-${idx + 1}`];
+        const taskDue = matched?.due_date || (typeof c === "object" && c.due_date) || computePresetDue(idx === 0 ? 0 : idx, 17, 0);
+        const taskStatus = isDone ? "COMPLETED" : (matched?.status || "TODO");
+        const finalTitle = matched?.title && !matched.title.startsWith("task-") ? matched.title : critTitle;
+
+        return {
+          id: critId,
+          title: finalTitle,
+          sequence_order: idx + 1,
+          why_it_matters: `Fulfills Outcome Goal criterion for ${activeCustomer.customerName}.`,
+          status: taskStatus === "COMPLETED" ? "COMPLETED" : taskStatus === "IN_PROGRESS" ? "IN_PROGRESS" : "TODO",
+          due_date: taskDue,
+          linked_goal_id: critId
+        };
+      });
+    }
+
+    if (wp?.tasks && Array.isArray(wp.tasks) && wp.tasks.length > 0) {
+      return wp.tasks
+        .filter((t: any) => t && t.title && !t.title.startsWith("task-"))
+        .map((t: any, idx: number) => ({
+          id: t.id || `task-${idx + 1}`,
+          title: t.title,
+          sequence_order: t.sequence_order || idx + 1,
+          why_it_matters: t.why_it_matters || `Fulfills Outcome Goal criterion for ${activeCustomer.customerName}.`,
+          status: t.status === "COMPLETED" ? "COMPLETED" : t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "TODO",
+          due_date: t.due_date || computePresetDue(idx, 17, 0),
+          linked_goal_id: t.linked_goal_id || t.id
+        }));
+    }
+
+    return [];
+  }, [activeEngagementData, activeCustomer.customerName]);
+
   const workItems = proposedPlan?.work_items || [];
   const [localTasks, setLocalTasks] = useState<any[]>([]);
 
   useEffect(() => {
-    if (proposedPlan?.work_items) {
+    if (proposedPlan?.work_items && proposedPlan.work_items.length > 0) {
       setLocalTasks(proposedPlan.work_items);
+    } else if (baselineTasks.length > 0 && localTasks.length === 0) {
+      setLocalTasks(baselineTasks);
     }
-  }, [proposedPlan?.work_items]);
+  }, [proposedPlan?.work_items, baselineTasks, localTasks.length]);
 
-  const effectiveTasks = localTasks.length > 0 ? localTasks : workItems;
+  const effectiveTasks = localTasks.length > 0 ? localTasks : (workItems.length > 0 ? workItems : baselineTasks);
 
   const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
   const [customDate, setCustomDate] = useState<string>("");
@@ -288,7 +346,7 @@ export default function MyDayPage() {
     }
   }, [alertNotification]);
 
-  const editingTask = effectiveTasks.find((t) => t.id === editingDueDateTaskId);
+  const editingTask = effectiveTasks.find((t: any) => t.id === editingDueDateTaskId);
 
   const handleUpdateDueDate = async (task: any, newDueDate: string) => {
     setEditingDueDateTaskId(null);
@@ -653,13 +711,20 @@ export default function MyDayPage() {
             {/* Today's Tasks (Ordered Work Sequence) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-display font-bold text-slate-900">
-                    Today&apos;s Ordered Tasks
-                  </h2>
-                  <span className="text-xs font-mono text-slate-500">
-                    ({effectiveTasks.filter((t) => t.status === "COMPLETED").length}/{effectiveTasks.length} Done)
-                  </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-display font-bold text-slate-900">
+                      Today&apos;s Ordered Tasks
+                    </h2>
+                    <span className="text-xs font-mono text-slate-500">
+                      ({effectiveTasks.filter((t: any) => t.status === "COMPLETED").length}/{effectiveTasks.length} Done)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {brief
+                      ? `Synthesized by Plan Agent &middot; Refreshed at ${lastRefreshed}`
+                      : "Active Engagement Work Plan &middot; Click 'Morning Brief' to re-prioritize"}
+                  </p>
                 </div>
                 {proposedPlan?.plan_id && (
                   <span className="font-mono text-xs px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200">
@@ -668,15 +733,16 @@ export default function MyDayPage() {
                 )}
               </div>
 
-              {!brief && !briefLoading && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 text-center">
-                  Click &lsquo;Morning Brief&rsquo; in the header to synthesize today&apos;s ordered tasks &amp; IST due targets.
+              {effectiveTasks.length === 0 && !briefLoading && (
+                <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-500 text-center space-y-1">
+                  <p className="font-medium text-slate-700">No active tasks in work plan</p>
+                  <p className="text-xs text-slate-400">Click &lsquo;Morning Brief&rsquo; in the header to synthesize today&apos;s tasks &amp; IST targets.</p>
                 </div>
               )}
 
               {effectiveTasks.length > 0 && (
                 <div className="space-y-3">
-                  {effectiveTasks.map((item) => {
+                  {effectiveTasks.map((item: any) => {
                     const isDone = item.status === "COMPLETED";
                     const inProgress = item.status === "IN_PROGRESS";
                     return (
