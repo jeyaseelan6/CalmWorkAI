@@ -28,6 +28,7 @@ import {
   Target,
   CheckSquare
 } from "lucide-react";
+import AgentProgressStream, { AgentStreamEvent } from "./AgentProgressStream";
 
 interface WorkTask {
   id: string;
@@ -101,6 +102,8 @@ export default function WorkPlanSection({
   const [showInputForm, setShowInputForm] = useState<boolean>(!initialWorkPlan);
   const [naturalLanguageInput, setNaturalLanguageInput] = useState<string>("");
   const [isProposing, setIsProposing] = useState<boolean>(false);
+  const [streamEvent, setStreamEvent] = useState<AgentStreamEvent | null>(null);
+  const [streamHistory, setStreamHistory] = useState<AgentStreamEvent[]>([]);
   const [isApproving, setIsApproving] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -155,6 +158,8 @@ export default function WorkPlanSection({
     setIsProposing(true);
     setErrorMsg(null);
     setSuccessMsg(null);
+    setStreamEvent(null);
+    setStreamHistory([]);
 
     try {
       const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || "demo-manager-token";
@@ -163,7 +168,7 @@ export default function WorkPlanSection({
         headers["Authorization"] = `Bearer ${authToken}`;
       }
 
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/plan/propose`, {
+      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/plan/propose/stream`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -172,16 +177,54 @@ export default function WorkPlanSection({
         })
       });
 
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setDraftProposal(json.data);
-        setEditedObjective(json.data.engagement_objective || "");
-        setShowInputForm(false);
-      } else {
-        setErrorMsg(json.detail || json.message || "Failed to generate work plan proposal.");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.detail || "AI service is currently unavailable. Please verify your AI service configuration or try again shortly.");
+      }
+
+      if (!res.body) {
+        throw new Error("Streaming is not supported by your browser environment.");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const event: AgentStreamEvent = JSON.parse(trimmed.slice(6));
+              if (event.type === "progress") {
+                setStreamEvent(event);
+                setStreamHistory((prev) => [...prev, event]);
+              } else if (event.type === "complete" && (event as any).data) {
+                const planData = (event as any).data;
+                setDraftProposal(planData);
+                setEditedObjective(planData.engagement_objective || "");
+                setShowInputForm(false);
+                setStreamEvent(null);
+              } else if (event.type === "error") {
+                setErrorMsg(event.detail || "AI service is currently unavailable. Please verify your AI service configuration or try again shortly.");
+                setStreamEvent(null);
+              }
+            } catch (jsonErr) {
+              console.warn("Failed to parse SSE line:", line, jsonErr);
+            }
+          }
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Network error generating proposal.");
+      setStreamEvent(null);
     } finally {
       setIsProposing(false);
     }
@@ -384,6 +427,15 @@ export default function WorkPlanSection({
               <span>Zero hallucinated dates or owners.</span>
             </div>
           </div>
+
+          {/* Real-time Multi-Agent Progress Stream */}
+          {isProposing && (
+            <AgentProgressStream
+              currentEvent={streamEvent}
+              history={streamHistory}
+              title="Supervisor & Specialist Multi-Agent Orchestration"
+            />
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
             {activePlan && (

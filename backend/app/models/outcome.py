@@ -17,7 +17,7 @@ class Outcome(Base):
     __tablename__ = "outcomes"
 
     id = Column(String(50), primary_key=True)
-    engagement_id = Column(String(50), ForeignKey("engagements.id"), nullable=False)
+    engagement_id = Column(String(50), ForeignKey("engagements.id"), nullable=False, index=True)
     version = Column(Integer, default=1, nullable=False)
     statement = Column(Text, nullable=False)
     success_criteria = Column(JSON, nullable=False)  # List of DoD criteria objects [{title: str, completed: bool}]

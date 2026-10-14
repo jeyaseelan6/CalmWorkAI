@@ -24,10 +24,10 @@ class DocumentModel(Base):
     __tablename__ = "documents"
 
     id = Column(String(50), primary_key=True)
-    engagement_id = Column(String(50), ForeignKey("engagements.id"), nullable=False)
+    engagement_id = Column(String(50), ForeignKey("engagements.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     category = Column(Enum(DocumentCategory), default=DocumentCategory.OTHER, nullable=False)
-    status = Column(Enum(DocumentStatus), default=DocumentStatus.INDEXED, nullable=False)
+    status = Column(Enum(DocumentStatus), default=DocumentStatus.INDEXED, nullable=False, index=True)
     content = Column(Text, nullable=True)
     chunks_count = Column(Integer, default=0, nullable=False)
     uploaded_by = Column(String(100), nullable=False)

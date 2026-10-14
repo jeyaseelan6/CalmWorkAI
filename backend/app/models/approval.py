@@ -21,10 +21,10 @@ class Approval(Base):
     __tablename__ = "approvals"
 
     id = Column(String(50), primary_key=True)
-    engagement_id = Column(String(50), ForeignKey("engagements.id"), nullable=False)
+    engagement_id = Column(String(50), ForeignKey("engagements.id"), nullable=False, index=True)
     type = Column(Enum(ApprovalType), nullable=False)
     target_id = Column(String(50), nullable=True)
-    status = Column(Enum(ApprovalStatus), default=ApprovalStatus.PENDING, nullable=False)
+    status = Column(Enum(ApprovalStatus), default=ApprovalStatus.PENDING, nullable=False, index=True)
     requested_by = Column(String(100), nullable=False)
     reviewed_by = Column(String(100), nullable=True)
     decision_note = Column(Text, nullable=True)

@@ -4,7 +4,7 @@ Central Orchestrator coordinating all 4 specialized agents (UNDERSTAND, KNOW, MO
 over 1 centralized engagement state across the 6 FDE Work Cycles.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from pydantic import BaseModel, Field
 import logging
 import json
@@ -435,7 +435,8 @@ class SupervisorCoordinator:
         current_work_cycle: str = "Step 1: Understand the Business Reality",
         timeline_events: Optional[List[Any]] = None,
         success_criteria: Optional[List[Dict[str, Any]]] = None,
-        approved_work_plan: Optional[Dict[str, Any]] = None
+        approved_work_plan: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> DailyWorkBrief:
         """
         Proactive Morning Brief Workflow (Sequential Execution):
@@ -446,6 +447,15 @@ class SupervisorCoordinator:
         5. SUPERVISOR -> Consolidates findings & creates Proposed Daily Work Plan
         * CRITICAL REQUIREMENT: DELIVER is EXCLUDED from default Morning Brief *
         """
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "SUPERVISOR",
+                "stage": "STATE",
+                "message": "Loading engagement state snapshot & timeline...",
+                "step": 1,
+                "total_steps": 5
+            })
         now_str = datetime.now(IST_TZ).strftime("%d/%m/%Y %H:%M")
         now_iso = datetime.now(IST_TZ).isoformat()
         warnings: List[str] = []
@@ -453,6 +463,15 @@ class SupervisorCoordinator:
         # -------------------------------------------------------------
         # STEP 1: Invoke UNDERSTAND Agent (Identify Outcome & Scope Drift)
         # -------------------------------------------------------------
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "UNDERSTAND",
+                "stage": "SCOPE_ANALYSIS",
+                "message": "UNDERSTAND Agent analyzing requirement changes & scope drift...",
+                "step": 2,
+                "total_steps": 5
+            })
         raw_change = ""
         if timeline_events:
             for evt in timeline_events:
@@ -484,6 +503,15 @@ class SupervisorCoordinator:
         # -------------------------------------------------------------
         # STEP 2: Invoke KNOW Agent (Guided RAG Retrieval using UNDERSTAND findings)
         # -------------------------------------------------------------
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "KNOW",
+                "stage": "EVIDENCE_RETRIEVAL",
+                "message": f"KNOW Agent performing grounded RAG retrieval for {customer_name}...",
+                "step": 3,
+                "total_steps": 5
+            })
         know_findings = None
         try:
             guided_query = f"{customer_name} technical specifications, architectural constraints, and outcome criteria"
@@ -501,6 +529,15 @@ class SupervisorCoordinator:
         # -------------------------------------------------------------
         # STEP 3: Invoke MOVE Agent (Blockers, Dependencies, Next Action)
         # -------------------------------------------------------------
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "MOVE",
+                "stage": "ACTION_EVALUATION",
+                "message": "MOVE Agent evaluating gating blockers & Next Best Action...",
+                "step": 4,
+                "total_steps": 5
+            })
         move_findings = None
         try:
             move_findings = self.move_agent.determine_next_action(
@@ -519,6 +556,15 @@ class SupervisorCoordinator:
         # STEP 4: Supervisor Synthesis & Work Plan Preparation
         # (Constructing Sections A, B, C, D, E dynamically)
         # -------------------------------------------------------------
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "SUPERVISOR",
+                "stage": "SYNTHESIS",
+                "message": "Supervisor assembling Daily Work Plan & IST Due Targets...",
+                "step": 5,
+                "total_steps": 5
+            })
         
         # Section A: What Changed?
         what_changed: List[WhatChangedItem] = []
@@ -836,7 +882,8 @@ class SupervisorCoordinator:
         existing_plan_edits: Optional[Dict[str, Any]] = None,
         current_outcome_statement: Optional[str] = None,
         current_success_criteria: Optional[List[Any]] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> StructuredWorkPlanProposal:
         """
         Supervisor Work Planning Engine:
@@ -852,12 +899,30 @@ class SupervisorCoordinator:
         proposal_id = f"prop-{uuid.uuid4().hex[:8]}"
 
         # 1. Apply Pre-LLM Privacy Guardrail
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "SUPERVISOR",
+                "stage": "PRIVACY",
+                "message": "Sanitizing input through Privacy Guardrail...",
+                "step": 1,
+                "total_steps": 4
+            })
         sanitized_desc, mapping = self.privacy_engine.process_llm_input(
             natural_language_description,
             session_id=engagement_id
         )
 
         # 2. Retrieve any relevant indexed specifications
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "KNOW",
+                "stage": "RETRIEVAL",
+                "message": f"KNOW Agent retrieving indexed technical documentation for {customer_name}...",
+                "step": 2,
+                "total_steps": 4
+            })
         grounded_context = ""
         try:
             know_res = self.know_agent.answer_question(
@@ -935,6 +1000,15 @@ class SupervisorCoordinator:
         has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
+                if progress_callback:
+                    progress_callback({
+                        "type": "progress",
+                        "agent": "SUPERVISOR",
+                        "stage": "INFERENCE",
+                        "message": "Planning Engine synthesizing structured delivery plan with AI...",
+                        "step": 3,
+                        "total_steps": 4
+                    })
                 raw_reply = execute_adk_runner(
                     runner=self.runner,
                     user_id="manager_user",
@@ -961,6 +1035,16 @@ class SupervisorCoordinator:
                 status_code=503,
                 detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
             )
+
+        if progress_callback:
+            progress_callback({
+                "type": "progress",
+                "agent": "SUPERVISOR",
+                "stage": "VALIDATION",
+                "message": "Validating milestone hierarchy, dependencies & Outcome Goals...",
+                "step": 4,
+                "total_steps": 4
+            })
 
         # Merge any existing manager edits if provided
         if existing_plan_edits and isinstance(existing_plan_edits, dict):

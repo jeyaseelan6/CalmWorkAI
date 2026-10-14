@@ -46,6 +46,48 @@ def init_db():
                     conn.commit()
                 except Exception:
                     pass  # column already exists
+
+            # Add foreign key and status query indexes idempotently
+            indexes_to_create = [
+                ("ix_outcomes_engagement_id", "outcomes", "engagement_id"),
+                ("ix_approvals_engagement_id", "approvals", "engagement_id"),
+                ("ix_approvals_status", "approvals", "status"),
+                ("ix_timeline_events_engagement_id", "timeline_events", "engagement_id"),
+                ("ix_timeline_events_created_at", "timeline_events", "created_at"),
+                ("ix_timeline_events_event_type", "timeline_events", "event_type"),
+                ("ix_documents_engagement_id", "documents", "engagement_id"),
+                ("ix_documents_status", "documents", "status"),
+                ("ix_engagements_status", "engagements", "status"),
+                ("ix_engagements_customer_name", "engagements", "customer_name"),
+            ]
+            for idx_name, tbl_name, col_name in indexes_to_create:
+                try:
+                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {tbl_name} ({col_name})"))
+                    conn.commit()
+                except Exception as ie:
+                    logger.debug(f"Index creation note ({idx_name}): {ie}")
+
+            # Seed demo users if not present
+            try:
+                from app.models.user import UserModel
+                from app.auth.security import DEMO_USERS
+                session = SessionLocal()
+                for email, udata in DEMO_USERS.items():
+                    existing = session.query(UserModel).filter(UserModel.email == email).first()
+                    if not existing:
+                        new_user = UserModel(
+                            id=udata["id"],
+                            email=udata["email"],
+                            password_hash=udata["password_hash"],
+                            name=udata["name"],
+                            role=udata["role"],
+                            title=udata.get("title", "")
+                        )
+                        session.add(new_user)
+                session.commit()
+                session.close()
+            except Exception as ue:
+                logger.debug(f"User seeding note: {ue}")
     except Exception as e:
         logger.debug(f"Migration check completed: {e}")
 

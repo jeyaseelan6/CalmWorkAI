@@ -5,6 +5,7 @@ import { RefreshCw, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert, ArrowRig
 import { useEngagement } from "@/context/EngagementContext";
 import Link from "next/link";
 import { getNowISTTime } from "@/utils/date";
+import AgentProgressStream, { AgentStreamEvent } from "./AgentProgressStream";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -83,20 +84,64 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
   const [brief, setBrief] = useState<MorningBriefData | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>("");
+  const [streamEvent, setStreamEvent] = useState<AgentStreamEvent | null>(null);
+  const [streamHistory, setStreamHistory] = useState<AgentStreamEvent[]>([]);
 
   const fetchBrief = async () => {
     setLoading(true);
+    setStreamEvent(null);
+    setStreamHistory([]);
     try {
-      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/stream`, {
         method: "POST"
       });
-      const data = await res.json();
-      if (data.success) {
-        setBrief(data.data);
-        setLastRefreshed(getNowISTTime(true));
+      if (!res.ok || !res.body) {
+        throw new Error("Streaming not available, falling back");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const event: AgentStreamEvent = JSON.parse(trimmed.slice(6));
+              if (event.type === "progress") {
+                setStreamEvent(event);
+                setStreamHistory((prev) => [...prev, event]);
+              } else if (event.type === "complete" && (event as any).data) {
+                setBrief((event as any).data);
+                setLastRefreshed(getNowISTTime(true));
+                setStreamEvent(null);
+              }
+            } catch (e) {
+              console.warn("SSE parse error in brief:", e);
+            }
+          }
+        }
       }
     } catch (err) {
-      console.error("Failed to fetch Morning Brief:", err);
+      console.warn("Morning brief stream error, trying fallback:", err);
+      try {
+        const fallbackRes = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, { method: "POST" });
+        const fallbackData = await fallbackRes.json();
+        if (fallbackData.success) {
+          setBrief(fallbackData.data);
+          setLastRefreshed(getNowISTTime(true));
+        }
+      } catch (e) {
+        console.error("Fallback brief fetch failed:", e);
+      }
     } finally {
       setLoading(false);
     }
@@ -108,9 +153,12 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
 
   if (!brief) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-3 animate-pulse">
-        <div className="h-4 bg-slate-200 rounded w-1/3"></div>
-        <div className="h-20 bg-slate-100 rounded"></div>
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs">
+        <AgentProgressStream
+          currentEvent={streamEvent}
+          history={streamHistory}
+          title={`Supervisor Synthesizing Morning Brief for ${activeCustomer.name}`}
+        />
       </div>
     );
   }
@@ -163,6 +211,14 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
         </div>
       </div>
 
+      {/* Real-Time Agent Stream on Refresh */}
+      {loading && (
+        <AgentProgressStream
+          currentEvent={streamEvent}
+          history={streamHistory}
+          title={`Supervisor Updating Morning Brief for ${activeCustomer.name}`}
+        />
+      )}
 
       {/* Warnings & Partial Failures Notice */}
       {brief.warnings_or_partial_failures && brief.warnings_or_partial_failures.length > 0 && (

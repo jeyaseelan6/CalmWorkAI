@@ -85,3 +85,35 @@ def test_know_agent_offline_raises_error():
             raw_question="What is the offline content?"
         )
     assert "AI service is currently unavailable" in str(exc_info.value)
+
+
+def test_vector_store_cold_start_rehydration():
+    from unittest.mock import MagicMock
+    from app.knowledge.vector_store import VectorStore
+    from app.models.document import DocumentModel, DocumentStatus
+
+    store = VectorStore()
+    mock_db = MagicMock()
+    mock_doc = MagicMock(spec=DocumentModel)
+    mock_doc.id = "doc-rehydrate-001"
+    mock_doc.engagement_id = "eng-rehydrate-test"
+    mock_doc.title = "Disaster Recovery Runbook"
+    mock_doc.content = "In disaster recovery failover mode, RTO is 15 minutes and RPO is 0 data loss."
+    mock_doc.status = DocumentStatus.INDEXED
+
+    mock_db.query.return_value.filter.return_value.all.return_value = [mock_doc]
+
+    # Vector store is initially empty for this engagement
+    assert "eng-rehydrate-test" not in store._chunks_by_engagement
+
+    # Rehydrate explicitly
+    added = store.rehydrate_engagement("eng-rehydrate-test", db=mock_db)
+    assert added > 0
+    assert "eng-rehydrate-test" in store._chunks_by_engagement
+
+    # Search should successfully match rehydrated content
+    results = store.search("eng-rehydrate-test", "disaster recovery RTO failover", top_k=2)
+    assert len(results) > 0
+    assert results[0][0].title == "Disaster Recovery Runbook"
+    assert "RTO is 15 minutes" in results[0][0].content
+

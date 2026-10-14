@@ -45,6 +45,93 @@ class VectorStore:
         logger.info(f"Added {len(new_chunks)} chunks to vector store for engagement {engagement_id}")
         return len(self._chunks_by_engagement[engagement_id])
 
+    def rehydrate_engagement(self, engagement_id: str, db: Any = None) -> int:
+        """
+        Cold-start recovery: pulls all indexed DocumentModel records for engagement
+        from PostgreSQL and re-chunks them into the in-memory tenant vector index.
+        """
+        from app.db.database import SessionLocal
+        from app.models.document import DocumentModel, DocumentStatus
+        from app.knowledge.ingestion import IngestionEngine
+
+        close_session = False
+        session = db
+        if session is None:
+            try:
+                session = SessionLocal()
+                close_session = True
+            except Exception as e:
+                logger.warning(f"Could not open database session for rehydration: {e}")
+                return 0
+
+        try:
+            docs = (
+                session.query(DocumentModel)
+                .filter(
+                    DocumentModel.engagement_id == engagement_id,
+                    DocumentModel.status == DocumentStatus.INDEXED,
+                    DocumentModel.content.isnot(None)
+                )
+                .all()
+            )
+            if not docs:
+                return 0
+
+            ingestion_engine = IngestionEngine()
+            total_added = 0
+            for doc in docs:
+                if not doc.content or not doc.content.strip():
+                    continue
+                chunks = ingestion_engine.process_document(
+                    engagement_id=engagement_id,
+                    title=doc.title,
+                    raw_text=doc.content,
+                    document_id=doc.id
+                )
+                self.add_chunks(engagement_id, chunks)
+                total_added += len(chunks)
+
+            logger.info(f"Rehydrated {total_added} chunks for engagement {engagement_id} from PostgreSQL.")
+            return total_added
+        except Exception as e:
+            logger.warning(f"Error during vector store rehydration for engagement {engagement_id}: {e}")
+            return 0
+        finally:
+            if close_session and session:
+                session.close()
+
+    def rehydrate_all(self, db: Any = None) -> int:
+        """
+        Rehydrates vector store for all engagements present in database.
+        """
+        from app.db.database import SessionLocal
+        from app.models.document import DocumentModel
+
+        close_session = False
+        session = db
+        if session is None:
+            try:
+                session = SessionLocal()
+                close_session = True
+            except Exception as e:
+                logger.warning(f"Could not open database session for full rehydration: {e}")
+                return 0
+
+        try:
+            engagement_ids = [
+                r[0] for r in session.query(DocumentModel.engagement_id).distinct().all()
+            ]
+            total = 0
+            for eng_id in engagement_ids:
+                total += self.rehydrate_engagement(eng_id, db=session)
+            return total
+        except Exception as e:
+            logger.warning(f"Error during full vector store rehydration: {e}")
+            return 0
+        finally:
+            if close_session and session:
+                session.close()
+
     def search(
         self,
         engagement_id: str,
@@ -53,9 +140,15 @@ class VectorStore:
     ) -> List[Tuple[DocumentChunk, float]]:
         """
         Perform grounded vector search for query within tenant engagement boundary.
+        Automatically rehydrates tenant index from database on cold start if empty.
         Returns List[(DocumentChunk, similarity_score)].
         """
         tenant_chunks = self._chunks_by_engagement.get(engagement_id, [])
+        if not tenant_chunks:
+            # Cold-start rehydration attempt from PostgreSQL
+            self.rehydrate_engagement(engagement_id)
+            tenant_chunks = self._chunks_by_engagement.get(engagement_id, [])
+
         if not tenant_chunks:
             return []
 
@@ -87,3 +180,4 @@ class VectorStore:
     def clear_engagement_data(self, engagement_id: str) -> None:
         if engagement_id in self._chunks_by_engagement:
             del self._chunks_by_engagement[engagement_id]
+

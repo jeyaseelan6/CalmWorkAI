@@ -27,10 +27,10 @@ class Engagement(Base):
     __tablename__ = "engagements"
 
     id = Column(String(50), primary_key=True)
-    customer_name = Column(String(255), nullable=False)
+    customer_name = Column(String(255), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    status = Column(Enum(EngagementStatus), default=EngagementStatus.HEALTHY, nullable=False)
+    status = Column(Enum(EngagementStatus), default=EngagementStatus.HEALTHY, nullable=False, index=True)
     current_work_cycle = Column(Enum(WorkCycleStep), default=WorkCycleStep.STEP_1_UNDERSTAND_BUSINESS_REALITY, nullable=False)
     progress = Column(Integer, default=0, nullable=False)
     current_outcome_id = Column(String(50), nullable=True)
