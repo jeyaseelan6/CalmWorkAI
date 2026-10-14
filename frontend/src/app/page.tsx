@@ -21,13 +21,30 @@ import {
   AlertTriangle,
   Calendar,
   Edit2,
-  X
+  Zap,
+  Compass,
+  X,
+  Target,
+  FileText
 } from "lucide-react";
 import Link from "next/link";
 import { MorningBriefData, WhatChangedItem } from "@/components/engagement/DailyWorkBriefing";
 import { formatISTTime, formatISTDate, formatISTDateTime, getNowISTTime } from "@/utils/date";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+function formatWorkCycle(cycle?: string): string {
+  if (!cycle) return "";
+  let clean = cycle.replace(/^WorkCycleStep\./, "").replace(/^STEP_\d+_/, "");
+  clean = clean.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  return clean;
+}
+
+function formatRoleName(role?: string): string {
+  if (!role) return "";
+  let clean = role.replace(/_/g, " ");
+  return clean.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
 
 function computePresetDue(offsetDays: number, hour: number, minute: number = 0): string {
   const d = new Date();
@@ -229,9 +246,14 @@ export default function MyDayPage() {
 
   const pendingApprovalsCount = activeEngagementData?.pending_approvals_count ?? (approvedAcme ? 0 : 1);
 
+  // Complete MOVE Agent output (from Morning Brief if run, fallback to nextActionData)
+  const moveData = brief?.next_best_action || nextActionData;
+
   // Daily Work Plan values directly derived from Morning Brief
   const proposedPlan = brief?.proposed_work_plan;
   const primaryAction =
+    moveData?.recommendation ||
+    moveData?.action_title ||
     proposedPlan?.recommended_first_action ||
     activeEngagementData?.outcome?.work_plan?.next_actions?.[0] ||
     nextActionData?.recommendation ||
@@ -356,16 +378,25 @@ export default function MyDayPage() {
 
   // Latest updates / worknotes from Morning Brief
   const briefChanges = brief?.what_changed || [];
+  const uniqueChanges = React.useMemo(() => {
+    const seen = new Set<string>();
+    return briefChanges.filter((item) => {
+      const key = `${item.category}-${item.summary}-${item.date_recorded}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [briefChanges]);
   const fallbackEvents = (activeEngagementData?.timeline || []).slice(0, 3);
 
   const isLoading = briefLoading || engagementLoading;
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto space-y-7 py-2">
+      <div className="max-w-6xl mx-auto space-y-7 py-3 px-4 sm:px-6">
         {/* Manager Pending Alert (Quiet & Unobtrusive) */}
         {role === "MANAGER" && pendingApprovalsCount > 0 && (
-          <div className="flex items-center justify-between p-3 rounded-md bg-amber-50 border border-amber-200 text-xs">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs">
             <div className="flex items-center gap-2 text-amber-900">
               <ShieldCheck className="h-4 w-4 text-amber-700 shrink-0" />
               <span>
@@ -387,15 +418,15 @@ export default function MyDayPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-display font-bold text-slate-900">My Day</h1>
+                <h1 className="text-2xl font-display font-bold text-slate-900">My Day</h1>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-sm text-slate-500 mt-0.5">
                 {activeCustomer.customerName} &middot; {activeCustomer.engagementName}
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5">
-              <span className={`text-[11px] font-mono font-medium px-2 py-0.5 rounded border ${
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-mono font-medium px-2.5 py-1 rounded-md border ${
                 outcomeStatus === "HEALTHY"
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                   : "bg-amber-50 text-amber-800 border-amber-200"
@@ -409,9 +440,9 @@ export default function MyDayPage() {
                 onClick={runMorningBrief}
                 disabled={briefLoading}
                 title="Run UNDERSTAND, PLAN, and MOVE agents to generate Morning Brief"
-                className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
-                <Sun className={`h-3.5 w-3.5 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
+                <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
                 <span>{briefLoading ? "Running Agents..." : brief ? "Re-run Brief" : "Morning Brief"}</span>
               </button>
 
@@ -419,18 +450,18 @@ export default function MyDayPage() {
                 onClick={handleSyncAll}
                 disabled={isLoading}
                 title="Refresh State"
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
-                <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
                 <span>Refresh</span>
               </button>
 
               <Link
                 href={`/engagements/${activeCustomer.id}`}
-                className="text-xs text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 pl-2 border-l border-slate-200 transition"
+                className="text-xs text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 pl-2.5 border-l border-slate-200 transition"
               >
                 <span>Workspace</span>
-                <ArrowRight className="h-3 w-3" />
+                <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
           </div>
@@ -535,90 +566,130 @@ export default function MyDayPage() {
           </div>
         )}
 
-        {/* 1. Daily Work Plan (Priority Focus — Powered by Morning Brief) */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-amber-500 text-slate-950 rounded-md shrink-0 shadow-2xs">
-                <Sun className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-display font-bold text-slate-900">
-                  Daily Work Plan
-                </h2>
-                <p className="text-[11px] text-slate-500">
-                  {brief
-                    ? `Synthesized by Plan Agent &middot; Refreshed at ${lastRefreshed}`
-                    : "Click 'Morning Brief' in the header to synthesize today's plan"}
-                </p>
-              </div>
+        {/* Active Outcome Goal Context Ribbon */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+              <Target className="h-4 w-4" />
             </div>
-
-            {proposedPlan?.plan_id && (
-              <span className="font-mono text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">
-                Plan {proposedPlan.plan_id}
+            <div>
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+                Active Outcome Goal
               </span>
-            )}
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-xs space-y-3">
-            {/* Active Engagement Outcome Goal Statement */}
-            <div className="flex items-center justify-between text-xs pb-2.5 border-b border-slate-800/80">
-              <span className="text-slate-300 italic text-xs leading-snug">
+              <p className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
                 &ldquo;{outcomeStatement}&rdquo;
-              </span>
-              <span className="text-[10px] font-mono text-slate-400 shrink-0 ml-3">
-                {progressPct}% Progress
-              </span>
-            </div>
-
-            {/* Recommended First Action Highlight */}
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-1">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
-                  Recommended First Action Today:
-                </span>
-              </div>
-              <p className="text-xs font-semibold text-white leading-relaxed">
-                {primaryAction}
               </p>
             </div>
-
-            {/* When brief not run yet, calm guidance */}
-            {!brief && !briefLoading && (
-              <div className="p-3 bg-slate-800/50 border border-slate-700/60 rounded-lg text-xs text-slate-400">
-                Ordered task sequence &amp; IST due targets will be synthesized when Morning Brief runs.
+          </div>
+          <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+            <div className="text-right">
+              <span className="text-xs font-mono font-bold text-slate-700">
+                {completedCount}/{successCriteria.length} Criteria Met
+              </span>
+              <div className="w-28 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  style={{ width: `${progressPct}%` }}
+                />
               </div>
-            )}
+            </div>
+            <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-1 rounded-md border border-emerald-300">
+              {progressPct}%
+            </span>
+          </div>
+        </div>
 
-            {/* Ordered Work Sequence with Calm Task Tracking */}
-            {effectiveTasks.length > 0 && (
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
-                    Ordered Tasks & IST Due Targets:
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500">
-                    {effectiveTasks.filter((t) => t.status === "COMPLETED").length}/{effectiveTasks.length} Done
+        {/* Core Layout: Left Main Column (Action & Tasks) + Right Side Column (MOVE Agent & Worknotes) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+          {/* Main Column (lg:col-span-7): Recommended Action & Today's Tasks */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* Recommended First Action Today (Hero Focus Card) */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-amber-50/90 via-white to-amber-50/40 border border-amber-200/90 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500 text-slate-950 shadow-2xs">
+                    <Zap className="h-4 w-4 fill-slate-950" />
+                  </div>
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-900">
+                    Recommended First Action Today
                   </span>
                 </div>
+                <div className="flex items-center gap-2">
+                  {moveData?.confidence && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 shadow-2xs">
+                      {moveData.confidence} Conf
+                    </span>
+                  )}
+                  {moveData?.priority_level && (
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                      moveData.priority_level === "CRITICAL"
+                        ? "bg-rose-50 text-rose-800 border-rose-300"
+                        : moveData.priority_level === "HIGH_PRIORITY"
+                        ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
+                        : "bg-slate-100 text-slate-700 border-slate-200"
+                    }`}>
+                      {moveData.priority_level}
+                    </span>
+                  )}
+                </div>
+              </div>
 
-                <div className="space-y-2">
+              <p className="text-lg sm:text-xl font-bold text-slate-900 leading-snug">
+                {primaryAction}
+              </p>
+
+              {(moveData?.target_work_cycle || moveData?.affected_role) && (
+                <div className="pt-2.5 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-600">
+                  {moveData.target_work_cycle && (
+                    <span>Cycle: {formatWorkCycle(moveData.target_work_cycle)}</span>
+                  )}
+                  {moveData.affected_role && (
+                    <span>Role: {formatRoleName(moveData.affected_role)}</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Today's Tasks (Ordered Work Sequence) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-display font-bold text-slate-900">
+                    Today&apos;s Ordered Tasks
+                  </h2>
+                  <span className="text-xs font-mono text-slate-500">
+                    ({effectiveTasks.filter((t) => t.status === "COMPLETED").length}/{effectiveTasks.length} Done)
+                  </span>
+                </div>
+                {proposedPlan?.plan_id && (
+                  <span className="font-mono text-xs px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200">
+                    Plan {proposedPlan.plan_id}
+                  </span>
+                )}
+              </div>
+
+              {!brief && !briefLoading && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 text-center">
+                  Click &lsquo;Morning Brief&rsquo; in the header to synthesize today&apos;s ordered tasks &amp; IST due targets.
+                </div>
+              )}
+
+              {effectiveTasks.length > 0 && (
+                <div className="space-y-3">
                   {effectiveTasks.map((item) => {
                     const isDone = item.status === "COMPLETED";
                     const inProgress = item.status === "IN_PROGRESS";
                     return (
                       <div
                         key={item.id}
-                        className={`p-3 rounded-lg space-y-2 text-xs transition border ${
+                        className={`p-4 rounded-xl space-y-2.5 text-sm transition border ${
                           isDone
-                            ? "bg-slate-800/40 border-slate-700/40 text-slate-400"
-                            : "bg-slate-800/90 border-slate-700/80 text-white"
+                            ? "bg-slate-50/80 border-slate-200 text-slate-500"
+                            : "bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs text-slate-900"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="flex items-start gap-3 min-w-0">
                             <button
                               type="button"
                               onClick={() => handleToggleTaskStatus(item)}
@@ -626,21 +697,21 @@ export default function MyDayPage() {
                               title={isDone ? "Mark as To Do" : "Mark as Completed"}
                             >
                               {isDone ? (
-                                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                               ) : (
-                                <Circle className="h-4 w-4 text-slate-500 hover:text-amber-400 transition" />
+                                <Circle className="h-5 w-5 text-slate-400 hover:text-amber-500 transition" />
                               )}
                             </button>
                             <div className="min-w-0">
                               <span
-                                className={`font-semibold text-xs leading-snug block ${
-                                  isDone ? "line-through text-slate-400" : "text-slate-100"
+                                className={`font-semibold text-sm sm:text-base leading-snug block ${
+                                  isDone ? "line-through text-slate-400" : "text-slate-900"
                                 }`}
                               >
                                 #{item.sequence_order}. {item.title}
                               </span>
                               {item.why_it_matters && (
-                                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mt-1">
                                   {item.why_it_matters}
                                 </p>
                               )}
@@ -653,23 +724,23 @@ export default function MyDayPage() {
                               onClick={() => {
                                 setEditingDueDateTaskId(editingDueDateTaskId === item.id ? null : item.id);
                               }}
-                              className="flex items-center gap-1.5 font-mono text-[10px] text-amber-300 bg-amber-950/60 hover:bg-amber-900/90 px-2 py-0.5 rounded border border-amber-800/60 hover:border-amber-600 transition cursor-pointer group"
+                              className="flex items-center gap-1.5 font-mono text-xs text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-200 hover:border-amber-300 transition cursor-pointer group"
                               title="Click to edit IST due date"
                             >
-                              <Clock className="h-3 w-3 text-amber-400 group-hover:scale-110 transition shrink-0" />
+                              <Clock className="h-3.5 w-3.5 text-amber-600 group-hover:scale-110 transition shrink-0" />
                               <span>Due: {item.due_date || "Set target"}</span>
-                              <Edit2 className="h-2.5 w-2.5 text-amber-400/60 group-hover:text-amber-200 transition shrink-0" />
+                              <Edit2 className="h-3 w-3 text-amber-500 group-hover:text-amber-700 transition shrink-0" />
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleToggleTaskStatus(item)}
-                              className={`text-[9px] font-mono px-2 py-0.5 rounded border transition cursor-pointer font-bold ${
+                              className={`text-xs font-mono px-2.5 py-1 rounded-md border transition cursor-pointer font-bold ${
                                 isDone
-                                  ? "bg-emerald-950 text-emerald-300 border-emerald-700 hover:bg-emerald-900"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                                   : inProgress
-                                  ? "bg-amber-950 text-amber-300 border-amber-700 hover:bg-amber-900"
-                                  : "bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                  : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                               }`}
                             >
                               {isDone ? "Done" : inProgress ? "In Progress" : "To Do"}
@@ -680,127 +751,137 @@ export default function MyDayPage() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Side Column (lg:col-span-5): MOVE Agent Rationale & Latest Worknotes */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* MOVE Agent Rationale & Velocity Card */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-500" />
+                  <span className="text-xs uppercase tracking-wider font-mono font-bold text-slate-600 block">
+                    MOVE Agent &middot; Rationale
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-slate-400">Velocity Intelligence</span>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* 2. Context & Guardrails: Gating Blockers & Latest Updates */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Active Gating Blockers */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-                Active Gating Blockers
-              </span>
-              <span className="text-[10px] font-mono text-slate-500">
-                {briefBlockers.length > 0 ? `${briefBlockers.length} Active` : "Cleared"}
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5 min-h-[140px]">
-              {briefBlockers.length > 0 ? (
-                <div className="space-y-2.5 text-xs">
-                  {briefBlockers.map((b, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg space-y-1 text-amber-950"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 font-bold text-xs">
-                          <ShieldAlert className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-                          <span>{b.title}</span>
-                        </div>
-                        <span className="text-[9px] font-mono bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300 font-bold">
-                          {b.dependency_type}
+              <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
+                {moveData ? (
+                  <div className="space-y-4">
+                    {/* Why Now */}
+                    {moveData.why_now && (
+                      <div className="space-y-1">
+                        <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-800 block">
+                          Why Now (Operational Urgency):
                         </span>
-                      </div>
-                      <p className="text-[11px] text-amber-900 leading-snug">
-                        <strong>Impact:</strong> {b.impact_description}
-                      </p>
-                      {b.evidence_snippet && (
-                        <p className="text-[10px] font-mono text-slate-600 bg-white/70 p-1 rounded border border-amber-200/60 truncate">
-                          {b.evidence_snippet}
+                        <p className="text-sm text-slate-700 leading-relaxed font-normal">
+                          {moveData.why_now}
                         </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : fallbackBlockers.length > 0 ? (
-                <ul className="space-y-2 text-xs">
-                  {fallbackBlockers.map((blocker: string, idx: number) => (
-                    <li key={idx} className="flex items-start gap-2 text-slate-800">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                      <span className="leading-relaxed">{blocker}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="flex items-center gap-2 text-xs text-slate-500 py-3">
-                  <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>No active blockers gating execution.</span>
-                </div>
-              )}
-            </div>
-          </div>
+                      </div>
+                    )}
 
-          {/* Latest Updates & Worknotes */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-wider font-mono font-bold text-slate-400 block">
-                Latest Updates & Worknotes
-              </span>
-              <span className="text-[10px] font-mono text-slate-500">
-                {briefChanges.length > 0 ? `${briefChanges.length} Recorded` : "Baseline"}
-              </span>
-            </div>
+                    {/* Operational Impact */}
+                    {moveData.impact && (
+                      <div className="space-y-1 pt-3 border-t border-slate-100">
+                        <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-600 block">
+                          Operational Impact:
+                        </span>
+                        <p className="text-sm text-slate-700 leading-relaxed font-normal">
+                          {moveData.impact}
+                        </p>
+                      </div>
+                    )}
 
-            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5 min-h-[140px]">
-              {briefChanges.length > 0 ? (
-                <div className="space-y-2 text-xs">
-                  {briefChanges.slice(0, 5).map((item, idx) => {
-                    const isWorknote = item.category === "WORKNOTE";
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-2.5 rounded-lg border space-y-1 transition ${
-                          isWorknote
-                            ? "bg-emerald-50/70 border-emerald-200/90 text-emerald-950"
-                            : "bg-slate-50 border-slate-200 text-slate-900"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span
-                            className={`font-mono font-bold px-1.5 py-0.5 rounded border ${
-                              isWorknote
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                : "bg-white text-slate-700 border-slate-200"
-                            }`}
-                          >
-                            {item.category}
+                    {/* Work Cycle & Situation */}
+                    {(moveData.target_work_cycle || moveData.affected_role) && (
+                      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-500">
+                        {moveData.target_work_cycle && (
+                          <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                            Cycle: {formatWorkCycle(moveData.target_work_cycle)}
                           </span>
-                          <span className="text-slate-400 font-mono">{item.date_recorded}</span>
-                        </div>
-                        <p className="font-medium text-xs leading-snug">{item.summary}</p>
+                        )}
+                        {moveData.affected_role && (
+                          <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                            Role: {formatRoleName(moveData.affected_role)}
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-slate-400 py-6 justify-center">
+                    <Compass className="h-4 w-4 animate-spin text-amber-500" />
+                    <span>Evaluating MOVE agent velocity recommendation...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Latest Updates & Worknotes on the side */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-slate-500" />
+                  <span className="text-xs uppercase tracking-wider font-mono font-bold text-slate-600 block">
+                    Latest Worknotes &amp; Updates
+                  </span>
                 </div>
-              ) : fallbackEvents.length > 0 ? (
-                <ul className="space-y-2 text-xs">
-                  {fallbackEvents.map((evt: any) => (
-                    <li key={evt.id} className="space-y-0.5 text-slate-800">
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                        <span>{evt.actor_type}</span>
-                        <span>{formatISTTime(evt.created_at, true)}</span>
-                      </div>
-                      <p className="font-medium text-xs leading-snug">{evt.title}</p>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-slate-500 py-3">Baseline engagement parameters active.</p>
-              )}
+                <span className="text-xs font-mono text-slate-400">
+                  {uniqueChanges.length > 0 ? `${uniqueChanges.length} Recorded` : "Baseline"}
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
+                {uniqueChanges.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {uniqueChanges.slice(0, 4).map((item, idx) => {
+                      const isWorknote = item.category === "WORKNOTE";
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-xl border space-y-1.5 transition ${
+                            isWorknote
+                              ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                              : "bg-slate-50 border-slate-200 text-slate-900"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span
+                              className={`font-mono font-bold px-1.5 py-0.5 rounded border text-[10px] ${
+                                isWorknote
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                  : "bg-white text-slate-700 border-slate-200"
+                              }`}
+                            >
+                              {item.category}
+                            </span>
+                            <span className="text-slate-500 font-mono text-xs">{item.date_recorded}</span>
+                          </div>
+                          <p className="font-medium text-xs sm:text-sm leading-snug">{item.summary}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : fallbackEvents.length > 0 ? (
+                  <ul className="space-y-2.5 text-sm">
+                    {fallbackEvents.map((evt: any) => (
+                      <li key={evt.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-800">
+                        <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+                          <span className="font-bold">{evt.actor_type}</span>
+                          <span>{formatISTTime(evt.created_at, true)}</span>
+                        </div>
+                        <p className="font-medium text-xs sm:text-sm leading-snug">{evt.title}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-500 py-3 text-center">Baseline engagement parameters active.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

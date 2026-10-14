@@ -178,6 +178,35 @@ class MoveAgent:
         priority = parsed.get("priority_level", "HIGH_PRIORITY")
         role = parsed.get("affected_role", "FDE")
         gating_blocker = None
+        raw_gb = parsed.get("gating_blocker")
+        if raw_gb and isinstance(raw_gb, dict):
+            gating_blocker = BlockerItem(
+                id=raw_gb.get("id", "blk-1"),
+                title=raw_gb.get("title", "Active Blocker"),
+                owner=raw_gb.get("owner", "Customer"),
+                status=raw_gb.get("status", "OPEN"),
+                is_gating=raw_gb.get("is_gating", True),
+                description=raw_gb.get("description", "")
+            )
+        elif raw_blockers and len(raw_blockers) > 0:
+            b0 = raw_blockers[0] if isinstance(raw_blockers[0], dict) else {"title": str(raw_blockers[0])}
+            gating_blocker = BlockerItem(
+                id=b0.get("id", "blk-1"),
+                title=b0.get("title", "Active Dependency"),
+                owner=b0.get("owner", "Customer"),
+                status=b0.get("status", "OPEN"),
+                is_gating=b0.get("is_gating", True),
+                description=b0.get("description", b0.get("title", ""))
+            )
+        elif pending_approvals > 0:
+            gating_blocker = BlockerItem(
+                id="blk-approval",
+                title="Manager Scope Authorization",
+                owner="Engineering Manager",
+                status="PENDING_APPROVAL",
+                is_gating=True,
+                description=f"{pending_approvals} pending scope or outcome change awaiting authorization."
+            )
 
         # 6. Sanitize output tokens back for authorized display
         clean_rec = self.privacy_engine.sanitize_output(recommendation, mapping)

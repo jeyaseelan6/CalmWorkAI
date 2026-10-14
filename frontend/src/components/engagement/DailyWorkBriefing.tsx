@@ -68,6 +68,7 @@ export interface MorningBriefData {
   pending_decisions_and_approvals: string[];
   what_is_blocking_progress: BlockerItem[];
   proposed_work_plan: ProposedWorkPlan;
+  next_best_action?: any;
   evidence_and_confidence: EvidenceItem[];
   warnings_or_partial_failures: string[];
   capabilities_invoked: string[];

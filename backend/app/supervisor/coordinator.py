@@ -185,6 +185,7 @@ class DailyWorkBrief(BaseModel):
     pending_decisions_and_approvals: List[str]
     what_is_blocking_progress: List[BlockerItem]
     proposed_work_plan: ProposedWorkPlan
+    next_best_action: Optional[Dict[str, Any]] = None  # Complete MOVE Agent Output
     evidence_and_confidence: List[EvidenceAndConfidenceItem]
     warnings_or_partial_failures: List[str] = []
     capabilities_invoked: List[str] = ["UNDERSTAND", "KNOW", "MOVE", "SUPERVISOR"]
@@ -1122,6 +1123,7 @@ class SupervisorCoordinator:
             pending_decisions_and_approvals=pending_decisions,
             what_is_blocking_progress=blockers,
             proposed_work_plan=proposed_plan,
+            next_best_action=move_findings.model_dump() if move_findings else None,
             evidence_and_confidence=evidence_items,
             warnings_or_partial_failures=warnings,
             capabilities_invoked=["UNDERSTAND", "KNOW", "MOVE", "SUPERVISOR"],

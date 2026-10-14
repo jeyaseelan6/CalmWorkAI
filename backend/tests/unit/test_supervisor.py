@@ -111,6 +111,14 @@ def test_sequential_morning_brief_excludes_deliver():
     assert len(brief.evidence_and_confidence) >= 1
     assert brief.source_state_version == 1
     assert brief.brief_id.startswith("brief-eng-acme-001-")
+
+    # 4. Verification: Complete MOVE Agent output is preserved in next_best_action
+    assert brief.next_best_action is not None
+    assert "recommendation" in brief.next_best_action or "action_title" in brief.next_best_action
+    assert "why_now" in brief.next_best_action
+    assert "impact" in brief.next_best_action
+    assert "priority_level" in brief.next_best_action
+
     print("Sequential Morning Brief unit test passed successfully!")
 
 
