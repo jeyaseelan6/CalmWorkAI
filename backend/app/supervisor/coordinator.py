@@ -607,16 +607,31 @@ class SupervisorCoordinator:
                 answer = "\n".join(parts)
 
         elif intent == "KNOW":
-            handover_banner = "📚 **[Handed over to KNOW Agent — Grounded Technical Documentation]**\n\n"
+            handover_banner = "📚 **[Handed over to KNOW Agent — Grounded Technical Documentation & Engagement Intelligence]**\n\n"
+
+            engagement_context = {
+                "customer_name": customer_name,
+                "timeline_events": events,
+                "outcome_statement": outcome_statement,
+                "success_criteria": crit_items,
+                "outcome_version": version,
+                "approved_work_plan": approved_work_plan,
+                "pending_approvals": apprs,
+                "current_work_cycle": current_work_cycle,
+                "status": status,
+                "engagement_progress": engagement_progress
+            }
+
             know_response = self.know_agent.answer_question(
                 engagement_id=engagement_id,
                 raw_question=sanitized_query,
-                top_k=3
+                top_k=3,
+                engagement_context=engagement_context
             )
             for cit in know_response.citations:
                 sources.append(SourceCitation(
                     title=cit.document_title,
-                    source_type="DOCUMENT",
+                    source_type=getattr(cit, "source_type", "DOCUMENT"),
                     snippet=cit.snippet
                 ))
 
@@ -624,10 +639,10 @@ class SupervisorCoordinator:
                 answer = handover_banner + know_response.answer
             else:
                 answer = handover_banner + (
-                    f"I searched the verified documentation for {customer_name}, but there is not enough specific evidence "
-                    f"in the knowledge base to answer this query with high confidence.\n\n"
-                    f"**Recommendation**: Please upload the technical specification, runbook, or architecture document "
-                    f"via the Documents tab to index this information into the KNOW Agent."
+                    f"I searched the verified documentation and engagement records for {customer_name}, "
+                    f"but there is not enough specific evidence to answer this query with high confidence.\n\n"
+                    f"**Recommendation**: Please upload the technical specification via the Documents tab, "
+                    f"or record the relevant update in Worknotes to index this information into the KNOW Agent."
                 )
 
         else:  # MULTI_AGENT / SUPERVISOR

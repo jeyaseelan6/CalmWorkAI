@@ -117,3 +117,170 @@ def test_vector_store_cold_start_rehydration():
     assert results[0][0].title == "Disaster Recovery Runbook"
     assert "RTO is 15 minutes" in results[0][0].content
 
+
+def test_know_agent_answers_from_worknotes_and_customer_inputs():
+    from datetime import datetime
+    agent = KnowAgent()
+    # Note: No documents uploaded to vector store for this engagement
+    ctx = {
+        "timeline_events": [
+            {
+                "id": "evt-wn-01",
+                "event_type": "WORKNOTE",
+                "title": "Kafka Partition Verification",
+                "description": "Verified Kafka cluster partition count is set to 12 partitions with replication factor 3.",
+                "actor_type": "FDE",
+                "created_at": datetime(2026, 10, 14, 10, 30)
+            },
+            {
+                "id": "evt-ci-01",
+                "event_type": "CUSTOMER_INPUT",
+                "title": "Strict Latency Constraint",
+                "description": "Customer requested P99 latency SLA must remain below 150ms under peak load.",
+                "actor_type": "CUSTOMER",
+                "created_at": datetime(2026, 10, 14, 11, 0)
+            }
+        ]
+    }
+    res = agent.answer_question(
+        engagement_id="eng-ctx-01",
+        raw_question="What did the customer input regarding latency SLA?",
+        engagement_context=ctx
+    )
+    assert res.evidence_sufficient is True
+    assert len(res.citations) > 0
+    source_types = [c.source_type for c in res.citations]
+    assert "CUSTOMER_INPUT" in source_types
+    matching_cit = next(c for c in res.citations if c.source_type == "CUSTOMER_INPUT")
+    assert "Strict Latency Constraint" in matching_cit.document_title
+    assert "150ms" in matching_cit.snippet
+
+
+def test_know_agent_answers_from_decisions_and_approvals():
+    from datetime import datetime
+    agent = KnowAgent()
+    ctx = {
+        "timeline_events": [
+            {
+                "id": "evt-dec-01",
+                "event_type": "DECISION",
+                "title": "PostgreSQL Logical Replication Approved",
+                "description": "Architects approved PostgreSQL logical replication over Debezium for Phase 1.",
+                "actor_type": "MANAGER",
+                "created_at": datetime(2026, 10, 14, 14, 0)
+            }
+        ],
+        "pending_approvals": [
+            {
+                "id": "appr-01",
+                "type": "WORK_PLAN_CHANGE",
+                "description": "Production cutover date shift to Sunday 15:30 IST",
+                "requested_by": "FDE Alice",
+                "created_at": datetime(2026, 10, 14, 15, 0)
+            }
+        ]
+    }
+    res = agent.answer_question(
+        engagement_id="eng-dec-01",
+        raw_question="What architectural decision was approved for replication?",
+        engagement_context=ctx
+    )
+    assert res.evidence_sufficient is True
+    assert any(c.source_type == "DECISION" for c in res.citations)
+    cit = next(c for c in res.citations if c.source_type == "DECISION")
+    assert "PostgreSQL Logical Replication" in cit.document_title
+
+
+def test_know_agent_answers_from_observations_and_work_plan():
+    agent = KnowAgent()
+    ctx = {
+        "timeline_events": [
+            {
+                "id": "evt-obs-01",
+                "event_type": "OBSERVATION",
+                "title": "High Memory Consumption During Bulk Sync",
+                "description": "Observed worker node memory spiking to 88% during bulk table sync.",
+                "actor_type": "FDE",
+                "created_at": "2026-10-14T12:00:00Z"
+            }
+        ],
+        "approved_work_plan": {
+            "tasks": [
+                {
+                    "id": "task-01",
+                    "title": "Tune JDBC Batch Size",
+                    "description": "Adjust batch size from 5000 to 1000 to reduce memory pressure.",
+                    "status": "IN_PROGRESS",
+                    "owner": "Engineer Bob",
+                    "due_date": "15 Oct 2026, 17:00 IST"
+                }
+            ]
+        }
+    }
+    res = agent.answer_question(
+        engagement_id="eng-obs-01",
+        raw_question="What observations were recorded about memory and what is the work plan task?",
+        engagement_context=ctx
+    )
+    assert res.evidence_sufficient is True
+    source_types = [c.source_type for c in res.citations]
+    assert "OBSERVATION" in source_types
+    assert "WORK_PLAN" in source_types
+
+
+def test_know_agent_prioritizes_uploaded_documents_over_context():
+    from datetime import datetime
+    agent = KnowAgent()
+    # 1. Ingest document (Tier 1)
+    agent.ingest_document(
+        engagement_id="eng-prio-01",
+        title="Official Migration Spec",
+        raw_text="The authorized migration batch window is 20 minutes maximum."
+    )
+    # 2. Add engagement context (Tier 2)
+    ctx = {
+        "timeline_events": [
+            {
+                "id": "evt-wn-02",
+                "event_type": "WORKNOTE",
+                "title": "Informal Batch Discussion",
+                "description": "FDE noted team discussed trying 30 minute batch window in dev.",
+                "actor_type": "FDE",
+                "created_at": datetime(2026, 10, 14, 9, 0)
+            }
+        ]
+    }
+    res = agent.answer_question(
+        engagement_id="eng-prio-01",
+        raw_question="What is the authorized migration batch window in the specification?",
+        engagement_context=ctx
+    )
+    assert res.evidence_sufficient is True
+    # Tier 1 document citation MUST be present and listed first
+    assert res.citations[0].source_type == "DOCUMENT"
+    assert res.citations[0].document_title == "Official Migration Spec"
+
+
+def test_know_agent_context_insufficient_evidence_when_unrelated():
+    agent = KnowAgent()
+    ctx = {
+        "timeline_events": [
+            {
+                "id": "evt-unrelated",
+                "event_type": "WORKNOTE",
+                "title": "Lunch Break",
+                "description": "Team out for lunch.",
+                "created_at": "2026-10-14T13:00:00Z"
+            }
+        ]
+    }
+    res = agent.answer_question(
+        engagement_id="eng-empty-01",
+        raw_question="What is the cryptographic cipher suite for the payment gateway?",
+        engagement_context=ctx
+    )
+    assert res.evidence_sufficient is False
+    assert "don't have enough verified engagement evidence" in res.answer
+    assert len(res.citations) == 0
+
+

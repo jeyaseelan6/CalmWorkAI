@@ -32,7 +32,7 @@ interface ChatMessage {
   intent?: string;
   delegatedAgent?: DelegatedAgent;
   capabilitiesUsed?: string[];
-  sources?: { title: string; snippet: string }[];
+  sources?: { title: string; snippet: string; source_type?: string }[];
   suggestedFollowups?: string[];
   timestamp: string;
 }
@@ -445,18 +445,37 @@ export default function AskCalmWorkChat() {
                   </div>
                 )}
 
-                {/* Grounded Document Sources */}
+                {/* Grounded Knowledge Sources */}
                 {!isUser && m.sources && m.sources.length > 0 && (
                   <div className="p-2.5 bg-slate-100/80 border border-slate-200 rounded text-[11px] text-slate-700 space-y-1.5 ml-1">
                     <div className="flex items-center gap-1.5 font-semibold text-slate-800">
                       <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Verified Knowledge Sources:</span>
+                      <span>Verified Knowledge Sources ({m.sources.length}):</span>
                     </div>
-                    {m.sources.map((s, idx) => (
-                      <div key={idx} className="font-mono text-[10px] text-slate-600 pl-2 border-l-2 border-blue-300">
-                        <span className="font-bold text-slate-800">{s.title}:</span> {s.snippet}
-                      </div>
-                    ))}
+                    {m.sources.map((s, idx) => {
+                      const typeBadge = {
+                        DOCUMENT: "bg-blue-100 text-blue-800 border-blue-200",
+                        WORKNOTE: "bg-emerald-100 text-emerald-800 border-emerald-200",
+                        CUSTOMER_INPUT: "bg-purple-100 text-purple-800 border-purple-200",
+                        DECISION: "bg-amber-100 text-amber-800 border-amber-200",
+                        OBSERVATION: "bg-cyan-100 text-cyan-800 border-cyan-200",
+                        WORK_PLAN: "bg-indigo-100 text-indigo-800 border-indigo-200",
+                        OUTCOME: "bg-rose-100 text-rose-800 border-rose-200",
+                        TIMELINE: "bg-slate-200 text-slate-800 border-slate-300"
+                      }[s.source_type || "DOCUMENT"] || "bg-blue-100 text-blue-800 border-blue-200";
+
+                      return (
+                        <div key={idx} className="font-mono text-[10px] text-slate-600 pl-2 border-l-2 border-blue-400 space-y-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${typeBadge}`}>
+                              {s.source_type || "DOCUMENT"}
+                            </span>
+                            <span className="font-bold text-slate-800">{s.title}</span>
+                          </div>
+                          <div className="text-slate-600">{s.snippet}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
