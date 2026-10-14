@@ -84,6 +84,7 @@ KNOW_INSTRUCTION = (
     "- Do NOT hallucinate or assume details not present in the evidence.\n"
     "- Keep all dates and hours strictly in Indian Standard Time (IST) 24-hour clock notation (e.g. '14 Oct 2026, 16:30 IST').\n"
     "- Attribute facts to their verified sources.\n"
+    "- If referring to timeline events, cite ONLY the single specific pertinent timeline record that contains the fact instead of listing or enumerating all timelines.\n"
     "- If the evidence does not contain enough facts to answer, reply exactly with: "
     "'I don't have enough verified engagement evidence to answer this confidently.'"
 )
@@ -201,6 +202,7 @@ class KnowAgent:
             pending_approvals = engagement_context.get("pending_approvals") or []
 
             # 2a. Categorize and evaluate timeline events
+            seen_timeline_titles = set()
             for i, ev in enumerate(events):
                 ev_id = getattr(ev, "id", None) or (ev.get("id") if isinstance(ev, dict) else f"evt-{i}")
                 ev_type = (getattr(ev, "event_type", None) or (ev.get("event_type") if isinstance(ev, dict) else "TIMELINE")).upper()
@@ -209,6 +211,12 @@ class KnowAgent:
                 ev_actor = getattr(ev, "actor_type", None) or (ev.get("actor_type") if isinstance(ev, dict) else "USER")
                 ev_dt = getattr(ev, "created_at", None) or (ev.get("created_at") if isinstance(ev, dict) else None)
                 ev_ist = format_ist_timestamp(ev_dt)
+
+                # Ignore routine internal supervisor brief generation events unless user specifically asks about the brief
+                is_internal_briefing = ev_type in ["MORNING_BRIEF_GENERATED", "SYSTEM_LOG"] or "morning brief" in ev_title.lower()
+                user_wants_briefing = any(w in q_lower for w in ["morning brief", "briefing", "daily brief", "brief generated"])
+                if is_internal_briefing and not user_wants_briefing:
+                    continue
 
                 full_text = f"{ev_title} {ev_desc}"
                 relevance = calculate_token_relevance(full_text, q_tokens)
@@ -255,11 +263,17 @@ class KnowAgent:
                     elif is_observation:
                         matching_observations.append(item_payload)
                     else:
-                        matching_timeline.append(item_payload)
+                        norm_title = ev_title.strip().lower()
+                        if norm_title not in seen_timeline_titles:
+                            seen_timeline_titles.add(norm_title)
+                            matching_timeline.append(item_payload)
                 elif len(events) <= 6 and (not valid_doc_results) and any(w in q_lower for w in ["history", "timeline", "event", "happened", "status", "context"]):
                     # General historical query when no docs exist
-                    context_has_evidence = True
-                    matching_timeline.append(item_payload)
+                    norm_title = ev_title.strip().lower()
+                    if norm_title not in seen_timeline_titles:
+                        seen_timeline_titles.add(norm_title)
+                        context_has_evidence = True
+                        matching_timeline.append(item_payload)
 
             # 2b. Evaluate Decisions & Pending Approvals
             for a in pending_approvals:
@@ -350,13 +364,20 @@ class KnowAgent:
         # -----------------------------------------------------------------
         evidence_sections: List[str] = []
         citations: List[GroundedCitation] = []
+        seen_citation_keys: set = set()
+
+        def add_safe_citation(cit: GroundedCitation):
+            key = (cit.source_type, cit.document_title.strip().lower(), cit.chunk_id)
+            if key not in seen_citation_keys:
+                seen_citation_keys.add(key)
+                citations.append(cit)
 
         # 1. Primary: Uploaded Document Chunks
         if valid_doc_results:
             doc_lines = []
             for chunk, score in valid_doc_results:
                 clean_snippet = self.privacy_engine.sanitize_output(chunk.content[:240], mapping)
-                citations.append(GroundedCitation(
+                add_safe_citation(GroundedCitation(
                     document_title=chunk.title,
                     chunk_id=chunk.chunk_id,
                     snippet=clean_snippet + ("..." if len(chunk.content) > 240 else ""),
@@ -369,10 +390,10 @@ class KnowAgent:
         # 2. Secondary: Live Engagement Operational Context
         if matching_worknotes:
             wn_lines = []
-            for w in matching_worknotes[:5]:
+            for w in matching_worknotes[:3]:
                 clean_desc = self.privacy_engine.sanitize_output(w["description"], mapping)
                 wn_lines.append(f"- [{w['ist_time']}] {w['title']}: {clean_desc} (Logged by {w['actor']})")
-                citations.append(GroundedCitation(
+                add_safe_citation(GroundedCitation(
                     document_title=f"Worknote: {w['title']}",
                     chunk_id=w["id"],
                     snippet=clean_desc[:200],
@@ -383,10 +404,10 @@ class KnowAgent:
 
         if matching_customer_inputs:
             ci_lines = []
-            for c in matching_customer_inputs[:5]:
+            for c in matching_customer_inputs[:3]:
                 clean_desc = self.privacy_engine.sanitize_output(c["description"], mapping)
                 ci_lines.append(f"- [{c['ist_time']}] {c['title']}: {clean_desc}")
-                citations.append(GroundedCitation(
+                add_safe_citation(GroundedCitation(
                     document_title=f"Customer Input: {c['title']}",
                     chunk_id=c["id"],
                     snippet=clean_desc[:200],
@@ -397,10 +418,10 @@ class KnowAgent:
 
         if matching_decisions:
             dec_lines = []
-            for d in matching_decisions[:5]:
+            for d in matching_decisions[:3]:
                 clean_desc = self.privacy_engine.sanitize_output(d["description"], mapping)
                 dec_lines.append(f"- [{d['ist_time']}] {d['title']}: {clean_desc}")
-                citations.append(GroundedCitation(
+                add_safe_citation(GroundedCitation(
                     document_title=f"Decision: {d['title']}",
                     chunk_id=d["id"],
                     snippet=clean_desc[:200],
@@ -411,10 +432,10 @@ class KnowAgent:
 
         if matching_observations:
             obs_lines = []
-            for o in matching_observations[:5]:
+            for o in matching_observations[:3]:
                 clean_desc = self.privacy_engine.sanitize_output(o["description"], mapping)
                 obs_lines.append(f"- [{o['ist_time']}] {o['title']}: {clean_desc}")
-                citations.append(GroundedCitation(
+                add_safe_citation(GroundedCitation(
                     document_title=f"Observation: {o['title']}",
                     chunk_id=o["id"],
                     snippet=clean_desc[:200],
@@ -426,7 +447,7 @@ class KnowAgent:
         if matching_outcome:
             clean_outcome = self.privacy_engine.sanitize_output(matching_outcome["text"], mapping)
             evidence_sections.append("### TARGET OUTCOME & DEFINITION OF DONE:\n" + clean_outcome)
-            citations.append(GroundedCitation(
+            add_safe_citation(GroundedCitation(
                 document_title="Target Outcome & Definition of Done",
                 chunk_id=matching_outcome["id"],
                 snippet=matching_outcome["snippet"],
@@ -436,10 +457,10 @@ class KnowAgent:
 
         if matching_tasks:
             wp_lines = []
-            for t in matching_tasks[:6]:
+            for t in matching_tasks[:4]:
                 clean_desc = self.privacy_engine.sanitize_output(t["description"], mapping)
                 wp_lines.append(f"- [{t['status']}] {t['title']} (Owner: {t['owner']}, Due: {t['due_date']}): {clean_desc}")
-                citations.append(GroundedCitation(
+                add_safe_citation(GroundedCitation(
                     document_title=f"Work Plan Task: {t['title']}",
                     chunk_id=t["id"],
                     snippet=f"[{t['status']}] {clean_desc[:140]} (Owner: {t['owner']}, Due: {t['due_date']})",
@@ -448,19 +469,22 @@ class KnowAgent:
                 ))
             evidence_sections.append("### APPROVED WORK PLAN & TASKS:\n" + "\n".join(wp_lines))
 
+        # Specific Timeline Record (Only mention the single specific timeline record instead of listing all timelines)
         if matching_timeline:
-            tl_lines = []
-            for ev in matching_timeline[:5]:
-                clean_desc = self.privacy_engine.sanitize_output(ev["description"], mapping)
-                tl_lines.append(f"- [{ev['ist_time']}] ({ev['type']}) {ev['title']}: {clean_desc}")
-                citations.append(GroundedCitation(
-                    document_title=f"Timeline: {ev['title']}",
-                    chunk_id=ev["id"],
-                    snippet=clean_desc[:200],
-                    relevance_score=ev["score"],
-                    source_type="TIMELINE"
-                ))
-            evidence_sections.append("### HISTORICAL TIMELINE EVENTS (IST 24h):\n" + "\n".join(tl_lines))
+            matching_timeline.sort(key=lambda x: x["score"], reverse=True)
+            specific_ev = matching_timeline[0]
+            clean_desc = self.privacy_engine.sanitize_output(specific_ev["description"], mapping)
+            evidence_sections.append(
+                f"### SPECIFIC TIMELINE RECORD (IST 24h):\n"
+                f"- [{specific_ev['ist_time']}] ({specific_ev['type']}) {specific_ev['title']}: {clean_desc}"
+            )
+            add_safe_citation(GroundedCitation(
+                document_title=f"Timeline: {specific_ev['title']}",
+                chunk_id=specific_ev["id"],
+                snippet=clean_desc[:200],
+                relevance_score=specific_ev["score"],
+                source_type="TIMELINE"
+            ))
 
         full_evidence_context = "\n\n".join(evidence_sections)
         anonymized_evidence, _ = self.privacy_engine.process_llm_input(
@@ -478,6 +502,7 @@ class KnowAgent:
             f"- First and foremost, ground answers in the Uploaded Technical Documents when answering specs, architectures, schemas, or procedures.\n"
             f"- Supplement and answer from the Verified Engagement Context (worknotes, customer inputs, decisions, observations, outcomes, work plans) for execution facts and project history.\n"
             f"- Explicitly attribute facts to their source (e.g. 'According to the Architecture Guide...', 'In the customer input on...', 'Per the decision recorded on...').\n"
+            f"- If referring to timeline events, mention ONLY the specific timeline record that contains the fact instead of listing or enumerating all timelines.\n"
             f"- Do NOT hallucinate details not present in the verified evidence above.\n\n"
             f"Question: {anonymized_question}\n"
             f"Answer:"

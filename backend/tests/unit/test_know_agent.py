@@ -284,3 +284,62 @@ def test_know_agent_context_insufficient_evidence_when_unrelated():
     assert len(res.citations) == 0
 
 
+def test_know_agent_timeline_mentions_only_single_specific_record_instead_of_all():
+    from datetime import datetime
+    agent = KnowAgent()
+    ctx = {
+        "timeline_events": [
+            # Automated morning brief records that should NOT be cited
+            {
+                "id": "evt-mb-01",
+                "event_type": "MORNING_BRIEF_GENERATED",
+                "title": "Morning Brief Generated (v3)",
+                "description": "Supervisor synthesized sequential Morning Brief (UNDERSTAND -> KNOW -> MOVE). Proposed Plan: Review Outcome Goals criteria for Acme Corp.. DELIVER excluded.",
+                "actor_type": "SUPERVISOR",
+                "created_at": datetime(2026, 10, 14, 9, 0)
+            },
+            {
+                "id": "evt-mb-02",
+                "event_type": "MORNING_BRIEF_GENERATED",
+                "title": "Morning Brief Generated (v3)",
+                "description": "Supervisor synthesized sequential Morning Brief (UNDERSTAND -> KNOW -> MOVE). Proposed Plan: Schedule a short approval sync with the designated approver.",
+                "actor_type": "SUPERVISOR",
+                "created_at": datetime(2026, 10, 14, 9, 30)
+            },
+            # Real specific milestone event
+            {
+                "id": "evt-tl-specific",
+                "event_type": "TIMELINE",
+                "title": "Production VPN Tunnel Provisioned",
+                "description": "DevOps team completed IPSec VPN tunnel handshake between GCP VPC and customer datacenter.",
+                "actor_type": "DEVOPS",
+                "created_at": datetime(2026, 10, 14, 15, 0)
+            },
+            # Another general timeline event
+            {
+                "id": "evt-tl-general",
+                "event_type": "TIMELINE",
+                "title": "Initial Kickoff Complete",
+                "description": "General kickoff meeting with stakeholders.",
+                "actor_type": "MANAGER",
+                "created_at": datetime(2026, 10, 10, 10, 0)
+            }
+        ]
+    }
+    res = agent.answer_question(
+        engagement_id="eng-tl-test",
+        raw_question="When was the production VPN tunnel provisioned in the timeline?",
+        engagement_context=ctx
+    )
+    assert res.evidence_sufficient is True
+    # Filter citations to TIMELINE source_type
+    timeline_citations = [c for c in res.citations if c.source_type == "TIMELINE"]
+    # MUST contain exactly ONE specific timeline record, NOT multiple or all timelines
+    assert len(timeline_citations) == 1
+    assert "Production VPN Tunnel Provisioned" in timeline_citations[0].document_title
+    assert "IPSec VPN" in timeline_citations[0].snippet
+    # Automated Morning Brief events must NOT be listed
+    assert not any("Morning Brief Generated" in c.document_title for c in res.citations)
+
+
+
