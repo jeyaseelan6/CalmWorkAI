@@ -45,7 +45,6 @@ function NavLinks() {
   const engagementHref = `/engagements/${activeCustomer?.id || "eng-acme-001"}`;
 
   const fdeNav: NavItem[] = [
-    { id: "my-work", label: "My Day", href: "/", icon: Briefcase },
     { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
     { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
@@ -55,7 +54,6 @@ function NavLinks() {
   ];
 
   const managerNav: NavItem[] = [
-    { id: "control-center", label: "My Day", href: "/", icon: LayoutDashboard },
     { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
     { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
@@ -72,8 +70,8 @@ function NavLinks() {
         const Icon = item.icon;
         const isActive =
           item.id === "engagements"
-            ? pathname?.startsWith("/engagements")
-            : (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname?.startsWith(item.href));
+            ? pathname?.startsWith("/engagements") || pathname === "/"
+            : pathname?.startsWith(item.href);
         return (
           <Link
             key={item.id}
@@ -148,7 +146,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="w-60 border-r border-slate-200 bg-white flex flex-col justify-between p-3.5 shrink-0">
         <div>
           {/* Logo & Application Header */}
-          <Link href="/" className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
+          <Link href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`} className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
             <div className="h-7 w-7 rounded bg-slate-900 text-white flex items-center justify-center font-display font-bold text-sm shadow-2xs">
               C
             </div>
