@@ -22,7 +22,8 @@ from app.agents.adk_runtime import (
     get_session_service,
     create_privacy_guardrail_callback,
     create_adk_runner,
-    execute_adk_runner
+    execute_adk_runner,
+    _MOCK_ADK_RESPONSES
 )
 
 logger = logging.getLogger(__name__)
@@ -114,31 +115,7 @@ class DeliverAgent:
         completed_items = [c.get("title", "") for c in success_criteria if c.get("completed")]
         pending_items = [c.get("title", "") for c in success_criteria if not c.get("completed")]
 
-        # 2. Baseline content structure
-        if format_type == "TECHNICAL_LOG":
-            subject = f"Technical Progress Log: {customer_name} — {engagement_name}"
-            exec_summary = (
-                f"Technical status log for {engagement_name}. Active Work Cycle: {current_work_cycle}. "
-                f"Outcome Goals Progress: {len(completed_items)} / {len(success_criteria)} criteria verified."
-            )
-        elif format_type == "RELEASE_NOTE":
-            subject = f"Release Note: {customer_name} — Milestone Verification"
-            exec_summary = (
-                f"Release verification notes for {engagement_name}. Target outcome: '{outcome_statement}'. "
-                f"All completed checklist items are verified in staging."
-            )
-        else:
-            subject = f"Executive Update: {customer_name} — {engagement_name} Progress"
-            exec_summary = (
-                f"We are actively advancing the {engagement_name} initiative for {customer_name} "
-                f"in alignment with our target outcome: '{outcome_statement}'."
-            )
-
-        milestones = [f"Delivered: {item}" for item in completed_items] if completed_items else ["Completed initial environment & API baseline setup."]
-        next_target = pending_items[0] if pending_items else "Final production validation and handover."
-        customer_actions = ["Review milestone progress during next scheduled sync."]
-
-        # 3. Construct ADK Prompt
+        # 2. Construct ADK Prompt
         prompt = (
             f"Customer: {customer_name}\n"
             f"Engagement Name: {engagement_name}\n"
@@ -150,9 +127,9 @@ class DeliverAgent:
             f"Engineer Notes: {anonymized_notes}"
         )
 
-        # 4. Attempt ADK Runner Execution
+        # 3. Attempt ADK Runner Execution
         adk_response_text = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
                 adk_response_text = execute_adk_runner(
@@ -164,9 +141,10 @@ class DeliverAgent:
                     json_mode=True
                 )
             except Exception as e:
-                logger.warning(f"ADK DELIVER runner execution failed ({str(e)}); using deterministic template draft.")
+                logger.warning(f"ADK DELIVER runner execution failed: {str(e)}")
 
-        # 5. Parse ADK response if received
+        # 4. Parse ADK response — strictly no deterministic fallback fabrication
+        parsed = None
         if adk_response_text:
             try:
                 cleaned = adk_response_text.strip()
@@ -177,18 +155,19 @@ class DeliverAgent:
                     cleaned = cleaned.strip()
 
                 parsed = json.loads(cleaned)
-                if parsed.get("subject"):
-                    subject = parsed["subject"]
-                if parsed.get("executive_summary"):
-                    exec_summary = parsed["executive_summary"]
-                if parsed.get("key_milestones_achieved"):
-                    milestones = parsed["key_milestones_achieved"]
-                if parsed.get("next_milestone_target"):
-                    next_target = parsed["next_milestone_target"]
-                if parsed.get("customer_action_items"):
-                    customer_actions = parsed["customer_action_items"]
             except Exception as parse_err:
-                logger.warning(f"Failed to parse ADK DELIVER output ({parse_err}); using template draft.")
+                logger.warning(f"Failed to parse ADK DELIVER output ({parse_err})")
+
+        if not parsed or not isinstance(parsed, dict):
+            raise RuntimeError(
+                "AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+            )
+
+        subject = parsed.get("subject", f"Customer Update: {customer_name} — {engagement_name}")
+        exec_summary = parsed.get("executive_summary", "")
+        milestones = parsed.get("key_milestones_achieved", [])
+        next_target = parsed.get("next_milestone_target", "")
+        customer_actions = parsed.get("customer_action_items", [])
 
         # 6. Sanitize tokens back for authorized display
         clean_summary = self.privacy_engine.sanitize_output(exec_summary, mapping)

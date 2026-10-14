@@ -12,6 +12,7 @@ Tests acceptance criteria:
 """
 
 import pytest
+import json
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -22,6 +23,7 @@ from app.models import Engagement, Outcome, OutcomeStatus, TimelineEvent, Approv
 from app.supervisor import SupervisorCoordinator, StructuredWorkPlanProposal
 from app.privacy import PrivacyPolicyEngine
 from app.auth import create_access_token
+from app.agents.adk_runtime import set_mock_adk_response, clear_mock_adk_responses
 
 client = TestClient(app)
 
@@ -36,6 +38,153 @@ def test_db():
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def setup_default_planning_mocks():
+    """Sets up realistic LLM JSON proposal responses for supervisor planning tests."""
+    acme_plan = json.dumps({
+        "engagement_objective": "Deliver cloud migration for Acme Financial within 12 weeks.",
+        "outcomes": ["Legacy application migrated to Google Cloud within 12 weeks."],
+        "definition_of_done": [
+            {"id": "sc-1", "title": "Discovery complete", "completed": False},
+            {"id": "sc-2", "title": "Security team approval obtained", "completed": False}
+        ],
+        "milestones": [
+            {
+                "id": "ms-1",
+                "title": "Architecture Assessment & Security Baseline",
+                "sequence_order": 1,
+                "deliverables": ["Architecture Spec"],
+                "dependencies": ["Legacy access"],
+                "customer_decisions_required": ["Security approval"]
+            },
+            {
+                "id": "ms-2",
+                "title": "Cloud Migration Execution",
+                "sequence_order": 2,
+                "deliverables": ["Migrated services"],
+                "dependencies": ["Security approval"],
+                "customer_decisions_required": ["Production sign-off"]
+            }
+        ],
+        "tasks": [
+            {
+                "id": "task-1",
+                "milestone_id": "ms-1",
+                "title": "Assess Existing Architecture & Security Requirements",
+                "description": "Analyze system topology and security requirements.",
+                "dependencies": ["Legacy access"],
+                "owner": None,
+                "status": "PLANNED"
+            },
+            {
+                "id": "task-2",
+                "milestone_id": "ms-2",
+                "title": "Migrate Critical Workflows",
+                "description": "Execute migration into Google Cloud.",
+                "dependencies": ["Security approval"],
+                "owner": None,
+                "status": "PLANNED"
+            }
+        ],
+        "risks": [
+            "Security team approval turnaround times may impact milestone delivery."
+        ],
+        "facts_and_assumptions": {
+            "confirmed_facts": [
+                "Customer wants to migrate legacy application to Google Cloud within 12 weeks.",
+                "Security team must approve architecture before production deployment."
+            ],
+            "inferred_assumptions": [
+                "Cloud project will be provisioned by the customer."
+            ],
+            "unresolved_questions_or_gaps": []
+        },
+        "next_actions": [
+            "Initiate architecture assessment."
+        ],
+        "timeline_summary": "Target completion: 12 weeks.",
+        "is_provisional": False,
+        "clarifying_questions": []
+    })
+
+    beta_plan = json.dumps({
+        "engagement_objective": "Optimize database query latency for Beta Retail.",
+        "outcomes": ["Database query latency reduced."],
+        "definition_of_done": [{"id": "sc-1", "title": "Latency reduced below target", "completed": False}],
+        "milestones": [
+            {"id": "ms-1", "title": "Query Profiling", "sequence_order": 1, "deliverables": ["Slow query log"], "dependencies": [], "customer_decisions_required": []},
+            {"id": "ms-2", "title": "Index Optimization", "sequence_order": 2, "deliverables": ["Applied indexes"], "dependencies": [], "customer_decisions_required": []}
+        ],
+        "tasks": [
+            {"id": "task-1", "milestone_id": "ms-1", "title": "Profile queries", "description": "Profile queries", "dependencies": [], "owner": None, "status": "PLANNED"},
+            {"id": "task-2", "milestone_id": "ms-2", "title": "Tune indexes", "description": "Tune indexes", "dependencies": [], "owner": None, "status": "PLANNED"}
+        ],
+        "risks": [],
+        "facts_and_assumptions": {
+            "confirmed_facts": ["We need to optimize the database query latency for the client."],
+            "inferred_assumptions": [],
+            "unresolved_questions_or_gaps": ["No explicit timeline or deadline provided."]
+        },
+        "next_actions": ["Analyze query logs."],
+        "timeline_summary": "No explicit timeline committed.",
+        "is_provisional": True,
+        "clarifying_questions": ["What is the target latency deadline and baseline?"]
+    })
+
+    titan_plan = json.dumps({
+        "engagement_objective": "Migrate core logistics database from on-prem to Cloud Spanner in 8 weeks.",
+        "outcomes": ["Database migrated to Cloud Spanner."],
+        "definition_of_done": [{"id": "sc-1", "title": "Dry run test passed", "completed": False}],
+        "milestones": [
+            {"id": "ms-1", "title": "Schema Migration", "sequence_order": 1, "deliverables": ["Spanner Schema"], "dependencies": [], "customer_decisions_required": []}
+        ],
+        "tasks": [
+            {"id": "task-1", "milestone_id": "ms-1", "title": "Spanner DDL", "description": "Spanner DDL", "dependencies": [], "owner": None, "status": "PLANNED"}
+        ],
+        "risks": [],
+        "facts_and_assumptions": {
+            "confirmed_facts": ["Migrate database in 8 weeks."],
+            "inferred_assumptions": [],
+            "unresolved_questions_or_gaps": []
+        },
+        "next_actions": ["Perform schema conversion."],
+        "timeline_summary": "Target completion: 8 weeks.",
+        "is_provisional": False,
+        "clarifying_questions": []
+    })
+
+    helios_plan = json.dumps({
+        "engagement_objective": "Deploy HIPAA-compliant containerized cluster in Google Cloud within 6 weeks.",
+        "outcomes": ["HIPAA cluster deployed."],
+        "definition_of_done": [{"id": "sc-1", "title": "BAA agreement complete", "completed": False}],
+        "milestones": [
+            {"id": "ms-1", "title": "Compliance & Infrastructure", "sequence_order": 1, "deliverables": ["KMS cluster"], "dependencies": [], "customer_decisions_required": []}
+        ],
+        "tasks": [
+            {"id": "task-1", "milestone_id": "ms-1", "title": "Configure KMS", "description": "Configure KMS", "dependencies": [], "owner": None, "status": "PLANNED"}
+        ],
+        "risks": [],
+        "facts_and_assumptions": {
+            "confirmed_facts": ["Complete BAA and KMS within 6 weeks."],
+            "inferred_assumptions": [],
+            "unresolved_questions_or_gaps": []
+        },
+        "next_actions": ["Execute KMS encryption setup."],
+        "timeline_summary": "Target completion: 6 weeks.",
+        "is_provisional": False,
+        "clarifying_questions": []
+    })
+
+    set_mock_adk_response("acme financial", acme_plan)
+    set_mock_adk_response("optimize the database query latency", beta_plan)
+    set_mock_adk_response("titan logistics", titan_plan)
+    set_mock_adk_response("helios health", helios_plan)
+    set_mock_adk_response("migrate core logistics database", titan_plan)
+    set_mock_adk_response("deploy hipaa-compliant", helios_plan)
+    yield
+    clear_mock_adk_responses()
 
 
 def test_coordinator_generate_natural_language_work_plan():
@@ -503,3 +652,49 @@ def test_plan_revision_creates_new_outcome_version(test_db: Session):
     assert outcomes[0].status == OutcomeStatus.SUPERSEDED
     assert outcomes[1].version == 2
     assert outcomes[1].status == OutcomeStatus.APPROVED
+
+
+def test_ai_unavailable_returns_503_without_technical_leak(test_db: Session):
+    """
+    Verifies that when AI service is unavailable (no credentials and no runner output):
+    1. coordinator.generate_natural_language_work_plan raises HTTPException with status 503.
+    2. Endpoint returns 503 Service Unavailable.
+    3. Error detail does NOT leak GEMINI_API_KEY, GROQ_API_KEY, or technical internals.
+    4. Absolutely NO deterministic mock tasks are fabricated.
+    """
+    clear_mock_adk_responses()
+    privacy_engine = PrivacyPolicyEngine(use_cloud_dlp=False)
+    coordinator = SupervisorCoordinator(privacy_engine=privacy_engine)
+
+    # 1. Direct coordinator call raises 503 HTTPException
+    with pytest.raises(Exception) as exc_info:
+        coordinator.generate_natural_language_work_plan(
+            engagement_id="eng-offline-01",
+            customer_name="Offline Corp",
+            natural_language_description="Build a new data pipeline."
+        )
+    err_str = str(exc_info.value)
+    assert "AI service is currently unavailable" in err_str
+    assert "GEMINI_API_KEY" not in err_str
+    assert "GROQ_API_KEY" not in err_str
+
+    # 2. Endpoint returns 503 with non-technical detail
+    create_res = client.post(
+        "/api/v1/engagements",
+        headers={"Authorization": f"Bearer {MANAGER_TOKEN}"},
+        json={"customer_name": "Offline Corp", "name": "Offline Pipeline"}
+    )
+    eng_id = create_res.json()["data"]["id"]
+
+    propose_res = client.post(
+        f"/api/v1/engagements/{eng_id}/plan/propose",
+        headers={"Authorization": f"Bearer {MANAGER_TOKEN}"},
+        json={"natural_language_description": "Build a new data pipeline."}
+    )
+    assert propose_res.status_code == 503
+    detail = propose_res.json()["detail"]
+    assert "AI service is currently unavailable" in detail
+    assert "GEMINI_API_KEY" not in detail
+    assert "GROQ_API_KEY" not in detail
+    assert "Traceback" not in detail
+

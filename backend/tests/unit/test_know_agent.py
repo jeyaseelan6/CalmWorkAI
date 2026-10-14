@@ -1,5 +1,12 @@
 import pytest
 from app.agents.know_agent import KnowAgent
+from app.agents.adk_runtime import set_mock_adk_response, clear_mock_adk_responses
+
+@pytest.fixture(autouse=True)
+def setup_know_mock():
+    set_mock_adk_response("verified engagement evidence", "Based on verified documentation, Cloud SQL cutover window is 15 minutes and AES-256 keys are managed in KMS.")
+    yield
+    clear_mock_adk_responses()
 
 def test_know_agent_insufficient_evidence():
     agent = KnowAgent()
@@ -25,13 +32,11 @@ def test_know_agent_grounded_answer():
     assert len(res.citations) > 0
     assert res.citations[0].document_title == "Architecture Guide"
 
-
 def test_document_processor_text():
     from app.services.document_processor import extract_text_from_file
     text = "# Security Guide\nAll endpoints require OAuth2 bearer token."
     extracted = extract_text_from_file("security.md", text.encode("utf-8"))
     assert "OAuth2 bearer token" in extracted
-
 
 def test_document_upload_file_endpoint():
     from fastapi.testclient import TestClient
@@ -65,3 +70,18 @@ def test_document_upload_file_endpoint():
     assert query_data["data"]["evidence_sufficient"] is True
     assert len(query_data["data"]["citations"]) > 0
     assert any("KMS Policy Spec" in c["document_title"] for c in query_data["data"]["citations"])
+
+def test_know_agent_offline_raises_error():
+    clear_mock_adk_responses()
+    agent = KnowAgent()
+    agent.ingest_document(
+        engagement_id="eng-offline-k01",
+        title="Offline Guide",
+        raw_text="Offline guide content for testing."
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        agent.answer_question(
+            engagement_id="eng-offline-k01",
+            raw_question="What is the offline content?"
+        )
+    assert "AI service is currently unavailable" in str(exc_info.value)

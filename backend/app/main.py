@@ -477,9 +477,14 @@ async def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisReque
             "data": analysis.model_dump(),
             "message": "Change impact analysis completed safely via AI Privacy Guardrail"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error analyzing change: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+        )
 
 
 @app.get(f"{settings.API_V1_STR}/approvals", tags=["Approvals"])
@@ -826,16 +831,25 @@ async def upload_document_file(
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/knowledge/query", tags=["Knowledge"])
 async def query_knowledge(engagement_id: str, payload: KnowledgeQueryRequest):
-    grounded_answer = know_agent.answer_question(
-        engagement_id=engagement_id,
-        raw_question=payload.question,
-        top_k=payload.top_k
-    )
-    return {
-        "success": True,
-        "data": grounded_answer.model_dump(),
-        "message": "Grounded Q&A response generated with source citations."
-    }
+    try:
+        grounded_answer = know_agent.answer_question(
+            engagement_id=engagement_id,
+            raw_question=payload.question,
+            top_k=payload.top_k
+        )
+        return {
+            "success": True,
+            "data": grounded_answer.model_dump(),
+            "message": "Grounded Q&A response generated with source citations."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying knowledge: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+        )
 
 
 @app.get(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/documents-search", tags=["Knowledge"])
@@ -1008,20 +1022,29 @@ async def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)
     version = current_outcome.version if current_outcome else 1
     approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
 
-    recommendation = move_agent.determine_next_action(
-        engagement_id=engagement_id,
-        customer_name=eng.customer_name,
-        current_work_cycle=eng.current_work_cycle,
-        status=eng.status,
-        outcome_version=version,
-        pending_approvals=len(approvals)
-    )
+    try:
+        recommendation = move_agent.determine_next_action(
+            engagement_id=engagement_id,
+            customer_name=eng.customer_name,
+            current_work_cycle=eng.current_work_cycle,
+            status=eng.status,
+            outcome_version=version,
+            pending_approvals=len(approvals)
+        )
 
-    return {
-        "success": True,
-        "data": recommendation.model_dump(),
-        "message": "MOVE Agent Next Best Action evaluated successfully."
-    }
+        return {
+            "success": True,
+            "data": recommendation.model_dump(),
+            "message": "MOVE Agent Next Best Action evaluated successfully."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error determining next action: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+        )
 
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/customer-updates/generate", tags=["Delivery"])
@@ -1034,16 +1057,25 @@ async def generate_customer_update(engagement_id: str, payload: GenerateCustomer
     statement = current_outcome.statement if current_outcome else ""
     criteria = current_outcome.success_criteria if current_outcome else []
 
-    draft = deliver_agent.generate_customer_update(
-        engagement_id=engagement_id,
-        customer_name=eng.customer_name,
-        engagement_name=eng.name,
-        outcome_statement=statement,
-        success_criteria=criteria,
-        current_work_cycle=eng.current_work_cycle,
-        raw_notes=payload.raw_notes,
-        format_type=payload.format_type
-    )
+    try:
+        draft = deliver_agent.generate_customer_update(
+            engagement_id=engagement_id,
+            customer_name=eng.customer_name,
+            engagement_name=eng.name,
+            outcome_statement=statement,
+            success_criteria=criteria,
+            current_work_cycle=eng.current_work_cycle,
+            raw_notes=payload.raw_notes,
+            format_type=payload.format_type
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating customer update: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+        )
 
     # Ensure a pending Approval record exists for this Customer Update
     existing_appr = db.query(Approval).filter(
@@ -1371,9 +1403,14 @@ async def propose_work_plan(
             "data": proposal.model_dump(),
             "message": "Structured work plan proposed successfully."
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating work plan proposal: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+        )
 
 
 @app.post(f"{settings.API_V1_STR}/engagements/{{engagement_id}}/plan/approve", tags=["Supervisor"])

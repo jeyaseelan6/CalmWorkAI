@@ -21,7 +21,8 @@ from app.agents.adk_runtime import (
     get_session_service,
     create_privacy_guardrail_callback,
     create_adk_runner,
-    execute_adk_runner
+    execute_adk_runner,
+    _MOCK_ADK_RESPONSES
 )
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class MoveAgent:
 
         # 3. Attempt ADK Runner execution
         adk_response_text = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
                 adk_response_text = execute_adk_runner(
@@ -144,9 +145,10 @@ class MoveAgent:
                     json_mode=True
                 )
             except Exception as e:
-                logger.warning(f"ADK MOVE runner execution failed ({str(e)}); falling back to deterministic action logic.")
+                logger.warning(f"ADK MOVE runner execution failed ({str(e)})")
 
-        # 4. Parse ADK output if available
+        # 4. Parse ADK output — strictly no deterministic fallback fabrication
+        parsed = None
         if adk_response_text:
             try:
                 cleaned = adk_response_text.strip()
@@ -157,90 +159,24 @@ class MoveAgent:
                     cleaned = cleaned.strip()
 
                 parsed = json.loads(cleaned)
-                situation = parsed.get("situation", f"Engagement is progressing in {current_work_cycle}.")
-                recommendation = parsed.get("recommendation", "Review active work items.")
-                why_now = parsed.get("why_now", "Maintains progress towards target milestone.")
-                impact = parsed.get("impact", "Advances validation readiness.")
-                evidence = parsed.get("evidence", [f"Status: {status}", f"Work cycle: {current_work_cycle}"])
-                confidence = parsed.get("confidence", "High")
-                approval_required = parsed.get("approval_required", False)
-                priority = parsed.get("priority_level", "HIGH_PRIORITY")
-                role = parsed.get("affected_role", "FDE")
-                gating_blocker = None
             except Exception as parse_err:
-                logger.warning(f"Failed to parse ADK MOVE output ({parse_err}); using deterministic rules.")
-                adk_response_text = None
+                logger.warning(f"Failed to parse ADK MOVE output ({parse_err})")
 
-        # 5. Deterministic engagement-state reasoning fallback
-        if not adk_response_text:
-            if status == "NEEDS_REASSESSMENT" or pending_approvals > 0 or any(b.get("is_gating") for b in raw_blockers):
-                situation = f"Outcome status for {customer_name} is currently NEEDS_REASSESSMENT due to pending gating dependency or requirement change."
-                recommendation = f"Review pending approval and obtain Manager authorization for Outcome Version {outcome_version + 1} for {customer_name}."
-                why_now = "Downstream work cycle progression is paused until this criteria and version transition are approved."
-                impact = "Manager authorization activates the updated Outcome Goals and unlocks delivery execution."
-                evidence = [
-                    f"Engagement status: {status}",
-                    f"Pending approvals: {pending_approvals}",
-                    f"Current Outcome Version: {outcome_version}"
-                ]
-                confidence = "High"
-                approval_required = True
-                priority = "CRITICAL"
-                gating_blocker = BlockerItem(
-                    id="blk-001",
-                    title="Outcome Version Approval Dependency",
-                    owner="Manager / Customer Owner",
-                    status="Pending Review",
-                    is_gating=True,
-                    description=f"Outcome version upgrade and updated criteria awaiting review for {customer_name}."
-                )
-                role = "CUSTOMER_OWNER" if status == "NEEDS_REASSESSMENT" else "MANAGER"
-            elif "STEP_5" in str(current_work_cycle).upper() or "Deploy" in str(current_work_cycle):
-                situation = f"Engagement is at Step 5 (Deploy Into Production) for {customer_name}."
-                recommendation = f"Execute staging deployment dry-run simulation and verification suite for {customer_name}."
-                why_now = "Staging verification and cutover dry-run are required to validate deployment integrity prior to production cutover."
-                impact = f"Confirms zero-downtime cutover and validates production release criteria for {customer_name}."
-                evidence = [
-                    f"Current Work Cycle: {current_work_cycle}",
-                    "Staging deployment ready for verification"
-                ]
-                confidence = "High"
-                approval_required = False
-                priority = "HIGH_PRIORITY"
-                gating_blocker = BlockerItem(
-                    id="blk-002",
-                    title="Staging Verification Window",
-                    owner="FDE Team",
-                    status="Scheduled",
-                    is_gating=False,
-                    description=f"Performance and integration verification scheduled for {customer_name}."
-                )
-                role = "FDE"
-            elif "STEP_1" in str(current_work_cycle).upper() or "Understand" in str(current_work_cycle):
-                situation = f"Engagement is at Step 1 (Understand Business Reality) for {customer_name}."
-                recommendation = f"Conduct stakeholder discovery session to clarify operational constraints for {customer_name}."
-                why_now = "Accurate problem discovery in Step 1 prevents downstream architectural rework."
-                impact = f"Establishes grounded Outcome Goals criteria for {customer_name}."
-                evidence = [
-                    f"Current Work Cycle: {current_work_cycle}",
-                    f"Customer: {customer_name}"
-                ]
-                confidence = "High"
-                approval_required = False
-                priority = "HIGH_PRIORITY"
-                gating_blocker = None
-                role = "FDE"
-            else:
-                situation = f"Engagement execution progressing in {current_work_cycle} for {customer_name}."
-                recommendation = f"Complete active work cycle tasks and verify success criteria for {customer_name}."
-                why_now = "Maintains outcome delivery velocity towards target milestone."
-                impact = f"Advances progress towards production validation readiness for {customer_name}."
-                evidence = [f"Current Work Cycle: {current_work_cycle}"]
-                confidence = "High"
-                approval_required = False
-                priority = "ROUTINE"
-                gating_blocker = None
-                role = "FDE"
+        if not parsed or not isinstance(parsed, dict):
+            raise RuntimeError(
+                "AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+            )
+
+        situation = parsed.get("situation", f"Engagement is progressing in {current_work_cycle}.")
+        recommendation = parsed.get("recommendation", "")
+        why_now = parsed.get("why_now", "")
+        impact = parsed.get("impact", "")
+        evidence = parsed.get("evidence", [f"Status: {status}", f"Work cycle: {current_work_cycle}"])
+        confidence = parsed.get("confidence", "Medium")
+        approval_required = parsed.get("approval_required", False)
+        priority = parsed.get("priority_level", "HIGH_PRIORITY")
+        role = parsed.get("affected_role", "FDE")
+        gating_blocker = None
 
         # 6. Sanitize output tokens back for authorized display
         clean_rec = self.privacy_engine.sanitize_output(recommendation, mapping)

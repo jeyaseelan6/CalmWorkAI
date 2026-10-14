@@ -1,10 +1,48 @@
-"""
-Unit test suite for Supervisor Coordinator & Event Bus Engine.
-"""
-
+import pytest
+import json
 from app.supervisor import SupervisorCoordinator, EventBus, EngagementEvent
 from app.privacy import PrivacyPolicyEngine
 from datetime import datetime, timezone
+from app.agents.adk_runtime import set_mock_adk_response, clear_mock_adk_responses
+
+
+@pytest.fixture(autouse=True)
+def setup_supervisor_mock():
+    understand_resp = json.dumps({
+        "evidence": ["Customer requirement observed."],
+        "reasoning": ["Requirement shift impacts Outcome Goals gating."],
+        "recommendation": "Upgrade Outcome to Version 2.",
+        "risk_score": "HIGH",
+        "affected_dimensions": ["Outcome Goals"],
+        "suggested_outcome_statement": "Reduce onboarding time.",
+        "suggested_success_criteria": []
+    })
+    move_resp = json.dumps({
+        "situation": "Engagement is progressing.",
+        "recommendation": "Review active work items.",
+        "why_now": "Maintains velocity.",
+        "impact": "Advances validation readiness.",
+        "evidence": ["Status: NEEDS_REASSESSMENT"],
+        "confidence": "High",
+        "approval_required": True,
+        "priority_level": "CRITICAL",
+        "affected_role": "MANAGER"
+    })
+    deliver_resp = json.dumps({
+        "subject": "Executive Update: Onboarding Modernization",
+        "executive_summary": "Active progress across engagement.",
+        "key_milestones_achieved": ["API setup"],
+        "next_milestone_target": "Validation",
+        "customer_action_items": ["Sync review"]
+    })
+    set_mock_adk_response("anonymized requirement input", understand_resp)
+    set_mock_adk_response("current work cycle", move_resp)
+    set_mock_adk_response("blockers", move_resp)
+    set_mock_adk_response("engineer notes", deliver_resp)
+    set_mock_adk_response("target outcome", deliver_resp)
+    set_mock_adk_response("verified engagement evidence", "Verified evidence text.")
+    yield
+    clear_mock_adk_responses()
 
 
 def test_supervisor_coordination():

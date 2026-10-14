@@ -22,7 +22,8 @@ from app.agents.adk_runtime import (
     get_session_service,
     create_privacy_guardrail_callback,
     create_adk_runner,
-    execute_adk_runner
+    execute_adk_runner,
+    _MOCK_ADK_RESPONSES
 )
 
 logger = logging.getLogger(__name__)
@@ -137,9 +138,9 @@ class UnderstandAgent:
             f"Current Success Criteria (Outcome Goals): {json.dumps(current_success_criteria)}"
         )
 
-        # 3. Execute ADK Runner if model credentials available
+        # 3. Execute ADK Runner if model credentials or test mock available
         adk_response_text = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
                 adk_response_text = execute_adk_runner(
@@ -151,12 +152,12 @@ class UnderstandAgent:
                     json_mode=True
                 )
             except Exception as e:
-                logger.warning(f"ADK Runner execution failed or model unavailable ({str(e)}); using deterministic outcome analysis.")
+                logger.warning(f"ADK Runner execution failed: {str(e)}")
 
-        # 4. Parse ADK output or fallback to deterministic engagement-state reasoning
+        # 4. Parse ADK output — strictly no deterministic fallback fabrication
+        parsed = None
         if adk_response_text:
             try:
-                # Strip markdown code blocks if model included them
                 cleaned = adk_response_text.strip()
                 if cleaned.startswith("```"):
                     cleaned = cleaned.split("```")[1]
@@ -165,45 +166,21 @@ class UnderstandAgent:
                     cleaned = cleaned.strip()
 
                 parsed = json.loads(cleaned)
-                evidence = parsed.get("evidence", [f"Observed scope input: '{anonymized_change}'"])
-                reasoning = parsed.get("reasoning", ["Requirement shift impacts Outcome Goals gating."])
-                recommendation = parsed.get("recommendation", f"Upgrade Outcome Goals checklist for '{anonymized_change}'.")
-                risk_score = parsed.get("risk_score", "HIGH")
-                affected_dims = parsed.get("affected_dimensions", ["Outcome Goals", "Timeline Gating"])
-                suggested_outcome = parsed.get("suggested_outcome_statement", current_outcome_statement)
-                suggested_criteria = parsed.get("suggested_success_criteria", list(current_success_criteria))
             except Exception as parse_err:
-                logger.warning(f"Failed to parse ADK structured output ({parse_err}); falling back to deterministic reasoning.")
-                adk_response_text = None
+                logger.warning(f"Failed to parse ADK structured output ({parse_err})")
 
-        if not adk_response_text:
-            # Deterministic engagement state reasoning (No third-party AI, strictly Google/DB state driven)
-            evidence = [
-                f"Customer requirement change input: '{anonymized_change}'",
-                f"Active outcome baseline: '{anonymized_outcome}'",
-                "Requirement introduces gating condition before production validation step."
-            ]
-            reasoning = [
-                f"The new requirement '{anonymized_change}' affects production success criteria and creates a customer dependency.",
-                "Outcome Goals completion affected: Step 4 (Build Within Real Constraints) requires validation before Step 5 deployment."
-            ]
-            recommendation = (
-                f"Upgrade Outcome to Version 2. Add '{anonymized_change}' to Outcome Goals checklist "
-                "and request Manager approval for version transition."
+        if not parsed or not isinstance(parsed, dict):
+            raise RuntimeError(
+                "AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
             )
-            risk_score = "HIGH"
-            affected_dims = ["Outcome Goals Checklist", "Dependencies & Blockers", "Timeline Gating"]
-            suggested_outcome = current_outcome_statement
 
-            # Reconstruct updated Outcome Goals checklist
-            suggested_criteria = list(current_success_criteria)
-            new_title = f"{raw_change_text} (Added v2)"
-            if not any(c.get("title") == new_title for c in suggested_criteria):
-                suggested_criteria.append({
-                    "id": f"sc-{len(suggested_criteria)+1}",
-                    "title": new_title,
-                    "completed": False
-                })
+        evidence = parsed.get("evidence", [])
+        reasoning = parsed.get("reasoning", [])
+        recommendation = parsed.get("recommendation", "")
+        risk_score = parsed.get("risk_score", "MEDIUM")
+        affected_dims = parsed.get("affected_dimensions", [])
+        suggested_outcome = parsed.get("suggested_outcome_statement", current_outcome_statement)
+        suggested_criteria = parsed.get("suggested_success_criteria", list(current_success_criteria))
 
         # 5. Sanitize output tokens back for authorized display
         clean_title = self.privacy_engine.sanitize_output(raw_change_text, mapping)

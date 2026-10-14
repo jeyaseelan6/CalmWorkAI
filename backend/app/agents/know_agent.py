@@ -22,7 +22,8 @@ from app.agents.adk_runtime import (
     get_session_service,
     create_privacy_guardrail_callback,
     create_adk_runner,
-    execute_adk_runner
+    execute_adk_runner,
+    _MOCK_ADK_RESPONSES
 )
 
 logger = logging.getLogger(__name__)
@@ -177,7 +178,7 @@ class KnowAgent:
         )
 
         adk_answer = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
                 adk_answer = execute_adk_runner(
@@ -189,13 +190,11 @@ class KnowAgent:
                     json_mode=False
                 )
             except Exception as e:
-                logger.warning(f"ADK KNOW runner synthesis failed ({str(e)}); using deterministic citation summary.")
+                logger.warning(f"ADK KNOW runner synthesis failed: {str(e)}")
 
-        # 5. Deterministic fallback if model unavailable or returned None
         if not adk_answer:
-            adk_answer = (
-                f"Based on verified engagement evidence in {citations[0].document_title}: "
-                f"{search_results[0][0].content[:250]}..."
+            raise RuntimeError(
+                "AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
             )
 
         clean_answer = self.privacy_engine.sanitize_output(adk_answer, mapping)

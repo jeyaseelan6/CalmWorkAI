@@ -25,6 +25,7 @@ from app.ai.gemini_service import GeminiService
 from app.supervisor.event_bus import EventBus, EngagementEvent
 
 from google.adk.agents import Agent, SequentialAgent
+from fastapi import HTTPException
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService
 from app.agents.adk_runtime import (
@@ -32,7 +33,8 @@ from app.agents.adk_runtime import (
     get_session_service,
     create_privacy_guardrail_callback,
     create_adk_runner,
-    execute_adk_runner
+    execute_adk_runner,
+    _MOCK_ADK_RESPONSES
 )
 from app.config import settings
 
@@ -373,7 +375,7 @@ class SupervisorCoordinator:
             answer_parts.append(f"**MOVE Action**: Next Best Action is '{next_act.action_title}'. {next_act.why_now}")
 
         if "DELIVER" in capabilities_used:
-            answer_parts.append(f"**DELIVER Communication**: Customer update draft is ready. Key message: Enterprise onboarding automation is 75% complete.")
+            answer_parts.append(f"**DELIVER Communication**: Customer update draft generated.")
 
         if "KNOW" in capabilities_used and know_response.evidence_sufficient and know_response.answer:
             answer_parts.append(f"**KNOW Evidence**: {know_response.answer}")
@@ -930,7 +932,7 @@ class SupervisorCoordinator:
         )
 
         parsed_data = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY)
+        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
                 raw_reply = execute_adk_runner(
@@ -951,13 +953,13 @@ class SupervisorCoordinator:
                         clean_json = re.sub(r"\s*```$", "", clean_json)
                     parsed_data = json.loads(clean_json)
             except Exception as e:
-                logger.warning(f"ADK runner planning generation fallback: {e}")
+                logger.warning(f"ADK runner planning generation error: {e}")
 
-        # Deterministic extraction fallback (used in test suite or when model output is offline/unparseable)
+        # Strictly enforce LLM generation — zero deterministic mock or fallback fabrication
         if not parsed_data or not isinstance(parsed_data, dict):
-            parsed_data = self._deterministic_plan_synthesis(
-                customer_name=customer_name,
-                text=sanitized_desc
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
             )
 
         # Merge any existing manager edits if provided
@@ -993,24 +995,7 @@ class SupervisorCoordinator:
                 })
 
         raw_risks = parsed_data.get("risks", [])
-        if not raw_risks:
-            raw_risks = [
-                f"Customer security approval turnaround times may impact {customer_name} milestone delivery.",
-                "Prerequisite access to legacy environments and technical documentation must be secured early."
-            ]
-
         raw_next_actions = parsed_data.get("next_actions", [])
-        if not raw_next_actions and milestones:
-            first_ms = milestones[0]
-            raw_next_actions = [
-                f"Initiate {first_ms.title} for {customer_name}.",
-                f"Verify prerequisite access: {first_ms.dependencies[0] if first_ms.dependencies else 'Technical documentation'}"
-            ]
-        elif not raw_next_actions:
-            raw_next_actions = [
-                f"Schedule discovery and requirements review with {customer_name} technical stakeholders.",
-                "Verify operational environment access and baseline technical constraints."
-            ]
 
         proposal = StructuredWorkPlanProposal(
             proposal_id=proposal_id,
@@ -1039,171 +1024,4 @@ class SupervisorCoordinator:
 
         return proposal
 
-    def _deterministic_plan_synthesis(self, customer_name: str, text: str) -> Dict[str, Any]:
-        """
-        Deterministic extraction of structured plan from natural language description.
-        Guarantees schema validity when LLM inference is offline or in test environments.
-        Extracts real facts from text, separates inferred assumptions, and identifies missing info.
-        """
-        text_lower = text.lower()
-
-        # 1. Timeline Extraction (NO fabrication)
-        deadline_match = re.search(r'\b(?:within|in|by)\s+(\d+\s*(?:weeks?|months?|days?)|Q[1-4]|end\s+of\s+\w+)\b', text, re.IGNORECASE)
-        timeline_summary = f"Target completion: {deadline_match.group(1)}" if deadline_match else "No explicit timeline committed."
-
-        # 2. Extract facts from text
-        confirmed_facts = []
-        sentences = [s.strip() for s in re.split(r'[.\n;]+', text) if len(s.strip()) > 8]
-        for s in sentences[:4]:
-            confirmed_facts.append(s)
-
-        # 3. Inferred Assumptions (explicitly marked)
-        inferred_assumptions = [
-            f"Target cloud and operational environments will be provisioned with access granted by {customer_name}.",
-            "Customer architecture and security stakeholders will be available for milestone reviews and sign-offs."
-        ]
-
-        # 4. Identify Gaps & Missing Information
-        missing_gaps = []
-        clarifying_questions = []
-        if not deadline_match:
-            missing_gaps.append("Target delivery date or hard milestone deadlines not specified.")
-            clarifying_questions.append("What is the required target completion timeline or deadline?")
-
-        if not any(k in text_lower for k in ["security", "compliance", "sso", "audit"]):
-            missing_gaps.append("Enterprise security and compliance governance constraints not detailed.")
-            clarifying_questions.append("Are there specific compliance or security requirements (e.g. SOC2, HIPAA, SSO)?")
-
-        if not any(k in text_lower for k in ["team", "handover", "training", "owner"]):
-            missing_gaps.append("Customer handover team and operational owners not identified.")
-            clarifying_questions.append("Who is the primary customer technical lead for handover and validation?")
-
-        # 5. Extract Objectives & Outcomes
-        objective = sentences[0] if sentences else f"Deliver enterprise cloud initiative for {customer_name}."
-        outcomes = [
-            f"Successfully execute initiative for {customer_name} meeting all defined acceptance criteria.",
-            f"Production verification and handover to {customer_name} team."
-        ]
-
-        # 6. Determine Milestones
-        milestones = [
-            WorkMilestone(
-                id="ms-1",
-                title="Discovery, Architecture Assessment & Security Baseline",
-                sequence_order=1,
-                deliverables=["Architecture assessment document", "Security and compliance requirements specification"],
-                dependencies=["Customer technical stakeholder interviews", "Environment access credentials"],
-                customer_decisions_required=["Security architecture sign-off"]
-            ),
-            WorkMilestone(
-                id="ms-2",
-                title="Core Workflow Migration & Environment Implementation",
-                sequence_order=2,
-                deliverables=["Provisioned cloud infrastructure", "Migrated critical workflows and service pipelines"],
-                dependencies=["Approved architecture from Milestone 1", "Source system access"],
-                customer_decisions_required=["Staging cutover approval"]
-            ),
-            WorkMilestone(
-                id="ms-3",
-                title="Production Validation, Handover & Operational Sign-off",
-                sequence_order=3,
-                deliverables=["Production validation report", "Operational runbook & team handover sessions"],
-                dependencies=["Milestone 2 migration completion", "Customer testing sign-off"],
-                customer_decisions_required=["Final production cutover and handover acceptance"]
-            )
-        ]
-
-        # 7. Concrete Work Tasks
-        tasks = [
-            WorkTask(
-                id="task-1",
-                milestone_id="ms-1",
-                title="Assess Existing Architecture & Dependencies",
-                description=f"Analyze existing system topology, data flows, and constraints for {customer_name}.",
-                dependencies=["Access to system documentation"],
-                owner=None,
-                status="PLANNED"
-            ),
-            WorkTask(
-                id="task-2",
-                milestone_id="ms-1",
-                title="Identify Security & Compliance Requirements",
-                description=f"Map security, authentication, and compliance requirements with {customer_name} security team.",
-                dependencies=["Security stakeholder interview"],
-                owner=None,
-                status="PLANNED"
-            ),
-            WorkTask(
-                id="task-3",
-                milestone_id="ms-2",
-                title="Implement & Configure Target Environment",
-                description="Provision and configure cloud environment following approved architecture.",
-                dependencies=["Approved security architecture"],
-                owner=None,
-                status="PLANNED"
-            ),
-            WorkTask(
-                id="task-4",
-                milestone_id="ms-2",
-                title="Migrate Critical Workflows & Data Pipelines",
-                description=f"Migrate and test core workflows for {customer_name}.",
-                dependencies=["Target environment active"],
-                owner=None,
-                status="PLANNED"
-            ),
-            WorkTask(
-                id="task-5",
-                milestone_id="ms-3",
-                title="Environment Validation & Outcome Goals Verification",
-                description="Conduct end-to-end integration testing and verify all Outcome Goals criteria.",
-                dependencies=["Migration completed"],
-                owner=None,
-                status="PLANNED"
-            ),
-            WorkTask(
-                id="task-6",
-                milestone_id="ms-3",
-                title="Customer Handover & Operational Enablement",
-                description=f"Conduct handover sessions and deliver operational runbooks to {customer_name} team.",
-                dependencies=["Validation testing complete"],
-                owner=None,
-                status="PLANNED"
-            )
-        ]
-
-        # 8. Outcome Goals (Success Criteria)
-        dod = [
-            {"id": "sc-1", "title": "Architecture assessment documented and approved by customer security", "completed": False},
-            {"id": "sc-2", "title": "Target environment provisioned and critical workflows migrated", "completed": False},
-            {"id": "sc-3", "title": "Production validation completed with zero critical blockers", "completed": False},
-            {"id": "dod-4", "title": "Handover documentation and enablement sessions completed", "completed": False}
-        ]
-
-        # 9. Next Actions & Risks
-        next_actions = [
-            f"Schedule architecture discovery session with {customer_name} technical stakeholders.",
-            "Obtain environment access credentials and review current system topology."
-        ]
-        risks = [
-            "Customer security approval cycle may gate production deployment if not engaged early.",
-            "Undocumented legacy dependencies may require scope or timeline adjustments."
-        ]
-
-        return {
-            "engagement_objective": objective,
-            "outcomes": outcomes,
-            "definition_of_done": dod,
-            "milestones": [m.model_dump() for m in milestones],
-            "tasks": [t.model_dump() for t in tasks],
-            "risks": risks,
-            "facts_and_assumptions": {
-                "confirmed_facts": confirmed_facts,
-                "inferred_assumptions": inferred_assumptions,
-                "unresolved_questions_or_gaps": missing_gaps
-            },
-            "next_actions": next_actions,
-            "timeline_summary": timeline_summary,
-            "is_provisional": len(missing_gaps) > 0,
-            "clarifying_questions": clarifying_questions
-        }
 
