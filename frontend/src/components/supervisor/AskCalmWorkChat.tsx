@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Sparkles, Send, Bot, User, CheckCircle2, ShieldCheck, ArrowRight, AlertTriangle, BookOpen } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
+import { getNowISTTime } from "@/utils/date";
 
 interface ChatMessage {
   id: string;
@@ -38,7 +39,7 @@ export default function AskCalmWorkChat() {
       id: `msg-${Date.now()}`,
       sender: "USER",
       text: q.trim(),
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: getNowISTTime(true)
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -62,7 +63,7 @@ export default function AskCalmWorkChat() {
           capabilitiesUsed: data.data.capabilities_used,
           sources: data.data.sources,
           suggestedFollowups: data.data.suggested_followups,
-          timestamp: new Date().toLocaleTimeString()
+          timestamp: getNowISTTime(true)
         };
         setMessages((prev) => [...prev, supMsg]);
       }

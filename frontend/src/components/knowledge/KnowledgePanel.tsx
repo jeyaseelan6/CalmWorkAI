@@ -8,6 +8,7 @@ import {
   Eye, Download, ZoomIn, ZoomOut, RotateCcw, X, Copy,
   ExternalLink, Image as ImageIcon, Filter, ChevronRight
 } from "lucide-react";
+import { formatISTDateTime } from "@/utils/date";
 
 interface Citation {
   document_title: string;
@@ -688,7 +689,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                         <span>&bull;</span>
                         <span className="flex items-center gap-1 font-mono">
                           <Clock className="h-3 w-3 text-slate-400" />
-                          {new Date(doc.created_at).toLocaleDateString()}
+                          {formatISTDateTime(doc.created_at, { shortMonth: true })}
                         </span>
                         <span>&bull;</span>
                         <span className="text-emerald-700 font-semibold flex items-center gap-1">

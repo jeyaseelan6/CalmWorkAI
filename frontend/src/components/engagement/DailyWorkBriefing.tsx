@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { RefreshCw, Sparkles, AlertTriangle, CheckCircle2, ShieldAlert, ArrowRight, Clock, MessageSquare, BookOpen, ShieldCheck, ChevronRight, X, Sun } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
 import Link from "next/link";
+import { getNowISTTime } from "@/utils/date";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -90,7 +91,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
       const data = await res.json();
       if (data.success) {
         setBrief(data.data);
-        setLastRefreshed(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        setLastRefreshed(getNowISTTime(true));
       }
     } catch (err) {
       console.error("Failed to fetch Morning Brief:", err);

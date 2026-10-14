@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Cpu, ShieldCheck, Activity, CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
+import { formatISTTime } from "@/utils/date";
 
 interface AgentStatus {
   agent_name: string;
@@ -120,7 +121,7 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
           <span>Central State: <strong className="text-slate-900 font-semibold">{summary?.current_work_cycle}</strong></span>
         </div>
         <span className="font-mono text-[11px] text-slate-500">
-          Orchestrated: {summary?.orchestrated_at ? new Date(summary.orchestrated_at).toLocaleTimeString() : "Just now"}
+          Orchestrated: {summary?.orchestrated_at ? formatISTTime(summary.orchestrated_at, true) : "Just now"}
         </span>
       </div>
       </>

@@ -4,6 +4,8 @@
  * and provides client-side print-to-PDF export with zero external dependencies.
  */
 
+import { formatISTDate } from "./date";
+
 export interface CustomerUpdatePdfData {
   customerName: string;
   engagementName?: string;
@@ -76,7 +78,7 @@ export function buildCustomerUpdatePdfBlob(data: CustomerUpdatePdfData): Blob {
   const statusLabel = data.isApproved
     ? "APPROVED BY MANAGER (RELEASE AUTHORIZED)"
     : "DRAFT (AWAITING MANAGER SIGN-OFF)";
-  const dateStr = data.dateStr || new Date().toISOString().split("T")[0];
+  const dateStr = data.dateStr || formatISTDate(new Date());
 
   const streamLines: string[] = [];
 
@@ -287,7 +289,7 @@ export function downloadCustomerUpdatePdf(data: CustomerUpdatePdfData): boolean 
   const cleanCustomer = (data.customerName || "Customer")
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .slice(0, 24);
-  const dateStr = data.dateStr || new Date().toISOString().split("T")[0];
+  const dateStr = data.dateStr || formatISTDate(new Date()).replace(/\//g, "-");
   const filename = `Executive_Summary_${cleanCustomer}_${dateStr}.pdf`;
 
   const url = URL.createObjectURL(blob);
@@ -445,7 +447,7 @@ export function printCustomerUpdateDocument(data: CustomerUpdatePdfData): boolea
     </div>
     <div class="meta-item">
       <span class="meta-label">Date</span>
-      <span class="meta-val">${data.dateStr || new Date().toISOString().split("T")[0]}</span>
+      <span class="meta-val">${data.dateStr || formatISTDate(new Date())}</span>
     </div>
     <div class="meta-item">
       <span class="meta-label">Initiative</span>

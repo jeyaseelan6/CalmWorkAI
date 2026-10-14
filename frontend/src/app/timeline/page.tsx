@@ -4,6 +4,7 @@ import React from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useEngagement } from "@/context/EngagementContext";
 import { Clock, ShieldCheck, AlertTriangle, FileText, CheckCircle, RefreshCw } from "lucide-react";
+import { formatISTDateTime } from "@/utils/date";
 
 interface TimelineItem {
   id: string;
@@ -63,17 +64,7 @@ export default function TimelinePage() {
   };
 
   const formatDate = (isoString: string) => {
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    } catch {
-      return isoString;
-    }
+    return formatISTDateTime(isoString, { shortMonth: true, includeZone: true });
   };
 
   return (

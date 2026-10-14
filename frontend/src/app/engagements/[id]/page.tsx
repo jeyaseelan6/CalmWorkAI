@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { useParams } from "next/navigation";
+import { formatISTDateTime } from "@/utils/date";
 
 function parseStepNumber(workCycle?: string): number {
   if (!workCycle) return 1;
@@ -438,7 +439,7 @@ function EngagementDetailContent() {
                       <p className="text-slate-600 leading-relaxed">{evt.description}</p>
                     </div>
                     <span className="text-[11px] text-slate-400 font-mono shrink-0">
-                      {new Date(evt.created_at).toLocaleDateString()}
+                      {formatISTDateTime(evt.created_at)}
                     </span>
                   </li>
                 ))}

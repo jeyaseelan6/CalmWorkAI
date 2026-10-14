@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { MorningBriefData } from "@/components/engagement/DailyWorkBriefing";
+import { formatISTTime, formatISTDate, formatISTDateTime, getNowISTTime } from "@/utils/date";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -52,7 +53,7 @@ export default function MyDayPage() {
       const data = await res.json();
       if (data.success && data.data) {
         setBrief(data.data);
-        setLastRefreshed(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        setLastRefreshed(getNowISTTime(true));
       }
     } catch (err) {
       console.warn("Failed to fetch Morning Brief:", err);
@@ -386,7 +387,7 @@ export default function MyDayPage() {
                     <li key={evt.id} className="space-y-0.5 text-slate-800">
                       <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                         <span>{evt.actor_type}</span>
-                        <span>{new Date(evt.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        <span>{formatISTTime(evt.created_at, true)}</span>
                       </div>
                       <p className="font-medium text-xs leading-snug">{evt.title}</p>
                     </li>

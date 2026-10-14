@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field
 import json
 import re
 import uuid
-import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
 from app.agents import (
     UnderstandAgent, ChangeImpactAnalysis,
@@ -440,8 +441,8 @@ class SupervisorCoordinator:
         5. SUPERVISOR -> Consolidates findings & creates Proposed Daily Work Plan
         * CRITICAL REQUIREMENT: DELIVER is EXCLUDED from default Morning Brief *
         """
-        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_str = datetime.now(IST_TZ).strftime("%d/%m/%Y %H:%M")
+        now_iso = datetime.now(IST_TZ).isoformat()
         warnings: List[str] = []
 
         # -------------------------------------------------------------
@@ -534,7 +535,14 @@ class SupervisorCoordinator:
                     continue
                 summary_text = getattr(evt, "description", None) or getattr(evt, "title", "Milestone recorded")
                 evt_date = getattr(evt, "created_at", None)
-                date_str = evt_date.strftime("%Y-%m-%d") if (evt_date and hasattr(evt_date, "strftime")) else now_str
+                if evt_date and hasattr(evt_date, "strftime"):
+                    if getattr(evt_date, "tzinfo", None) is None:
+                        evt_ist = evt_date.replace(tzinfo=timezone.utc).astimezone(IST_TZ)
+                    else:
+                        evt_ist = evt_date.astimezone(IST_TZ)
+                    date_str = evt_ist.strftime("%d/%m/%Y %H:%M")
+                else:
+                    date_str = now_str
                 what_changed.append(WhatChangedItem(
                     summary=summary_text,
                     category=category_map.get(evt_type, "PROGRESS"),
