@@ -13,7 +13,7 @@ export const IST_TIMEZONE = "Asia/Kolkata";
  */
 export function formatISTTime(
   dateInput: string | Date | number | null | undefined,
-  includeZone: boolean = false
+  includeZone: boolean = true
 ): string {
   if (!dateInput) return "";
   try {
@@ -66,7 +66,7 @@ export function formatISTDate(
 
 /**
  * Format an ISO timestamp or Date object into complete IST date & 24-hour time:
- * Default: "14 Oct 2026, 14:30"
+ * Default: "14 Oct 2026, 14:30 IST"
  * @param dateInput Date, ISO string, or timestamp
  * @param options Custom formatting options
  */
@@ -85,7 +85,7 @@ export function formatISTDateTime(
 
     const useShortMonth = options?.shortMonth ?? true;
     const includeSeconds = options?.includeSeconds ?? false;
-    const includeZone = options?.includeZone ?? false;
+    const includeZone = options?.includeZone ?? true;
 
     const formatted = d.toLocaleString("en-GB", {
       timeZone: IST_TIMEZONE,
@@ -105,15 +105,15 @@ export function formatISTDateTime(
 }
 
 /**
- * Returns current time in IST (24-hour format): "HH:mm" or "HH:mm IST"
+ * Returns current time in IST (24-hour format): "HH:mm IST"
  */
-export function getNowISTTime(includeZone: boolean = false): string {
+export function getNowISTTime(includeZone: boolean = true): string {
   return formatISTTime(new Date(), includeZone);
 }
 
 /**
- * Returns current date & time in IST (24-hour format): "DD MMM YYYY, HH:mm"
+ * Returns current date & time in IST (24-hour format): "DD MMM YYYY, HH:mm IST"
  */
-export function getNowISTDateTime(includeZone: boolean = false): string {
+export function getNowISTDateTime(includeZone: boolean = true): string {
   return formatISTDateTime(new Date(), { includeZone });
 }

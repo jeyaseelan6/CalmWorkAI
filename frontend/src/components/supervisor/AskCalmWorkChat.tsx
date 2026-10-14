@@ -264,7 +264,7 @@ export default function AskCalmWorkChat() {
         "What should I do next?",
         "Prepare a customer update."
       ],
-      timestamp: "Just now"
+      timestamp: getNowISTTime(true)
     }
   ]);
 
@@ -409,15 +409,25 @@ export default function AskCalmWorkChat() {
                           </div>
                         </div>
                       </div>
-                      <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${meta.badgeBg}`}>
-                        {m.delegatedAgent?.badge_label || meta.badge}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+                          {m.timestamp}
+                        </span>
+                        <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${meta.badgeBg}`}>
+                          {m.delegatedAgent?.badge_label || meta.badge}
+                        </span>
+                      </div>
                     </div>
                   )}
 
                   {/* Message Content */}
                   {isUser ? (
-                    <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                    <div>
+                      <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                      <div className="text-[9px] text-slate-400 font-mono mt-1 text-right">
+                        {m.timestamp}
+                      </div>
+                    </div>
                   ) : (
                     <FormattedMessageBody rawText={m.text} />
                   )}

@@ -54,11 +54,7 @@ function formatCustomISTDueDate(dateStr: string, timeStr: string = "17:00"): str
 }
 
 const getTodayDateStr = (): string => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 };
 
 const DUE_PRESET_CONFIG = [

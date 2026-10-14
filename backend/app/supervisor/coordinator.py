@@ -334,7 +334,18 @@ class SupervisorCoordinator:
             d = getattr(ev, "description", None) or (ev.get("description") if isinstance(ev, dict) else "")
             ev_type = getattr(ev, "event_type", None) or (ev.get("event_type") if isinstance(ev, dict) else "")
             dt = getattr(ev, "created_at", None) or (ev.get("created_at") if isinstance(ev, dict) else "")
-            dt_str = dt.strftime("%Y-%m-%d %H:%M") if hasattr(dt, "strftime") else str(dt)[:16]
+            if isinstance(dt, datetime):
+                dt_ist = dt.replace(tzinfo=timezone.utc).astimezone(IST_TZ) if dt.tzinfo is None else dt.astimezone(IST_TZ)
+                dt_str = dt_ist.strftime("%d %b %Y, %H:%M IST")
+            elif isinstance(dt, str) and dt:
+                try:
+                    parsed_dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+                    dt_ist = parsed_dt.replace(tzinfo=timezone.utc).astimezone(IST_TZ) if parsed_dt.tzinfo is None else parsed_dt.astimezone(IST_TZ)
+                    dt_str = dt_ist.strftime("%d %b %Y, %H:%M IST")
+                except Exception:
+                    dt_str = str(dt)[:16]
+            else:
+                dt_str = str(dt)[:16]
             recent_event_lines.append(f"- [{dt_str}] ({ev_type}) {t}: {d}")
         timeline_formatted = "\n".join(recent_event_lines) if recent_event_lines else "No recent worknotes or events recorded."
 
@@ -347,6 +358,15 @@ class SupervisorCoordinator:
         pending_approvals_desc = "; ".join(pending_desc_lines) if pending_desc_lines else ("None" if pending_approvals == 0 else f"{pending_approvals} pending approval(s)")
 
         # 3. Intent Detection: AI Classification with Semantic Pattern Fallback
+        now_ist = datetime.now(IST_TZ)
+        now_ist_str = now_ist.strftime("%d %b %Y, %H:%M IST")
+        time_rule = (
+            f"MANDATORY TIMEZONE RULE:\n"
+            f"- Current Platform Time: {now_ist_str}\n"
+            f"- All timestamps, event hours, milestones, and deadlines across your response MUST strictly use Indian Standard Time (IST) 24-hour clock only (e.g. '{now_ist_str}' or '15:30 IST').\n"
+            f"- NEVER output or mention UTC, GMT, or 12-hour AM/PM formats under any circumstances."
+        )
+
         intent = None
         if groq_service.is_configured() or is_live_inference_enabled():
             classification_prompt = (
@@ -420,6 +440,7 @@ class SupervisorCoordinator:
             if groq_service.is_configured() or is_live_inference_enabled():
                 understand_prompt = (
                     f"You are the UNDERSTAND Agent in CalmWork AI. You protect scope integrity and track requirement evolution.\n\n"
+                    f"{time_rule}\n\n"
                     f"Engagement Context:\n"
                     f"- Customer: {customer_name} ({engagement_id})\n"
                     f"- Current Work Cycle: {current_work_cycle}\n"
@@ -427,14 +448,14 @@ class SupervisorCoordinator:
                     f"- Outcome Version {version}: \"{outcome_statement}\"\n"
                     f"- Progress: {engagement_progress}% ({len(completed_crits)}/{total_crits} criteria completed)\n\n"
                     f"Success Criteria (Outcome Goals):\n{crit_formatted}\n\n"
-                    f"Recent Timeline Events & Worknotes:\n{timeline_formatted}\n\n"
+                    f"Recent Timeline Events & Worknotes (All in IST):\n{timeline_formatted}\n\n"
                     f"User Query: \"{sanitized_query}\"\n\n"
-                    f"Provide a concise, direct, professional response answering the user's question with full context of recent timeline events, worknotes, and whether current work remains strictly within approved scope."
+                    f"Provide a concise, direct, professional response answering the user's question with full context of recent timeline events, worknotes, and whether current work remains strictly within approved scope. Ensure any dates or times mentioned are strictly in IST 24h format."
                 )
                 try:
                     llm_response = groq_service.generate_chat_completion(
                         prompt=understand_prompt,
-                        system_instruction="You are the CalmWork UNDERSTAND Agent. Respond concisely and professionally based on factual context.",
+                        system_instruction="You are the CalmWork UNDERSTAND Agent. Respond concisely and professionally. Keep all timestamps strictly in IST 24-hour clock notation.",
                         max_tokens=600
                     )
                 except Exception as e:
@@ -473,20 +494,21 @@ class SupervisorCoordinator:
             if groq_service.is_configured() or is_live_inference_enabled():
                 move_prompt = (
                     f"You are the MOVE Agent in CalmWork AI. You specialize in operational velocity, eliminating blockers, and recommending the single highest-leverage next action.\n\n"
+                    f"{time_rule}\n\n"
                     f"Engagement Context:\n"
                     f"- Customer: {customer_name}\n"
                     f"- Current Work Cycle: {current_work_cycle}\n"
                     f"- Status: {status}\n"
                     f"- Pending Approvals: {pending_approvals_desc}\n\n"
-                    f"Active Work Plan Tasks:\n{tasks_formatted}\n\n"
-                    f"Recent Activity:\n{timeline_formatted}\n\n"
+                    f"Active Work Plan Tasks (Target Due Dates in IST):\n{tasks_formatted}\n\n"
+                    f"Recent Activity (in IST):\n{timeline_formatted}\n\n"
                     f"User Query: \"{sanitized_query}\"\n\n"
-                    f"Identify the Next Best Action for the engineer, explain WHY NOW, address any gating approvals or blockers, and specify immediate next steps."
+                    f"Identify the Next Best Action for the engineer, explain WHY NOW, address any gating approvals or blockers, and specify immediate next steps. All target times and schedules must strictly use IST 24-hour notation."
                 )
                 try:
                     llm_response = groq_service.generate_chat_completion(
                         prompt=move_prompt,
-                        system_instruction="You are the CalmWork MOVE Agent. Provide high-clarity operational guidance.",
+                        system_instruction="You are the CalmWork MOVE Agent. Provide high-clarity operational guidance. Keep all timestamps and deadlines strictly in IST 24-hour clock notation.",
                         max_tokens=600
                     )
                 except Exception as e:
@@ -532,25 +554,26 @@ class SupervisorCoordinator:
             if groq_service.is_configured() or is_live_inference_enabled():
                 deliver_prompt = (
                     f"You are the DELIVER Agent in CalmWork AI. You translate engineering progress into calm, high-trust executive stakeholder communication.\n\n"
+                    f"{time_rule}\n\n"
                     f"Engagement Context:\n"
                     f"- Customer: {customer_name}\n"
                     f"- Current Stage: {current_work_cycle}\n"
                     f"- Outcome Objective: \"{outcome_statement}\"\n"
                     f"- Progress: {engagement_progress}%\n"
                     f"- Completed Criteria:\n{crit_formatted}\n\n"
-                    f"Recent Engineering Worknotes:\n{timeline_formatted}\n\n"
+                    f"Recent Engineering Worknotes (in IST):\n{timeline_formatted}\n\n"
                     f"User Query: \"{sanitized_query}\"\n\n"
                     f"Draft a clean, professional stakeholder update containing:\n"
                     f"1. Executive Summary\n"
-                    f"2. Key Milestones Achieved\n"
-                    f"3. Next Milestones & Commitments\n"
+                    f"2. Key Milestones Achieved (with dates in IST 24h notation)\n"
+                    f"3. Next Milestones & Commitments (with target deadlines in IST 24h notation)\n"
                     f"4. Customer Action Items (if any)\n"
                     f"Note: Remind the user that manager approval is required before external distribution."
                 )
                 try:
                     llm_response = groq_service.generate_chat_completion(
                         prompt=deliver_prompt,
-                        system_instruction="You are the CalmWork DELIVER Agent. Write clear, executive-grade customer communications.",
+                        system_instruction="You are the CalmWork DELIVER Agent. Write clear, executive-grade customer communications. Keep all dates and times strictly in IST 24-hour clock notation.",
                         max_tokens=700
                     )
                 except Exception as e:
@@ -632,6 +655,10 @@ class SupervisorCoordinator:
 
         # 5. Restore de-anonymized names if needed
         final_answer = self.privacy_engine.sanitize_output(answer, mapping)
+        # Defense-in-depth: Ensure any residual UTC/GMT references are strictly converted to IST
+        final_answer = re.sub(r'\(UTC\)', '(IST)', final_answer)
+        final_answer = re.sub(r'\bUTC\b', 'IST', final_answer)
+        final_answer = re.sub(r'\bGMT\b', 'IST', final_answer)
 
         # 6. Dynamic Suggested Followups based on intent
         if intent == "UNDERSTAND":
@@ -715,7 +742,7 @@ class SupervisorCoordinator:
             sufficient_evidence=True,
             suggested_followups=suggested_followups,
             delegated_agent=delegated_agent,
-            timestamp=datetime.now(timezone.utc).isoformat()
+            timestamp=datetime.now(IST_TZ).isoformat()
         )
 
     def generate_daily_work_brief(
@@ -750,7 +777,7 @@ class SupervisorCoordinator:
                 "step": 1,
                 "total_steps": 5
             })
-        now_str = datetime.now(IST_TZ).strftime("%d/%m/%Y %H:%M")
+        now_str = datetime.now(IST_TZ).strftime("%d %b %Y, %H:%M IST")
         now_iso = datetime.now(IST_TZ).isoformat()
         warnings: List[str] = []
 
@@ -886,7 +913,7 @@ class SupervisorCoordinator:
                         evt_ist = evt_date.replace(tzinfo=timezone.utc).astimezone(IST_TZ)
                     else:
                         evt_ist = evt_date.astimezone(IST_TZ)
-                    date_str = evt_ist.strftime("%d/%m/%Y %H:%M")
+                    date_str = evt_ist.strftime("%d %b %Y, %H:%M IST")
                 else:
                     date_str = now_str
                 what_changed.append(WhatChangedItem(

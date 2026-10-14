@@ -7,9 +7,11 @@ executive business language updates suitable for customer stakeholders, protecte
 
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import logging
+
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
 from google.adk.agents import Agent
 from google.adk.runners import Runner
@@ -48,6 +50,7 @@ DELIVER_INSTRUCTION = (
     "You are the CalmWork DELIVER Agent, an executive communication specialist for Forward-Deployed Engineers. "
     "Your objective is to translate technical engineering milestone progress into executive, polished business communication "
     "suitable for enterprise customer stakeholders. "
+    "All deadlines, milestone dates, and target schedules must strictly use Indian Standard Time (IST) 24-hour clock (e.g., '14 Oct 2026, 17:00 IST'). NEVER use UTC or 12-hour AM/PM formats. "
     "Never claim unverified completions. Only reference verified milestones and criteria. "
     "Drafts must always require human manager approval before distribution. "
     "Return JSON matching keys: subject (string), executive_summary (string), "
@@ -183,7 +186,7 @@ class DeliverAgent:
             next_milestone_target=next_target,
             customer_action_items=customer_actions,
             status="PENDING_MANAGER_APPROVAL",
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=datetime.now(IST_TZ).isoformat(),
             privacy_scrubbed=len(mapping.reference_to_original) > 0,
             approval_required=True
         )
