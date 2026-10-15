@@ -84,7 +84,7 @@ interface MyDayViewProps {
 }
 
 export default function MyDayView({ embedded = false }: MyDayViewProps) {
-  const { role } = useAuth();
+  const { role, token } = useAuth();
   const {
     activeCustomer,
     activeEngagementData,
@@ -141,9 +141,15 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       total_steps: 5
     });
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/stream`, {
-        method: "POST"
+        method: "POST",
+        headers
       });
 
       if (!res.ok || !res.body) {
@@ -185,7 +191,8 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       console.warn("Streaming morning brief encountered error, using standard fallback:", err);
       try {
         const fallbackRes = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
-          method: "POST"
+          method: "POST",
+          headers
         });
         const fallbackData = await fallbackRes.json();
         if (fallbackData.success && fallbackData.data) {
@@ -345,6 +352,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
   const effectiveTasks = localTasks.length > 0 ? localTasks : (workItems.length > 0 ? workItems : baselineTasks);
 
   const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [customDate, setCustomDate] = useState<string>("");
   const [customTime, setCustomTime] = useState<string>("17:00");
   const [alertNotification, setAlertNotification] = useState<string | null>(null);
@@ -419,7 +427,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     if (!brief?.proposed_work_plan?.work_items || brief.proposed_work_plan.work_items.length === 0) return;
     setAdoptingTasks(true);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -438,9 +445,12 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
           setAlertNotification(`${brief.proposed_work_plan.work_items.length} Plan Agent tasks added and submitted for Manager approval!`);
         }
         await fetchEngagementDetail(activeCustomer.id);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setAlertNotification(`Failed to adopt Plan Agent tasks: ${errJson.detail || "Server rejected task adoption."}`);
       }
-    } catch (err) {
-      console.error("Failed to adopt Plan Agent tasks:", err);
+    } catch (err: any) {
+      setAlertNotification(`Failed to adopt Plan Agent tasks: ${err.message || "Network error."}`);
     } finally {
       setAdoptingTasks(false);
     }
@@ -448,7 +458,9 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
 
   const handleUpdateDueDate = async (task: any, newDueDate: string) => {
     setEditingDueDateTaskId(null);
+    const previousTasks = [...localTasks];
 
+    // Optimistic update
     setLocalTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, due_date: newDueDate } : t))
     );
@@ -456,11 +468,10 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     setAlertNotification(`Due date updated for '${task.title}' to ${newDueDate}.`);
 
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({
@@ -469,16 +480,25 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
           linked_goal_id: task.linked_goal_id || task.id
         })
       });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error ${res.status}`);
+      }
+
       await fetchEngagementDetail(activeCustomer.id);
       if (brief) {
         await runMorningBrief();
       }
-    } catch (e) {
-      console.warn("Failed to update task due date:", e);
+    } catch (e: any) {
+      // Revert optimistic update on server error
+      setLocalTasks(previousTasks);
+      setAlertNotification(`Error updating due date for '${task.title}': ${e.message || "Reverted to previous date."}`);
     }
   };
 
   const handleToggleTaskStatus = async (task: any) => {
+    if (updatingTaskId === task.id) return; // Prevent duplicate concurrent submissions
     if (task.approval_status === "PENDING_APPROVAL") {
       setAlertNotification("Action blocked: This task is pending Manager approval before it can become approved work.");
       return;
@@ -486,19 +506,24 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
 
     const isCurrentlyDone = task.status === "COMPLETED";
     const nextStatus = isCurrentlyDone ? "TODO" : "COMPLETED";
+    const previousTasks = [...localTasks];
+    const previousBrief = brief;
 
+    // Apply optimistic UI state
     setLocalTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t))
     );
 
+    let tempWorknoteRef: string | null = null;
     if (nextStatus === "COMPLETED") {
       setAlertNotification(`Worknote logged: '${task.title}' marked as Done.`);
       const nowISTStr = formatISTDateTime(new Date(), { shortMonth: false, includeZone: false }) || "Just now";
+      tempWorknoteRef = `temp-${Date.now()}`;
       const newWorknote: WhatChangedItem = {
         summary: `Worknote: ${role || "FDE"} marked task '${task.title}' as completed.`,
         category: "WORKNOTE",
         date_recorded: nowISTStr,
-        timeline_ref: `temp-${Date.now()}`
+        timeline_ref: tempWorknoteRef
       };
       setBrief((prev) => {
         if (!prev) return prev;
@@ -511,12 +536,12 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       setAlertNotification(`Task '${task.title}' reopened as To Do.`);
     }
 
+    setUpdatingTaskId(task.id);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({
@@ -525,12 +550,23 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
           due_date: task.due_date
         })
       });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server returned ${res.status}: Failed to update task status`);
+      }
+
       await fetchEngagementDetail(activeCustomer.id);
       if (brief) {
         await runMorningBrief();
       }
-    } catch (e) {
-      console.warn("Failed to toggle task status:", e);
+    } catch (e: any) {
+      // Reconcile and revert optimistic update on failure!
+      setLocalTasks(previousTasks);
+      setBrief(previousBrief);
+      setAlertNotification(`Failed to update task '${task.title}': ${e.message || "Action reverted."}`);
+    } finally {
+      setUpdatingTaskId(null);
     }
   };
 

@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import AppShell from "@/components/layout/AppShell";
 import MyDayView from "@/components/engagement/MyDayView";
-import EvidenceReasoningCard from "@/components/engagement/EvidenceReasoningCard";
 import ChangeAnalysisPanel from "@/components/intelligence/ChangeAnalysisPanel";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
 import WorkPlanSection from "@/components/engagement/WorkPlanSection";
+import TimelinePanel from "@/components/timeline/TimelinePanel";
 import { useEngagement } from "@/context/EngagementContext";
 import { useParams } from "next/navigation";
-import { formatISTDateTime } from "@/utils/date";
 
 function EngagementDetailContent() {
   const routeParams = useParams();
@@ -21,9 +20,7 @@ function EngagementDetailContent() {
     activeCustomer,
     setActiveCustomer,
     activeEngagementData,
-    nextActionData,
     approvedAcme,
-    handleApproveChange,
     fetchEngagementDetail,
     activeTab,
     setActiveTab
@@ -45,10 +42,10 @@ function EngagementDetailContent() {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get("tab");
       if (tabParam && ["myday", "plan", "knowledge", "changes", "updates", "timeline"].includes(tabParam)) {
-        setActiveTab(tabParam as any);
+        setActiveTab(tabParam as "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline");
       }
     }
-  }, [engagementId, customers]);
+  }, [engagementId, customers, activeCustomer.id, fetchEngagementDetail, setActiveCustomer, setActiveTab]);
 
   const handleTabChange = (tab: "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline") => {
     setActiveTab(tab);
@@ -89,8 +86,8 @@ function EngagementDetailContent() {
                   {activeCustomer.engagementName}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">
-                Delivery Workspace · {activeEngagementData?.engagement?.current_work_cycle || "Step 4: Build & Integrate"}
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate" title={currentOutcomeStatement}>
+                Delivery Workspace · {activeEngagementData?.engagement?.current_work_cycle || "Step 4: Build & Integrate"} · {currentOutcomeStatement}
               </p>
             </div>
 
@@ -231,43 +228,15 @@ function EngagementDetailContent() {
           </div>
         )}
 
-        {/* 6. TIMELINE TAB: Chronological audit trail */}
+        {/* 6. TIMELINE TAB: Chronological audit trail & shared memory */}
         {activeTab === "timeline" && (
-          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
-            <h2 className="text-sm font-semibold text-slate-900 font-display">Audit Trail</h2>
-            {activeEngagementData?.timeline && activeEngagementData.timeline.length > 0 ? (
-              <ul className="divide-y divide-slate-100 text-xs">
-                {activeEngagementData.timeline.map((evt: any) => (
-                  <li key={evt.id} className="py-2.5 flex items-start justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <span className="font-semibold text-slate-900 block">{evt.title}</span>
-                      <p className="text-slate-600 leading-relaxed">{evt.description}</p>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono shrink-0">
-                      {formatISTDateTime(evt.created_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <ul className="divide-y divide-slate-100 text-xs">
-                <li className="py-2.5 flex items-start justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-slate-900 block">Customer requirement change logged</span>
-                    <p className="text-slate-600">Enterprise SSO configuration flagged as prerequisite.</p>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-mono shrink-0">Recent</span>
-                </li>
-                <li className="py-2.5 flex items-start justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-slate-900 block">Outcome Version 1 established</span>
-                    <p className="text-slate-600">Initial Outcome Goals criteria activated.</p>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-mono shrink-0">Initial</span>
-                </li>
-              </ul>
-            )}
-          </div>
+          <TimelinePanel
+            key={engagementId}
+            engagementId={engagementId}
+            customerName={activeCustomer.customerName}
+            timeline={activeEngagementData?.timeline || []}
+            onRefresh={() => fetchEngagementDetail(engagementId, false)}
+          />
         )}
       </div>
     </AppShell>

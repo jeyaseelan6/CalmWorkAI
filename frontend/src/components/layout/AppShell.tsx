@@ -239,7 +239,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   setIsMobileMenuOpen(false);
                   setCustomerSearch("");
                   if (pathname?.startsWith("/engagements")) {
-                    router.push(`/engagements/${cust.id}`);
+                    router.push(`/engagements/${cust.id}${activeTab ? `?tab=${activeTab}` : ""}`);
                   }
                 }}
                 className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between cursor-pointer ${
@@ -644,6 +644,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* Slide-out Drawer Panel */}
             <div className="relative w-full sm:w-[500px] lg:w-[560px] max-w-[100vw] h-full bg-white z-10 shadow-2xl flex flex-col border-l border-slate-200">
               <AskCalmWorkChat
+                key={activeCustomer?.id || "global"}
                 isDrawer={true}
                 onClose={() => setIsSupervisorDrawerOpen(false)}
                 engagementId={activeCustomer?.id}

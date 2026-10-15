@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { downloadCustomerUpdatePdf, printCustomerUpdateDocument } from "@/utils/pdfGenerator";
-import { Send, FileCheck, Sparkles, CheckCircle2, ShieldCheck, Mail, Lock, AlertTriangle, Download, Printer, UserCheck } from "lucide-react";
+import { FileCheck, Sparkles, CheckCircle2, ShieldCheck, Mail, Lock, AlertTriangle, Download, Printer, UserCheck } from "lucide-react";
 
 interface CustomerUpdateDraft {
   engagement_id: string;
@@ -35,46 +35,49 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   const [approvedBy, setApprovedBy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync approval state from backend and localStorage
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [wasEdited, setWasEdited] = useState(false);
+
+  // Sync approval state strictly from authoritative backend endpoint (never from localStorage)
   useEffect(() => {
-    setDraft(null);
-    setNotes("");
-    setApproved(false);
-    setApprovedBy(null);
-    setError(null);
-
-    const localApproved = typeof window !== "undefined" ? localStorage.getItem(`cu_approved_${engagementId}`) : null;
-    const localApprover = typeof window !== "undefined" ? localStorage.getItem(`cu_approver_${engagementId}`) : null;
-    if (localApproved === "true") {
-      setApproved(true);
-      if (localApprover) setApprovedBy(localApprover);
-    }
-
+    let isCancelled = false;
     const headers: Record<string, string> = {};
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
     fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/status`, { headers })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Status check failed");
+        return res.json();
+      })
       .then((json) => {
-        if (json.success && json.data?.approved) {
-          setApproved(true);
-          setApprovedBy(json.data.reviewed_by || "David Miller (Engineering Manager)");
-          if (typeof window !== "undefined") {
-            localStorage.setItem(`cu_approved_${engagementId}`, "true");
-            if (json.data.reviewed_by) {
-              localStorage.setItem(`cu_approver_${engagementId}`, json.data.reviewed_by);
-            }
+        if (!isCancelled) {
+          if (json.success && json.data?.approved) {
+            setApproved(true);
+            setApprovedBy(json.data.reviewed_by || "David Miller (Engineering Manager)");
+          } else {
+            setApproved(false);
+            setApprovedBy(null);
           }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!isCancelled) {
+          setApproved(false);
+          setApprovedBy(null);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [engagementId, token]);
 
   const handleGenerateUpdate = async () => {
     setLoading(true);
     setError(null);
+    setWasEdited(false);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) {
@@ -94,10 +97,6 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
           // New draft must always start unapproved; changing content requires reapproval
           setApproved(false);
           setApprovedBy(null);
-          if (typeof window !== "undefined") {
-            localStorage.removeItem(`cu_approved_${engagementId}`);
-            localStorage.removeItem(`cu_approver_${engagementId}`);
-          }
         } else {
           setError(json.message || "Failed to generate AI customer update.");
           setDraft(null);
@@ -107,11 +106,25 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
         setError(errJson.detail || "DELIVER Agent failed to generate update.");
         setDraft(null);
       }
-    } catch (e: any) {
-      setError(e.message || "Network error while calling DELIVER Agent.");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Network error while calling DELIVER Agent.");
       setDraft(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDraftFieldChange = <K extends keyof CustomerUpdateDraft>(
+    field: K,
+    value: CustomerUpdateDraft[K]
+  ) => {
+    if (!draft) return;
+    setDraft({ ...draft, [field]: value });
+    // Invalidate approval state on edit: edited drafts must be reviewed anew
+    if (approved || !wasEdited) {
+      setApproved(false);
+      setApprovedBy(null);
+      setWasEdited(true);
     }
   };
 
@@ -139,27 +152,15 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
         const json = await res.json();
         setApproved(true);
         setApprovedBy(json.data?.approved_by || managerName);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(`cu_approved_${engagementId}`, "true");
-          localStorage.setItem(`cu_approver_${engagementId}`, json.data?.approved_by || managerName);
-        }
+        setWasEdited(false);
       } else {
-        // Fallback for local demo simulation
-        setApproved(true);
-        setApprovedBy(managerName);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(`cu_approved_${engagementId}`, "true");
-          localStorage.setItem(`cu_approver_${engagementId}`, managerName);
-        }
+        const errJson = await res.json().catch(() => ({}));
+        setError(errJson.detail || "Authorization request rejected by server. Approval not granted.");
+        setApproved(false);
       }
-    } catch (e: any) {
-      // In case backend is unreachable during client test, preserve manager decision
-      setApproved(true);
-      setApprovedBy(managerName);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`cu_approved_${engagementId}`, "true");
-        localStorage.setItem(`cu_approver_${engagementId}`, managerName);
-      }
+    } catch (e: unknown) {
+      setError((e as Error).message || "Network error communicating with approval server. Approval state unchanged.");
+      setApproved(false);
     } finally {
       setApprovalLoading(false);
     }
@@ -169,29 +170,34 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
     setDraft(null);
     setApproved(false);
     setApprovedBy(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(`cu_approved_${engagementId}`);
-      localStorage.removeItem(`cu_approver_${engagementId}`);
-    }
+    setWasEdited(false);
+    setIsEditingDraft(false);
   };
 
   const handleDownloadPdf = async () => {
     if (!draft) return;
-    if (!approved) {
-      setError("Manager Approval Required: An Engineering Manager must review and sign off on this executive update draft before downloading the PDF.");
-      return;
-    }
+    setError(null);
 
+    // Verify backend authorization: Must have backend-confirmed approval
     try {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
       if (!res.ok) {
-        setError("Manager Approval Required: The executive customer update cannot be downloaded as PDF until approved by an Engineering Manager.");
+        const errJson = await res.json().catch(() => ({}));
+        setError(errJson.detail || "Manager Approval Required: The executive customer update cannot be downloaded as PDF until approved by an Engineering Manager.");
+        setApproved(false);
         return;
       }
-    } catch (e) {
-      if (!approved) return;
+      const json = await res.json();
+      if (!json.success || !json.data?.pdf_authorized) {
+        setError("Manager Approval Required: Server reports PDF release is not authorized.");
+        setApproved(false);
+        return;
+      }
+    } catch {
+      setError("Unable to verify authorization with backend server. PDF download blocked.");
+      return;
     }
 
     downloadCustomerUpdatePdf({
@@ -210,21 +216,28 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
 
   const handlePrintPdf = async () => {
     if (!draft) return;
-    if (!approved) {
-      setError("Manager Approval Required: An Engineering Manager must review and sign off on this executive update draft before viewing or printing the PDF.");
-      return;
-    }
+    setError(null);
 
+    // Verify backend authorization: Must have backend-confirmed approval
     try {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
       if (!res.ok) {
-        setError("Manager Approval Required: The executive customer update cannot be viewed as PDF until approved by an Engineering Manager.");
+        const errJson = await res.json().catch(() => ({}));
+        setError(errJson.detail || "Manager Approval Required: The executive customer update cannot be viewed or printed as PDF until approved by an Engineering Manager.");
+        setApproved(false);
         return;
       }
-    } catch (e) {
-      if (!approved) return;
+      const json = await res.json();
+      if (!json.success || !json.data?.pdf_authorized) {
+        setError("Manager Approval Required: Server reports PDF view/print is not authorized.");
+        setApproved(false);
+        return;
+      }
+    } catch {
+      setError("Unable to verify authorization with backend server. PDF view/print blocked.");
+      return;
     }
 
     printCustomerUpdateDocument({
@@ -346,7 +359,19 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
           </div>
 
           {/* Governance Notice Banner */}
-          {!approved ? (
+          {wasEdited ? (
+            <div className="bg-amber-50 border border-amber-300 rounded-md p-3 text-xs flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-semibold text-amber-900 flex items-center gap-1.5">
+                  <span>Draft Modified — Re-Authorization Required</span>
+                </div>
+                <p className="text-amber-800 text-[11px] leading-relaxed">
+                  Draft content has been modified from the AI baseline. In accordance with delivery governance, editing invalidates prior approvals and requires fresh Engineering Manager sign-off before PDF export can be unlocked.
+                </p>
+              </div>
+            </div>
+          ) : !approved ? (
             <div className="bg-amber-50/80 border border-amber-200/90 rounded-md p-3 text-xs flex items-start gap-2.5">
               <Lock className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
               <div className="space-y-1">
@@ -372,37 +397,66 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
                   <span>Manager Approved — Authorized for Client Delivery</span>
                 </div>
                 <p className="text-emerald-800 text-[11px] leading-relaxed">
-                  Authorized by <strong>{approvedBy || "David Miller (Engineering Manager)"}</strong>. Both the <strong>Engineering Manager</strong> and <strong>Forward-Deployed Engineer (FDE)</strong> are cleared to download the PDF and send it to customer stakeholders.
+                  Authorized by <strong>{approvedBy || "David Miller (Engineering Manager)"}</strong>. Both the <strong>Engineering Manager</strong> and <strong>Forward-Deployed Engineer (FDE)</strong> are cleared to download the PDF report.
+                </p>
+                <p className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                  * Note: CalmWork authorizes local PDF generation. No emails or notifications are sent to the customer automatically.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Draft Preview Box */}
+          {/* Draft Preview / Edit Box */}
           <div className="bg-slate-50 border border-slate-200 rounded-md p-4 space-y-3 text-xs text-slate-900">
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-2">
-              <div>
+              <div className="flex-1">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block font-mono">Subject:</span>
-                <p className="font-bold text-slate-900 text-xs">{draft.subject}</p>
+                {isEditingDraft ? (
+                  <input
+                    type="text"
+                    value={draft.subject}
+                    onChange={(e) => handleDraftFieldChange("subject", e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-900 font-semibold focus:outline-none focus:border-slate-500 mt-1"
+                  />
+                ) : (
+                  <p className="font-bold text-slate-900 text-xs">{draft.subject}</p>
+                )}
               </div>
-              <button
-                onClick={handleDownloadPdf}
-                disabled={!approved}
-                className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1.5 transition shadow-2xs shrink-0 ${
-                  approved
-                    ? "bg-white hover:bg-slate-100 text-blue-700 border border-slate-300 cursor-pointer"
-                    : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
-                }`}
-                title={approved ? "Download Executive Summary PDF" : "Manager approval required before PDF download"}
-              >
-                {approved ? <Download className="h-3 w-3 text-blue-600" /> : <Lock className="h-3 w-3 text-slate-400" />}
-                <span>{approved ? "Download PDF" : "PDF Locked"}</span>
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDraft(!isEditingDraft)}
+                  className="px-2 py-1 rounded text-[11px] font-medium bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                >
+                  {isEditingDraft ? "Done Editing" : "Edit Text"}
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={!approved}
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1.5 transition shadow-2xs ${
+                    approved
+                      ? "bg-white hover:bg-slate-100 text-blue-700 border border-slate-300 cursor-pointer"
+                      : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
+                  }`}
+                  title={approved ? "Download Executive Summary PDF" : "Manager approval required before PDF download"}
+                >
+                  {approved ? <Download className="h-3 w-3 text-blue-600" /> : <Lock className="h-3 w-3 text-slate-400" />}
+                  <span>{approved ? "Download PDF" : "PDF Locked"}</span>
+                </button>
+              </div>
             </div>
 
             <div>
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block font-mono">Executive Summary:</span>
-              <p className="text-slate-800 leading-relaxed mt-0.5">{draft.executive_summary}</p>
+              {isEditingDraft ? (
+                <textarea
+                  value={draft.executive_summary}
+                  onChange={(e) => handleDraftFieldChange("executive_summary", e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded p-2 text-xs text-slate-900 leading-relaxed focus:outline-none focus:border-slate-500 mt-1 h-24 resize-y"
+                />
+              ) : (
+                <p className="text-slate-800 leading-relaxed mt-0.5">{draft.executive_summary}</p>
+              )}
             </div>
 
             <div>
@@ -439,7 +493,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
                   ) : (
                     <>
                       <FileCheck className="h-4 w-4" />
-                      <span>Manager Sign-Off & Authorize Release</span>
+                      <span>{wasEdited ? "Manager Sign-Off Modified Draft" : "Manager Sign-Off & Authorize Release"}</span>
                     </>
                   )}
                 </button>
@@ -453,7 +507,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
               !approved ? (
                 <div className="flex-1 min-w-[220px] bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-md text-xs flex items-center gap-2 font-medium">
                   <Lock className="h-4 w-4 text-amber-700 shrink-0" />
-                  <span>Draft Generated by FDE. Awaiting Engineering Manager sign-off before PDF export is unlocked.</span>
+                  <span>{wasEdited ? "Draft modified. Awaiting Manager re-authorization." : "Draft Generated by FDE. Awaiting Engineering Manager sign-off before PDF export is unlocked."}</span>
                 </div>
               ) : (
                 <div className="flex-1 min-w-[220px] bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-md text-xs flex items-center gap-2 font-semibold">

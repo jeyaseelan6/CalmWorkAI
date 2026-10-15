@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  BookOpen, Search, ShieldCheck, Sparkles, FileText, Send,
+  BookOpen, Search, Sparkles, FileText, Send,
   CheckCircle2, AlertTriangle, UploadCloud, FileUp, Folder,
   RefreshCw, Check, Layers, Clock, Lock, FileCode,
   Eye, Download, ZoomIn, ZoomOut, RotateCcw, X, Copy,
-  ExternalLink, Image as ImageIcon, Filter, ChevronRight
+  ExternalLink, Image as ImageIcon, Filter
 } from "lucide-react";
 import { formatISTDateTime } from "@/utils/date";
 
@@ -126,12 +126,30 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   };
 
   useEffect(() => {
-    fetchDocuments();
-    setAnswerData(null);
-    setQuery("");
-    setUploadSuccess(null);
-    setUploadError(null);
-    setViewingDoc(null);
+    let isCancelled = false;
+    const loadDocs = async () => {
+      setDocsLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/engagements/${engagementId}/documents`);
+        if (res.ok && !isCancelled) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            setDocuments(json.data);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch indexed documents:", err);
+      } finally {
+        if (!isCancelled) {
+          setDocsLoading(false);
+        }
+      }
+    };
+
+    loadDocs();
+    return () => {
+      isCancelled = true;
+    };
   }, [engagementId]);
 
   // Open Document Viewer
@@ -223,8 +241,8 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
         setQueryError(errJson.detail || "KNOW Agent failed to query knowledge vector store.");
         setAnswerData(null);
       }
-    } catch (err: any) {
-      setQueryError(err.message || "Network error while querying KNOW Agent.");
+    } catch (err: unknown) {
+      setQueryError((err as Error).message || "Network error while querying KNOW Agent.");
       setAnswerData(null);
     } finally {
       setQueryLoading(false);
@@ -271,11 +289,14 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
         if (fileInputRef.current) fileInputRef.current.value = "";
         setShowUploadForm(false);
         await fetchDocuments();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId, type: "EVIDENCE_UPLOADED" } }));
+        }
       } else {
         setUploadError(json.detail || json.message || "Failed to upload and index document.");
       }
-    } catch (err: any) {
-      setUploadError(err.message || "Network error during document upload.");
+    } catch (err: unknown) {
+      setUploadError((err as Error).message || "Network error during document upload.");
     } finally {
       setUploadLoading(false);
     }
@@ -832,8 +853,23 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                 {answerData.answer}
               </div>
 
+              {/* Insufficient Evidence Warning Banner */}
+              {(answerData.evidence_sufficient === false ||
+                (answerData.citations?.length === 0 && answerData.confidence_score < 0.5) ||
+                answerData.answer.toLowerCase().includes("don't have enough verified engagement evidence")) && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div className="space-y-1">
+                    <span className="font-bold block">Authorized Evidence Insufficient</span>
+                    <p className="text-amber-800 leading-relaxed">
+                      The KNOW agent found insufficient verified engagement documents or operational records to ground a definitive answer without speculation. Please upload relevant technical specifications, runbooks, or architecture notes to expand verified evidence.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Citations & Evidence Context */}
-              {answerData.citations && answerData.citations.length > 0 && (
+              {answerData.citations && answerData.citations.length > 0 ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-1.5">
@@ -844,23 +880,44 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                   </div>
 
                   <div className="grid grid-cols-1 gap-2">
-                    {answerData.citations.map((c, i) => (
-                      <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
-                        <div className="flex items-center justify-between font-semibold text-xs text-slate-900">
-                          <span className="flex items-center gap-1.5 text-teal-800">
-                            <FileText className="h-3.5 w-3.5 text-teal-600" />
-                            {c.document_title}
-                          </span>
-                          <span className="text-slate-500 font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
-                            Relevance: {c.relevance_score}
-                          </span>
+                    {answerData.citations.map((c, i) => {
+                      const matchedDoc = documents.find(
+                        (d) => d.title.toLowerCase() === c.document_title.toLowerCase()
+                      );
+
+                      return (
+                        <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
+                          <div className="flex items-center justify-between font-semibold text-xs text-slate-900">
+                            <span className="flex items-center gap-1.5 text-teal-800 truncate">
+                              <FileText className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                              <span className="truncate">{c.document_title}</span>
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-slate-500 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded">
+                                Relevance: {c.relevance_score}
+                              </span>
+                              {matchedDoc && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenViewer(matchedDoc)}
+                                  className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 border border-teal-200 transition cursor-pointer"
+                                >
+                                  View Source
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-slate-600 italic text-xs leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
+                            &ldquo;{c.snippet}&rdquo;
+                          </p>
                         </div>
-                        <p className="text-slate-600 italic text-xs leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
-                          &ldquo;{c.snippet}&rdquo;
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 italic">
+                  No specific document chunks were cited for this response.
                 </div>
               )}
             </div>

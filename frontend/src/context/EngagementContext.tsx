@@ -193,6 +193,8 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     setActiveEngagementData(null);
     setNextActionData(null);
     setApprovedAcme(false);
+    setSelectedItemContext(null);
+    setSupervisorInitialQuery(null);
     setLoading(true);
   };
 

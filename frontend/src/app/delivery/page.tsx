@@ -14,8 +14,14 @@ export default function DeliveryLegacyPage() {
   const targetHref = `/engagements/${targetId}?tab=updates`;
 
   useEffect(() => {
-    router.replace(targetHref);
-  }, [targetHref, router]);
+    let finalHref = targetHref;
+    if (typeof window !== "undefined" && window.location.search) {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "updates");
+      finalHref = `/engagements/${targetId}?${sp.toString()}`;
+    }
+    router.replace(finalHref);
+  }, [targetHref, targetId, router]);
 
   return (
     <AppShell>

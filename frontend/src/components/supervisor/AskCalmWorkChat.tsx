@@ -4,24 +4,19 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
   Send,
-  Bot,
   User,
   Compass,
   Zap,
   BookOpen,
   ArrowRight,
   ShieldCheck,
-  ChevronRight,
   RefreshCw,
-  Paperclip,
   Image as ImageIcon,
   X,
   AlertTriangle,
   CheckCircle2,
   Lock,
-  Layers,
-  Radio,
-  ExternalLink
+  Radio
 } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
 import { getNowISTTime } from "@/utils/date";
@@ -328,10 +323,11 @@ export default function AskCalmWorkChat({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const msgSeqRef = useRef<number>(1);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
-      id: "msg-welcome",
+      id: `msg-welcome-${targetEngagementId}`,
       sender: "SUPERVISOR",
       text: `Hello! I am the CalmWork Universal Supervisor for ${targetCustomerName}. Ask me anything about current state, scope changes, work plans, blockers, production support, or customer updates. You can also paste or attach screenshots of errors or logs for automated SUPPORT agent investigation.`,
       intent: "MULTI_AGENT",
@@ -360,6 +356,14 @@ export default function AskCalmWorkChat({
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  const [prevInitialQuery, setPrevInitialQuery] = useState(initialQuery);
+  if (initialQuery !== prevInitialQuery) {
+    setPrevInitialQuery(initialQuery);
+    if (initialQuery) {
+      setQuery(initialQuery);
+    }
+  }
 
   // File size limit: 4.5 MB
   const MAX_FILE_BYTES = 4.5 * 1024 * 1024;
@@ -431,7 +435,7 @@ export default function AskCalmWorkChat({
     const capturedScreenshot = attachedScreenshot;
 
     const userMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-usr-${msgSeqRef.current++}`,
       sender: "USER",
       text: userText,
       screenshotPreview: capturedScreenshot?.dataUrl,
@@ -467,7 +471,7 @@ export default function AskCalmWorkChat({
         if (data.success && data.data) {
           const inv: IncidentInvestigationResult = data.data;
           const supMsg: ChatMessage = {
-            id: `msg-${Date.now()}-sup`,
+            id: `msg-sup-${msgSeqRef.current++}`,
             sender: "SUPERVISOR",
             text: inv.summary,
             intent: "SUPPORT",
@@ -522,7 +526,7 @@ export default function AskCalmWorkChat({
           };
 
           const supMsg: ChatMessage = {
-            id: `msg-${Date.now()}-sup`,
+            id: `msg-sup-${msgSeqRef.current++}`,
             sender: "SUPERVISOR",
             text: data.data.answer,
             intent: intentDetected,
@@ -535,12 +539,12 @@ export default function AskCalmWorkChat({
           setMessages((prev) => [...prev, supMsg]);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Supervisor / Support query failed:", err);
       const errMsg: ChatMessage = {
-        id: `msg-${Date.now()}-err`,
+        id: `msg-err-${msgSeqRef.current++}`,
         sender: "SUPERVISOR",
-        text: `⚠️ Query processing error: ${err.message || "Unable to reach CalmWork Supervisor"}. Please check connectivity or retry.`,
+        text: `⚠️ Query processing error: ${(err as Error).message || "Unable to reach CalmWork Supervisor"}. Please check connectivity or retry.`,
         intent: "MULTI_AGENT",
         timestamp: getNowISTTime(true)
       };
@@ -642,7 +646,12 @@ export default function AskCalmWorkChat({
       </div>
 
       {/* Message Feed */}
-      <div className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-4 bg-slate-50/30">
+      <div 
+        role="log"
+        aria-live="polite"
+        aria-label="Conversation messages"
+        className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-4 bg-slate-50/30"
+      >
         {messages.map((m) => {
           const isUser = m.sender === "USER";
           const intentKey = m.intent || "MULTI_AGENT";
@@ -987,7 +996,7 @@ export default function AskCalmWorkChat({
           e.preventDefault();
           handleSend();
         }}
-        className="p-3 border-t border-slate-200 bg-white flex items-center gap-2 shrink-0"
+        className="p-2.5 sm:p-3 border-t border-slate-200 bg-white flex items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         {/* Hidden File Input for Image Selection */}
         <input
@@ -1003,7 +1012,7 @@ export default function AskCalmWorkChat({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer border border-slate-200 shrink-0 shadow-2xs"
+          className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer border border-slate-200 shrink-0 shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
           title="Attach or paste screenshot for SUPPORT agent diagnostic (Ctrl+V / Cmd+V supported)"
           aria-label="Attach screenshot or error log"
         >
@@ -1019,13 +1028,14 @@ export default function AskCalmWorkChat({
           }
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="flex-1 px-3.5 py-2 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-slate-900 bg-slate-50/50"
+          aria-label="Ask CalmWork query input"
+          className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-md text-base sm:text-xs focus:outline-none focus:ring-1 focus:ring-slate-900 bg-slate-50/50 min-h-[44px]"
         />
 
         <button
           type="submit"
           disabled={loading || (!query.trim() && !attachedScreenshot)}
-          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold text-xs transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer shrink-0"
+          className="px-4 py-2.5 min-h-[44px] min-w-[44px] bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
         >
           <span>{attachedScreenshot ? "Investigate" : "Ask"}</span>
           <Send className="h-3.5 w-3.5" />

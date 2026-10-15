@@ -26,7 +26,11 @@ export default function SupervisorPage() {
         </div>
 
         {/* Clean Conversational Chat Studio */}
-        <AskCalmWorkChat />
+        <AskCalmWorkChat
+          key={activeCustomer?.id || "global"}
+          engagementId={activeCustomer?.id}
+          customerName={activeCustomer?.customerName}
+        />
       </div>
     </AppShell>
   );

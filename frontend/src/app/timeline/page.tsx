@@ -14,8 +14,14 @@ export default function TimelineLegacyPage() {
   const targetHref = `/engagements/${targetId}?tab=timeline`;
 
   useEffect(() => {
-    router.replace(targetHref);
-  }, [targetHref, router]);
+    let finalHref = targetHref;
+    if (typeof window !== "undefined" && window.location.search) {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "timeline");
+      finalHref = `/engagements/${targetId}?${sp.toString()}`;
+    }
+    router.replace(finalHref);
+  }, [targetHref, targetId, router]);
 
   return (
     <AppShell>

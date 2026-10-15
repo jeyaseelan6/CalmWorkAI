@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
 import { useEngagement } from "@/context/EngagementContext";
 import { useAuth } from "@/context/AuthContext";
@@ -280,9 +281,20 @@ export default function ApprovalsPage() {
 
                   {/* Actions / Decision Bar */}
                   <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <span className="text-[11px] font-mono text-slate-400">
-                      Target ID: <code className="text-slate-600">{item.id}</code>
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Target ID: <code className="text-slate-600">{item.id}</code>
+                      </span>
+                      {isCustomerUpdate && (
+                        <Link
+                          href={`/engagements/${item.engagement_id}?tab=updates`}
+                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline flex items-center gap-0.5 ml-1.5"
+                        >
+                          <span>Open Update Studio</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      )}
+                    </div>
 
                     {role === "MANAGER" ? (
                       <div className="flex items-center gap-2 self-stretch sm:self-auto">

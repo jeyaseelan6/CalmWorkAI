@@ -14,8 +14,14 @@ export default function IntelligenceLegacyPage() {
   const targetHref = `/engagements/${targetId}?tab=changes`;
 
   useEffect(() => {
-    router.replace(targetHref);
-  }, [targetHref, router]);
+    let finalHref = targetHref;
+    if (typeof window !== "undefined" && window.location.search) {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "changes");
+      finalHref = `/engagements/${targetId}?${sp.toString()}`;
+    }
+    router.replace(finalHref);
+  }, [targetHref, targetId, router]);
 
   return (
     <AppShell>

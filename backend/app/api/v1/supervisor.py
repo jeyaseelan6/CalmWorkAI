@@ -18,6 +18,7 @@ from app.db.database import get_db
 from app.models import Engagement, Outcome, Approval, TimelineEvent
 from app.api.deps import supervisor_coordinator, support_agent
 from app.api.schemas import UniversalSupervisorQueryPayload, SupportInvestigationRequest
+from app.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,11 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
 
 
 @router.post("/engagements/{engagement_id}/supervisor/brief")
-def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)):
+def get_daily_work_brief(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
     """
     Proactive Intelligence Mode: Generates a sequential Morning Brief (PLAN -> KNOW -> MOVE -> Supervisor Plan).
     Persists provenance in shared timeline without invoking DELIVER.
@@ -147,7 +152,11 @@ def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/engagements/{engagement_id}/supervisor/brief/stream")
-async def get_daily_work_brief_stream(engagement_id: str, db: Session = Depends(get_db)):
+async def get_daily_work_brief_stream(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
     """
     Proactive Intelligence Mode (Real-Time SSE Stream):
     Streams sequential multi-agent execution events in real time.

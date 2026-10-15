@@ -283,6 +283,9 @@ export default function WorkPlanSection({
         setVersion(newVersion);
         setDraftProposal(null);
         setSuccessMsg(`Work Plan approved and activated as authoritative state (v${newVersion})!`);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId, type: "PLAN_APPROVED" } }));
+        }
         if (onPlanApproved) {
           onPlanApproved(approvedPlanData, newVersion);
         }
@@ -330,6 +333,9 @@ export default function WorkPlanSection({
         method: "PATCH"
       });
       if (res.ok) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId, type: "GOAL_TOGGLED" } }));
+        }
         if (onPlanApproved) {
           onPlanApproved(updatedPlan, version);
         }

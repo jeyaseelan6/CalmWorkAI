@@ -6,13 +6,26 @@ import {
   CheckCircle2, 
   AlertCircle, 
   HelpCircle,
-  FileText,
-  ShieldAlert,
-  ArrowRight
+  ShieldAlert
 } from "lucide-react";
 import { API_BASE } from "@/utils/api";
 import { useAuth } from "@/context/AuthContext";
 import { useEngagement } from "@/context/EngagementContext";
+
+interface SuccessCriterionPreview {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+interface ChangeAnalysisData {
+  change_title: string;
+  risk_score: number | string;
+  recommendation: string;
+  evidence: string[];
+  reasoning: string[];
+  suggested_success_criteria?: SuccessCriterionPreview[];
+}
 
 interface ChangeAnalysisPanelProps {
   engagementId: string;
@@ -32,7 +45,7 @@ export default function ChangeAnalysisPanel({
 
   const [changeInput, setChangeInput] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [analysisData, setAnalysisData] = useState<ChangeAnalysisData | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const samplePresets = [
@@ -67,8 +80,8 @@ export default function ChangeAnalysisPanel({
         setAnalysisError(json.detail || json.message || "PLAN Agent failed to analyze change impact.");
         setAnalysisData(null);
       }
-    } catch (err: any) {
-      setAnalysisError(err.message || "Network error while calling PLAN Agent.");
+    } catch (err: unknown) {
+      setAnalysisError((err as Error).message || "Network error while calling PLAN Agent.");
       setAnalysisData(null);
     } finally {
       setIsAnalyzing(false);
@@ -77,6 +90,9 @@ export default function ChangeAnalysisPanel({
 
   const handleAuthorize = async () => {
     await handleApproveChange();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId, type: "OUTCOME_CHANGE" } }));
+    }
     if (onPlanUpdated) {
       onPlanUpdated();
     }
@@ -176,7 +192,7 @@ export default function ChangeAnalysisPanel({
               </h2>
             </div>
 
-            {isManager && !approvedAcme && (
+            {isManager && !approvedAcme ? (
               <button
                 onClick={handleAuthorize}
                 className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
@@ -184,7 +200,12 @@ export default function ChangeAnalysisPanel({
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 <span>Authorize v2 Upgrade</span>
               </button>
-            )}
+            ) : !approvedAcme ? (
+              <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>Requires Manager Sign-off to Authorize</span>
+              </div>
+            ) : null}
           </div>
 
           {/* Recommendation */}
@@ -214,13 +235,16 @@ export default function ChangeAnalysisPanel({
             </div>
 
             <div className="space-y-1.5">
-              <span className="text-[11px] font-semibold uppercase text-slate-500 font-mono block">
-                Scope & Delivery Impact Reasoning
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase text-slate-500 font-mono block">
+                  Evaluated Impact Hypotheses &amp; Reasoning
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">Pending verification</span>
+              </div>
               <ul className="space-y-1 text-slate-700">
                 {analysisData.reasoning?.map((item: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-1.5">
-                    <span className="text-slate-400 font-bold">•</span>
+                    <span className="text-amber-500 font-bold">•</span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -235,7 +259,7 @@ export default function ChangeAnalysisPanel({
                 Proposed Outcome Criteria Preview
               </span>
               <ul className="divide-y divide-slate-100 text-xs">
-                {analysisData.suggested_success_criteria.map((sc: any) => (
+                {analysisData.suggested_success_criteria.map((sc: SuccessCriterionPreview) => (
                   <li 
                     key={sc.id} 
                     className="py-1.5 flex items-center justify-between"
