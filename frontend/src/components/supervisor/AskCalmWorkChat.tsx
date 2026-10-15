@@ -329,12 +329,12 @@ export default function AskCalmWorkChat({
     {
       id: `msg-welcome-${targetEngagementId}`,
       sender: "SUPERVISOR",
-      text: `Hello! I am the CalmWork Universal Supervisor for ${targetCustomerName}. Ask me anything about current state, scope changes, work plans, blockers, production support, or customer updates. You can also paste or attach screenshots of errors or logs for automated SUPPORT agent investigation.`,
+      text: `Hello! I am the CalmWork Supervisor for ${targetCustomerName}. Ask about project status, scope changes, blockers, or attach error logs and screenshots for quick diagnosis.`,
       intent: "MULTI_AGENT",
       delegatedAgent: {
         id: "MULTI_AGENT",
-        name: "CalmWork Supervisor Coordinator",
-        role: "Universal Routing & Multi-Agent Orchestration",
+        name: "CalmWork Supervisor",
+        role: "Multi-Agent Orchestration",
         badge_label: "Universal Orchestrator",
         color: "slate"
       },
@@ -577,9 +577,6 @@ export default function AskCalmWorkChat({
           <div className="truncate">
             <div className="flex items-center gap-2">
               <h2 className="font-display font-bold text-sm text-slate-900 truncate">Ask CalmWork</h2>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-mono font-semibold uppercase">
-                {currentTab}
-              </span>
             </div>
             <p className="text-[11px] text-slate-500 font-mono truncate">
               {targetCustomerName} · Supervisor Multi-Agent Router & SUPPORT Diagnostics
@@ -626,24 +623,6 @@ export default function AskCalmWorkChat({
         </div>
       )}
 
-      {/* Suggested Prompt Chips */}
-      <div className="p-2.5 bg-slate-50/60 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto text-[11px] shrink-0">
-        <span className="font-semibold text-slate-400 shrink-0 uppercase tracking-wider text-[10px] font-mono">Suggested:</span>
-        {[
-          { label: "What changed today?", tag: "Scope" },
-          { label: "Why is production blocked?", tag: "Blockers" },
-          { label: "Diagnose screenshot error", tag: "Support" },
-          { label: "Prepare a customer update.", tag: "Stakeholders" }
-        ].map((chip, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleSend(chip.label)}
-            className="px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-400 text-slate-700 rounded-full shrink-0 transition font-medium flex items-center gap-1 shadow-2xs hover:bg-slate-50 cursor-pointer"
-          >
-            <span>{chip.label}</span>
-          </button>
-        ))}
-      </div>
 
       {/* Message Feed */}
       <div 

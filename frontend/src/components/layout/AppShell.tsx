@@ -17,7 +17,6 @@ import {
   Building2,
   ChevronDown,
   LogOut,
-  LogIn,
   User,
   Activity,
   Sparkles,
@@ -378,7 +377,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <div>
               <h1 className="font-display font-bold text-slate-900 text-sm tracking-tight">CalmWork AI</h1>
-              <p className="text-[11px] text-slate-500 font-mono">Work-Intelligence SaaS</p>
             </div>
           </Link>
 
@@ -390,52 +388,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <NavLinks />
           </Suspense>
         </div>
-
-        {/* User Profile & Auth Section */}
-        <div className="space-y-2 pt-2 border-t border-slate-200 text-xs">
-          {isAuthenticated && user ? (
-            <div className="p-2 bg-slate-50 rounded-md border border-slate-200 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded bg-slate-200 text-slate-800 font-bold flex items-center justify-center text-[10px]">
-                    {user.name.split(" ").map(n => n[0]).join("")}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900 truncate">{user.name}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{user.title}</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">
-                  {role}
-                </span>
-              </div>
-              <button
-                onClick={logout}
-                className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 py-1 rounded transition font-medium cursor-pointer"
-                title="Sign out of current session and return to login"
-              >
-                <LogOut className="h-3 w-3" />
-                <span>Sign Out</span>
-              </button>
-            </div>
-          ) : (
-            <Link
-              href="/login"
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-1.5 rounded-md text-xs flex items-center justify-center gap-1.5 transition"
-            >
-              <LogIn className="h-3.5 w-3.5" />
-              <span>Sign In</span>
-            </Link>
-          )}
-        </div>
       </aside>
 
       {/* Main Content Workspace Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 min-w-0">
         {/* Top Header Bar (Mobile & Desktop) */}
-        <header className="h-13 sm:h-12 border-b border-slate-200 bg-white px-3 sm:px-5 flex items-center justify-between shrink-0 gap-2">
-          {/* Left Side: Mobile Menu Button & Brand Chip */}
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+        <header className="h-13 sm:h-12 border-b border-slate-200 bg-white px-3 sm:px-5 flex items-center justify-between shrink-0 gap-3">
+          {/* Left Side: Mobile Menu Button & Brand Chip & Expanded Desktop Search */}
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 max-w-xl">
             {/* Mobile Hamburger Button */}
             <button
               type="button"
@@ -460,13 +420,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             </div>
 
-            {/* Desktop Search Bar */}
-            <div className="hidden md:block relative w-64">
-              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            {/* Expanded Desktop Search Bar */}
+            <div className="hidden md:block relative flex-1 w-full">
+              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search specs, tasks, decisions..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-300 transition"
+                className="w-full bg-slate-50 border border-slate-200 rounded-md pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-300 transition shadow-2xs"
               />
             </div>
           </div>
@@ -484,17 +444,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <span>+ New Engagement</span>
               </button>
             )}
-
-            {/* Ask CalmWork contextual drawer trigger */}
-            <button
-              onClick={() => setIsSupervisorDrawerOpen(true)}
-              className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-medium text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md flex items-center gap-1 sm:gap-1.5 transition cursor-pointer shadow-2xs"
-              title="Open contextual Ask CalmWork Assistant Drawer"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-purple-600" />
-              <span className="hidden sm:inline">Ask CalmWork</span>
-              <span className="sm:hidden text-[11px]">Ask</span>
-            </button>
 
             {/* Record Note button */}
             <button
@@ -625,6 +574,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
         />
+
+        {/* Floating Ask CalmWork trigger in bottom-right (Desktop) */}
+        {!isSupervisorDrawerOpen && (
+          <button
+            onClick={() => setIsSupervisorDrawerOpen(true)}
+            className="hidden md:flex fixed bottom-6 right-6 z-40 bg-purple-50/90 hover:bg-purple-100 text-purple-800 border border-purple-200 hover:border-purple-300 font-medium text-xs px-3.5 py-2 rounded-lg items-center gap-2 shadow-sm hover:shadow-md transition cursor-pointer backdrop-blur-xs"
+            title="Open contextual Ask CalmWork Assistant Drawer"
+          >
+            <Sparkles className="h-4 w-4 text-purple-600" />
+            <span>Ask CalmWork</span>
+          </button>
+        )}
 
         {/* Contextual Supervisor Assistant Drawer */}
         {isSupervisorDrawerOpen && (
