@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   ShieldCheck,
   CheckCircle,
+  CheckCircle2,
   AlertTriangle,
   ArrowRight,
   XCircle,
@@ -76,6 +77,7 @@ export default function ApprovalsPage() {
 
   const customerUpdateCount = pendingApprovals.filter((a) => a.type === "CUSTOMER_UPDATE").length;
   const outcomeChangeCount = pendingApprovals.filter((a) => a.type === "OUTCOME_CHANGE").length;
+  const taskCreationCount = pendingApprovals.filter((a) => a.type === "TASK_CREATION").length;
 
   return (
     <AppShell>
@@ -153,6 +155,17 @@ export default function ApprovalsPage() {
               <Target className="h-3 w-3 text-amber-500" />
               <span>Scope Changes ({outcomeChangeCount})</span>
             </button>
+            <button
+              onClick={() => setSelectedTypeFilter("TASK_CREATION")}
+              className={`px-2.5 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                selectedTypeFilter === "TASK_CREATION"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+              }`}
+            >
+              <CheckCircle2 className="h-3 w-3 text-cyan-600" />
+              <span>Work Tasks ({taskCreationCount})</span>
+            </button>
           </div>
 
           {/* Engagement Scope Filter */}
@@ -178,6 +191,7 @@ export default function ApprovalsPage() {
           {filteredApprovals.length > 0 ? (
             filteredApprovals.map((item) => {
               const isCustomerUpdate = item.type === "CUSTOMER_UPDATE";
+              const isTaskCreation = item.type === "TASK_CREATION";
               const isSubmitting = submittingId === item.id;
 
               return (
@@ -201,12 +215,19 @@ export default function ApprovalsPage() {
                         className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                           isCustomerUpdate
                             ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                            : isTaskCreation
+                            ? "bg-cyan-50 text-cyan-800 border-cyan-200"
                             : "bg-amber-50 text-amber-800 border-amber-200"
                         }`}
                       >
-                        {isCustomerUpdate ? "Customer Update Authorization" : "Scope & Outcome Goals Upgrade"}
+                        {isCustomerUpdate
+                          ? "Customer Update Authorization"
+                          : isTaskCreation
+                          ? "Work Task Creation Authorization"
+                          : "Scope & Outcome Goals Upgrade"}
                       </span>
                     </div>
+
 
                     <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
                       <span>Requested by {item.requested_by}</span>
@@ -280,7 +301,13 @@ export default function ApprovalsPage() {
                           className="flex-1 sm:flex-none px-4 py-2 sm:py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-md text-xs transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
                         >
                           <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
-                          <span>{isSubmitting ? "Authorizing..." : "Authorize Release"}</span>
+                          <span>
+                            {isSubmitting
+                              ? "Authorizing..."
+                              : isTaskCreation
+                              ? "Approve Task"
+                              : "Authorize Release"}
+                          </span>
                         </button>
                       </div>
                     ) : (

@@ -50,7 +50,12 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
       if (localApprover) setApprovedBy(localApprover);
     }
 
-    fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/status`)
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/status`, { headers })
       .then((res) => res.json())
       .then((json) => {
         if (json.success && json.data?.approved) {
@@ -65,15 +70,20 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
         }
       })
       .catch(() => {});
-  }, [engagementId]);
+  }, [engagementId, token]);
 
   const handleGenerateUpdate = async () => {
     setLoading(true);
     setError(null);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ raw_notes: notes })
       });
 
@@ -169,7 +179,9 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
     }
 
     try {
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`);
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
       if (!res.ok) {
         alert("Manager Approval Required: The DELIVER agent report cannot be downloaded as PDF until approved by an Engineering Manager.");
         return;
@@ -200,7 +212,9 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
     }
 
     try {
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`);
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
       if (!res.ok) {
         alert("Manager Approval Required: The DELIVER agent report cannot be viewed as PDF until approved by an Engineering Manager.");
         return;

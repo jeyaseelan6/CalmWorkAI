@@ -112,11 +112,19 @@ def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/engagements/{engagement_id}/customer-updates/generate", tags=["Delivery"])
-def generate_customer_update(engagement_id: str, payload: GenerateCustomerUpdateRequest, db: Session = Depends(get_db)):
+def generate_customer_update(
+    engagement_id: str,
+    payload: GenerateCustomerUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
+):
     """DELIVER Agent: Translates engineering work into stakeholder updates and queues for Manager review."""
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
 
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
     statement = current_outcome.statement if current_outcome else ""
@@ -154,7 +162,7 @@ def generate_customer_update(engagement_id: str, payload: GenerateCustomerUpdate
             type=ApprovalType.CUSTOMER_UPDATE,
             target_id=engagement_id,
             status=ApprovalStatus.PENDING,
-            requested_by="FDE (DELIVER Agent)",
+            requested_by=f"{user_role} ({actor_name})",
             created_at=datetime.utcnow()
         )
         db.add(new_appr)
@@ -264,7 +272,8 @@ def get_customer_update_approval_status(engagement_id: str, db: Session = Depend
 @router.get("/engagements/{engagement_id}/customer-updates/pdf-status", tags=["Delivery"])
 def verify_customer_update_pdf_export_authorization(
     engagement_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
 ):
     """
     Enforces strict Manager Approval Gating for Deliver Agent Executive Customer Update PDF export.

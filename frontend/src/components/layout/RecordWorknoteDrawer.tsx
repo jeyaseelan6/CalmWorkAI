@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { X, Plus, FileText, CheckCircle2, MessageSquare, AlertCircle, Sparkles } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
+import { useAuth } from "@/context/AuthContext";
 
 interface RecordWorknoteDrawerProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ import { API_BASE } from "@/utils/api";
 
 export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknoteDrawerProps) {
   const { activeCustomer } = useEngagement();
+  const { user, token, role } = useAuth();
   const [eventType, setEventType] = useState("WORKNOTE");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -27,14 +29,17 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
 
     setIsSubmitting(true);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/timeline/worknotes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           event_type: eventType,
           title: title.trim(),
           description: description.trim(),
-          actor_name: "FDE User"
+          actor_name: user?.name || (role === "MANAGER" ? "Engineering Manager" : "FDE User")
         })
       });
 

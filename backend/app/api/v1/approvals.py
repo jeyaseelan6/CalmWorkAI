@@ -39,6 +39,22 @@ def list_pending_approvals(db: Session = Depends(get_db)):
             why = "Customer requirement changed, gating production validation step."
             evidence = ["Requirement input received", "Current Outcome Goals affected"]
             impact = "Updates Outcome Goals checklist and allows production rollout."
+        elif appr.type == ApprovalType.TASK_CREATION:
+            task_title = "Work Task"
+            task_due = "Target date"
+            if eng and eng.current_outcome_id:
+                outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+                if outcome and outcome.work_plan and isinstance(outcome.work_plan, dict):
+                    tasks = outcome.work_plan.get("tasks", [])
+                    for t in tasks:
+                        if isinstance(t, dict) and t.get("id") == appr.target_id:
+                            task_title = t.get("title", task_title)
+                            task_due = t.get("due_date", task_due)
+                            break
+            rec = f"Authorize work task '{task_title}' for {eng.customer_name if eng else 'customer'}."
+            why = f"FDE ({appr.requested_by}) submitted new work task '{task_title}' for Manager approval before becoming approved work."
+            evidence = ["Submitted by FDE", f"Task ID: {appr.target_id}", f"Due: {task_due}"]
+            impact = "Authorizes task into active work plan, enabling work execution and status tracking."
         else:
             rec = "Approve consequential action."
             why = "Consequential operational update requiring authorization."
@@ -126,6 +142,16 @@ def respond_to_approval(
             appr.reviewed_by = manager_name
             appr.decision_note = payload.decision_note
             appr.reviewed_at = datetime.utcnow()
+            if appr.type == ApprovalType.TASK_CREATION and current_outcome and current_outcome.work_plan:
+                from sqlalchemy.orm.attributes import flag_modified
+                wp = dict(current_outcome.work_plan)
+                tasks = list(wp.get("tasks", []))
+                for t in tasks:
+                    if isinstance(t, dict) and t.get("id") == appr.target_id:
+                        t["approval_status"] = "APPROVED"
+                wp["tasks"] = tasks
+                current_outcome.work_plan = wp
+                flag_modified(current_outcome, "work_plan")
 
         # Log timeline approval event
         db.add(TimelineEvent(
@@ -228,6 +254,33 @@ def respond_to_specific_approval(
                     actor_id=current_user.get("id", "usr-mgr-002"),
                     created_at=datetime.utcnow()
                 ))
+        elif appr.type == ApprovalType.TASK_CREATION:
+            task_title = "Work Task"
+            if eng and eng.current_outcome_id:
+                from sqlalchemy.orm.attributes import flag_modified
+                outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+                if outcome and outcome.work_plan and isinstance(outcome.work_plan, dict):
+                    wp = dict(outcome.work_plan)
+                    tasks = list(wp.get("tasks", []))
+                    for t in tasks:
+                        if isinstance(t, dict) and t.get("id") == appr.target_id:
+                            t["approval_status"] = "APPROVED"
+                            task_title = t.get("title", task_title)
+                            break
+                    wp["tasks"] = tasks
+                    outcome.work_plan = wp
+                    flag_modified(outcome, "work_plan")
+
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=appr.engagement_id,
+                event_type="TASK_APPROVED",
+                title=f"Work Task Approved: {task_title}",
+                description=f"Manager ({manager_name}) approved work task '{task_title}' submitted by {appr.requested_by}.",
+                actor_type="MANAGER",
+                actor_id=current_user.get("id", "usr-mgr-002"),
+                created_at=datetime.utcnow()
+            ))
         else:
             db.add(TimelineEvent(
                 id=f"evt-{uuid.uuid4().hex[:8]}",
@@ -257,16 +310,43 @@ def respond_to_specific_approval(
         appr.decision_note = decision_note
         appr.reviewed_at = datetime.utcnow()
 
-        db.add(TimelineEvent(
-            id=f"evt-{uuid.uuid4().hex[:8]}",
-            engagement_id=appr.engagement_id,
-            event_type="APPROVAL_REJECTED",
-            title="Approval Proposal Rejected",
-            description=f"Manager ({manager_name}) rejected approval proposal: {decision_note}",
-            actor_type="MANAGER",
-            actor_id=current_user.get("id", "usr-mgr-002"),
-            created_at=datetime.utcnow()
-        ))
+        if appr.type == ApprovalType.TASK_CREATION:
+            if eng and eng.current_outcome_id:
+                from sqlalchemy.orm.attributes import flag_modified
+                outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+                if outcome and outcome.work_plan and isinstance(outcome.work_plan, dict):
+                    wp = dict(outcome.work_plan)
+                    tasks = list(wp.get("tasks", []))
+                    for t in tasks:
+                        if isinstance(t, dict) and t.get("id") == appr.target_id:
+                            t["approval_status"] = "REJECTED"
+                            break
+                    wp["tasks"] = tasks
+                    outcome.work_plan = wp
+                    flag_modified(outcome, "work_plan")
+
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=appr.engagement_id,
+                event_type="TASK_REJECTED",
+                title="Work Task Rejected",
+                description=f"Manager ({manager_name}) rejected work task proposal {appr.target_id}: {decision_note}",
+                actor_type="MANAGER",
+                actor_id=current_user.get("id", "usr-mgr-002"),
+                created_at=datetime.utcnow()
+            ))
+        else:
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=appr.engagement_id,
+                event_type="APPROVAL_REJECTED",
+                title="Approval Proposal Rejected",
+                description=f"Manager ({manager_name}) rejected approval proposal: {decision_note}",
+                actor_type="MANAGER",
+                actor_id=current_user.get("id", "usr-mgr-002"),
+                created_at=datetime.utcnow()
+            ))
+
         db.commit()
         return {
             "success": True,
@@ -278,3 +358,4 @@ def respond_to_specific_approval(
             },
             "message": f"Approval {appr.id} rejected."
         }
+

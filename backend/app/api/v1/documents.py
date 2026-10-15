@@ -16,6 +16,7 @@ from app.models import Engagement, TimelineEvent, DocumentModel, DocumentCategor
 from app.services import extract_text_from_file, text_to_pdf_bytes
 from app.api.deps import know_agent, storage_service
 from app.api.schemas import IngestDocumentRequest, KnowledgeQueryRequest
+from app.auth import require_role
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +60,10 @@ def list_documents(engagement_id: str, db: Session = Depends(get_db)):
 def upload_document(
     engagement_id: str,
     payload: IngestDocumentRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
 ):
-    """Categorizes and indexes raw text document into KNOW Agent."""
+    """Categorizes and indexes raw text document into KNOW Agent (Manager & FDE authorized)."""
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -71,6 +73,10 @@ def upload_document(
         title=payload.title,
         raw_text=payload.content
     )
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
 
     doc_id = f"doc-{uuid.uuid4().hex[:8]}"
     storage_service.upload_document(
@@ -93,7 +99,7 @@ def upload_document(
         status=DocumentStatus.INDEXED,
         content=payload.content,
         chunks_count=result.get("chunks_created", 1),
-        uploaded_by="manager_user_1",
+        uploaded_by=actor_name,
         created_at=datetime.utcnow()
     )
     db.add(doc)
@@ -103,9 +109,9 @@ def upload_document(
         engagement_id=engagement_id,
         event_type="DOCUMENT_INGESTED",
         title="Document Uploaded & Indexed",
-        description=f"Manager uploaded document '{payload.title}' categorized as '{category_enum.value}'.",
-        actor_type="MANAGER",
-        actor_id="manager_user_1",
+        description=f"{user_role.capitalize()} {actor_name} uploaded document '{payload.title}' categorized as '{category_enum.value}'.",
+        actor_type=user_role,
+        actor_id=actor_id,
         created_at=datetime.utcnow()
     ))
     db.commit()
@@ -129,11 +135,13 @@ async def upload_document_file(
     file: UploadFile = File(...),
     category: str = Form("Technical Documentation"),
     title: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
 ):
     """
     Multipart File Upload endpoint for Grounded RAG Knowledge Base.
     Extracts text, anonymizes via Privacy Guardrail, chunks and indexes into vector store.
+    Authorized for both Manager and FDE.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
@@ -163,6 +171,10 @@ async def upload_document_file(
         raw_text=extracted_text
     )
 
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+
     doc_id = f"doc-{uuid.uuid4().hex[:8]}"
     upload_filename = file.filename or f"{doc_title}.txt"
     storage_uri = storage_service.upload_binary_file(
@@ -189,7 +201,7 @@ async def upload_document_file(
         status=DocumentStatus.INDEXED,
         content=extracted_text,
         chunks_count=chunks_count,
-        uploaded_by="fde_user_1",
+        uploaded_by=actor_name,
         created_at=datetime.utcnow()
     )
     db.add(doc)
@@ -199,9 +211,9 @@ async def upload_document_file(
         engagement_id=engagement_id,
         event_type="DOCUMENT_INGESTED",
         title="Document Uploaded & Indexed",
-        description=f"Uploaded '{doc_title}' ({category_enum.value}) — indexed into {chunks_count} vector chunks for Grounded RAG.",
-        actor_type="FDE",
-        actor_id="fde_user_1",
+        description=f"{user_role.capitalize()} {actor_name} uploaded '{doc_title}' ({category_enum.value}) — indexed into {chunks_count} vector chunks for Grounded RAG.",
+        actor_type=user_role,
+        actor_id=actor_id,
         created_at=datetime.utcnow()
     ))
     db.commit()

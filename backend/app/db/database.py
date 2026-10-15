@@ -35,6 +35,14 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     try:
         from sqlalchemy import text
+        try:
+            # Add TASK_CREATION to approvaltype enum if on PostgreSQL (requires AUTOCOMMIT)
+            auto_conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+            auto_conn.execute(text("ALTER TYPE approvaltype ADD VALUE IF NOT EXISTS 'TASK_CREATION'"))
+            auto_conn.close()
+        except Exception as e:
+            logger.debug(f"Enum migration skipped or already applied: {e}")
+
         with engine.connect() as conn:
             try:
                 # Postgres-safe alter column

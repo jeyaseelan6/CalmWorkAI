@@ -9,6 +9,7 @@ class ApprovalType(str, enum.Enum):
     DOD_CHANGE = "DOD_CHANGE"
     CONSEQUENTIAL_ACTION = "CONSEQUENTIAL_ACTION"
     CUSTOMER_UPDATE = "CUSTOMER_UPDATE"
+    TASK_CREATION = "TASK_CREATION"
 
 
 class ApprovalStatus(str, enum.Enum):

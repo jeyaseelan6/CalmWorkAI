@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Building2, X, Plus } from "lucide-react";
+import { Building2, X, Plus, AlertTriangle, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEngagement } from "@/context/EngagementContext";
+import { useAuth } from "@/context/AuthContext";
 
 interface CreateEngagementModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface CreateEngagementModalProps {
 export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagementModalProps) {
   const router = useRouter();
   const { createEngagement } = useEngagement();
+  const { isManager } = useAuth();
 
   const [customerName, setCustomerName] = useState("");
   const [engagementName, setEngagementName] = useState("");
@@ -29,6 +31,10 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isManager) {
+      setErrorMsg("Manager role required: Creating new customer engagements is restricted to Engineering Managers.");
+      return;
+    }
     if (!customerName.trim() || !engagementName.trim()) {
       setErrorMsg("Customer name and initiative title are required.");
       return;
@@ -91,6 +97,16 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
 
         {/* Modal Form */}
         <form onSubmit={handleCreate} className="p-6 space-y-4">
+          {!isManager && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">Manager Role Required</strong>
+                <span>Only Engineering Managers can initialize new customer engagements. FDEs operate within authorized customer workspaces.</span>
+              </div>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
               {errorMsg}
@@ -193,11 +209,12 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !isManager}
+              title={!isManager ? "Manager role required to create engagements" : "Create customer engagement"}
               className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-md transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>{submitting ? "Creating..." : "Create Engagement"}</span>
+              {!isManager ? <Lock className="h-3.5 w-3.5 text-slate-400" /> : <Plus className="h-3.5 w-3.5" />}
+              <span>{submitting ? "Creating..." : !isManager ? "Manager Role Required" : "Create Engagement"}</span>
             </button>
           </div>
         </form>

@@ -15,7 +15,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.models import (
     Engagement, EngagementStatus, WorkCycleStep, Outcome, OutcomeStatus,
-    TimelineEvent, Approval, ApprovalStatus, DocumentModel
+    TimelineEvent, Approval, ApprovalType, ApprovalStatus, DocumentModel
 )
 from app.auth import require_role
 from app.api.deps import know_agent
@@ -74,9 +74,9 @@ def list_engagements(db: Session = Depends(get_db)):
 def create_engagement(
     payload: CreateEngagementRequest,
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
 ):
-    """Create a new customer engagement initiative (Manager & FDE authorized)."""
+    """Create a new customer engagement initiative (Manager role required)."""
     if not payload.customer_name.strip() or not payload.name.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -237,11 +237,19 @@ def get_engagement(engagement_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{engagement_id}/timeline/worknotes", tags=["Timeline"])
-def record_worknote(engagement_id: str, payload: WorknotePayload, db: Session = Depends(get_db)):
-    """Fast Context Capture Endpoint: Logs FDE worknote/observation into shared memory timeline."""
+def record_worknote(
+    engagement_id: str,
+    payload: WorknotePayload,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
+):
+    """Fast Context Capture Endpoint: Logs Manager or FDE worknote/observation into shared memory timeline."""
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = payload.actor_name if payload.actor_name and payload.actor_name != "Sarah Chen" else current_user.get("name", payload.actor_name or "Engineer")
 
     evt_id = f"evt-{uuid.uuid4().hex[:8]}"
     evt = TimelineEvent(
@@ -250,8 +258,8 @@ def record_worknote(engagement_id: str, payload: WorknotePayload, db: Session = 
         event_type=payload.event_type.upper(),
         title=payload.title,
         description=payload.description,
-        actor_type="FDE",
-        actor_id=payload.actor_name,
+        actor_type=user_role,
+        actor_id=actor_name,
         created_at=datetime.utcnow()
     )
     db.add(evt)
@@ -352,10 +360,22 @@ def update_routine_task(
     target_task = None
     for t in tasks:
         if isinstance(t, dict) and t.get("id") == task_id:
-            for k, v in payload.items():
-                t[k] = v
             target_task = t
             break
+
+    # If pending manager approval, block status transitions until approved
+    if target_task and target_task.get("approval_status") == "PENDING_APPROVAL":
+        new_status = payload.get("status")
+        if new_status and str(new_status).upper() in ["COMPLETED", "DONE", "IN_PROGRESS"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Task is pending manager approval. Newly created tasks must be approved by an Engineering Manager before becoming approved work."
+            )
+
+    # Apply updates to target task
+    if target_task:
+        for k, v in payload.items():
+            target_task[k] = v
 
     # If not yet in wp["tasks"], create or match corresponding success criterion
     if not target_task:
@@ -368,6 +388,7 @@ def update_routine_task(
             "id": task_id,
             "title": (crit_match.get("title") if crit_match else payload.get("title", task_id)),
             "status": payload.get("status", "IN_PROGRESS"),
+            "approval_status": "APPROVED",
             "linked_goal_id": task_id if crit_match else payload.get("linked_goal_id"),
             "due_date": payload.get("due_date")
         }
@@ -463,8 +484,8 @@ def create_routine_task(
 ):
     """
     Create routine tasks in the active work plan within approved scope.
-    Supports single task creation as well as batch task ingestion (e.g. from Plan Agent).
-    Authorized for both Manager and FDE.
+    Manager creates tasks as approved work.
+    FDE creates tasks submitted for Manager approval before becoming approved work.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
@@ -484,6 +505,7 @@ def create_routine_task(
     user_role = current_user.get("role", "FDE")
     actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
     actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+    task_appr_status = "APPROVED" if user_role == "MANAGER" else "PENDING_APPROVAL"
 
     # Check for batch tasks (e.g. from Plan Agent)
     batch_tasks = payload.get("tasks")
@@ -504,6 +526,7 @@ def create_routine_task(
                 "title": title,
                 "description": item.get("description", item.get("why_it_matters", "")),
                 "status": item.get("status", "TODO"),
+                "approval_status": task_appr_status,
                 "sequence_order": item.get("sequence_order", len(tasks) + 1),
                 "due_date": item.get("due_date"),
                 "linked_goal_id": item.get("linked_goal_id") or task_id,
@@ -513,38 +536,68 @@ def create_routine_task(
             tasks.append(new_item)
             added_tasks.append(new_item)
 
+            if user_role != "MANAGER":
+                db.add(Approval(
+                    id=f"appr-task-{uuid.uuid4().hex[:8]}",
+                    engagement_id=engagement_id,
+                    type=ApprovalType.TASK_CREATION,
+                    target_id=task_id,
+                    status=ApprovalStatus.PENDING,
+                    requested_by=f"FDE ({actor_name})",
+                    decision_note=f"Task: {title}",
+                    created_at=datetime.utcnow()
+                ))
+
         wp["tasks"] = tasks
         current_outcome.work_plan = wp
         flag_modified(current_outcome, "work_plan")
         eng.updated_at = datetime.utcnow()
 
-        db.add(TimelineEvent(
-            id=f"evt-{uuid.uuid4().hex[:8]}",
-            engagement_id=engagement_id,
-            event_type="TASKS_INGESTED",
-            title=f"Plan Agent Tasks Added ({len(added_tasks)} tasks)",
-            description=f"{user_role} {actor_name} added {len(added_tasks)} tasks generated by Plan Agent to work plan.",
-            actor_type=user_role,
-            actor_id=actor_id,
-            created_at=datetime.utcnow()
-        ))
+        if user_role == "MANAGER":
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=engagement_id,
+                event_type="TASKS_INGESTED",
+                title=f"Plan Agent Tasks Added & Approved ({len(added_tasks)} tasks)",
+                description=f"Manager {actor_name} added and approved {len(added_tasks)} tasks generated by Plan Agent to work plan.",
+                actor_type=user_role,
+                actor_id=actor_id,
+                created_at=datetime.utcnow()
+            ))
+            msg = f"{len(added_tasks)} tasks added to work plan and approved."
+        else:
+            db.add(TimelineEvent(
+                id=f"evt-{uuid.uuid4().hex[:8]}",
+                engagement_id=engagement_id,
+                event_type="TASKS_SUBMITTED_FOR_APPROVAL",
+                title=f"Plan Agent Tasks Submitted for Approval ({len(added_tasks)} tasks)",
+                description=f"FDE {actor_name} added {len(added_tasks)} tasks generated by Plan Agent, submitted for Manager approval.",
+                actor_type=user_role,
+                actor_id=actor_id,
+                created_at=datetime.utcnow()
+            ))
+            msg = f"{len(added_tasks)} tasks created and submitted for manager approval."
+
         db.commit()
 
         return {
             "success": True,
             "data": added_tasks,
             "tasks": tasks,
-            "message": f"{len(added_tasks)} tasks added to work plan successfully."
+            "message": msg
         }
 
     # Single task creation (Manager or FDE manual add task)
     default_ms = wp["milestones"][0].get("id", "m-1") if wp["milestones"] else "m-1"
+    task_id = payload.get("id") or f"task-{len(tasks)+1}-{uuid.uuid4().hex[:4]}"
+    title = payload.get("title", "New Task")
     new_task = {
-        "id": payload.get("id") or f"task-{len(tasks)+1}-{uuid.uuid4().hex[:4]}",
+        "id": task_id,
         "milestone_id": payload.get("milestone_id") or default_ms,
-        "title": payload.get("title", "New Task"),
+        "title": title,
         "description": payload.get("description", payload.get("why_it_matters", "")),
         "status": payload.get("status", "TODO"),
+        "approval_status": task_appr_status,
         "sequence_order": payload.get("sequence_order", len(tasks) + 1),
         "due_date": payload.get("due_date"),
         "linked_goal_id": payload.get("linked_goal_id"),
@@ -557,21 +610,46 @@ def create_routine_task(
     flag_modified(current_outcome, "work_plan")
     eng.updated_at = datetime.utcnow()
 
-    db.add(TimelineEvent(
-        id=f"evt-{uuid.uuid4().hex[:8]}",
-        engagement_id=engagement_id,
-        event_type="TASK_CREATED",
-        title=f"Task Created: {new_task['title']}",
-        description=f"{user_role} {actor_name} created routine task '{new_task['id']}' within approved scope.",
-        actor_type=user_role,
-        actor_id=actor_id,
-        created_at=datetime.utcnow()
-    ))
+    if user_role == "MANAGER":
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="TASK_CREATED",
+            title=f"Task Created & Approved: {new_task['title']}",
+            description=f"Manager {actor_name} created approved routine task '{new_task['id']}'.",
+            actor_type="MANAGER",
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
+        msg = "Work task created and approved."
+    else:
+        db.add(Approval(
+            id=f"appr-task-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            type=ApprovalType.TASK_CREATION,
+            target_id=task_id,
+            status=ApprovalStatus.PENDING,
+            requested_by=f"FDE ({actor_name})",
+            decision_note=f"Task: {title}",
+            created_at=datetime.utcnow()
+        ))
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="TASK_SUBMITTED_FOR_APPROVAL",
+            title=f"Task Submitted for Approval: {new_task['title']}",
+            description=f"FDE {actor_name} created task '{new_task['title']}' and submitted for Manager approval.",
+            actor_type="FDE",
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
+        msg = "Routine task created and submitted for manager approval."
+
     db.commit()
 
     return {
         "success": True,
         "data": new_task,
         "tasks": tasks,
-        "message": "Routine task created successfully."
+        "message": msg
     }

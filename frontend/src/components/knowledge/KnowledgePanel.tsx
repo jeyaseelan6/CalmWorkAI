@@ -251,8 +251,13 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
     }
 
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/documents/upload-file`, {
         method: "POST",
+        headers,
         body: formData
       });
 

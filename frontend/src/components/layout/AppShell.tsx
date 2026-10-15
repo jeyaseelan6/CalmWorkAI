@@ -94,7 +94,7 @@ function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, role, logout, isAuthenticated, isLoadingAuth } = useAuth();
+  const { user, role, logout, isAuthenticated, isLoadingAuth, isManager } = useAuth();
   const { customers, activeCustomer, switchEngagement, pendingApprovalsCount } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -215,20 +215,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          <div className="pt-1 mt-1 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                setDropdownOpen(false);
-                setIsMobileMenuOpen(false);
-                setShowCreateModal(true);
-              }}
-              className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5 text-slate-500" />
-              <span>New Engagement...</span>
-            </button>
-          </div>
+          {isManager && (
+            <div className="pt-1 mt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  setIsMobileMenuOpen(false);
+                  setShowCreateModal(true);
+                }}
+                className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5 text-slate-500" />
+                <span>New Engagement...</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -419,15 +421,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Right Side Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* "+ New Engagement" on desktop */}
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="hidden lg:flex border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md items-center gap-1.5 transition cursor-pointer shadow-2xs"
-              title="Create a new customer engagement (Manager & FDE)"
-            >
-              <Building2 className="h-3.5 w-3.5 text-slate-500" />
-              <span>+ New Engagement</span>
-            </button>
+            {/* "+ New Engagement" on desktop (Manager only) */}
+            {isManager && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="hidden lg:flex border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title="Create a new customer engagement (Manager role required)"
+              >
+                <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                <span>+ New Engagement</span>
+              </button>
+            )}
 
             {/* Record Note button */}
             <button

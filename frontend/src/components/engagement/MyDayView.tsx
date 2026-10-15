@@ -18,7 +18,9 @@ import {
   Plus,
   Building2,
   Check,
-  Edit2
+  Edit2,
+  Lock,
+  AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 import { MorningBriefData, WhatChangedItem } from "@/components/engagement/DailyWorkBriefing";
@@ -380,7 +382,11 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
         const json = await res.json();
         const created = json.data;
         setLocalTasks((prev) => [...prev, created]);
-        setAlertNotification(`Task added: '${created.title}'`);
+        if (role === "MANAGER") {
+          setAlertNotification(`Work task created and approved: '${created.title}'`);
+        } else {
+          setAlertNotification(`Task created and submitted for manager approval: '${created.title}'`);
+        }
         setIsAddTaskModalOpen(false);
         setNewTaskTitle("");
         setNewTaskWhy("");
@@ -393,7 +399,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     }
   };
 
-  // Adding Plan Agent Generated Tasks directly without Manager approval
+  // Adding Plan Agent Generated Tasks to work plan
   const handleAdoptPlanAgentTasks = async () => {
     if (!brief?.proposed_work_plan?.work_items || brief.proposed_work_plan.work_items.length === 0) return;
     setAdoptingTasks(true);
@@ -411,7 +417,11 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       });
 
       if (res.ok) {
-        setAlertNotification(`${brief.proposed_work_plan.work_items.length} Plan Agent tasks added to work plan!`);
+        if (role === "MANAGER") {
+          setAlertNotification(`${brief.proposed_work_plan.work_items.length} Plan Agent tasks added to work plan and approved!`);
+        } else {
+          setAlertNotification(`${brief.proposed_work_plan.work_items.length} Plan Agent tasks added and submitted for Manager approval!`);
+        }
         await fetchEngagementDetail(activeCustomer.id);
       }
     } catch (err) {
@@ -431,9 +441,13 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     setAlertNotification(`Due date updated for '${task.title}' to ${newDueDate}.`);
 
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           due_date: newDueDate,
           status: task.status,
@@ -450,6 +464,11 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
   };
 
   const handleToggleTaskStatus = async (task: any) => {
+    if (task.approval_status === "PENDING_APPROVAL") {
+      setAlertNotification("Action blocked: This task is pending Manager approval before it can become approved work.");
+      return;
+    }
+
     const isCurrentlyDone = task.status === "COMPLETED";
     const nextStatus = isCurrentlyDone ? "TODO" : "COMPLETED";
 
@@ -478,9 +497,13 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     }
 
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           status: nextStatus,
           linked_goal_id: task.linked_goal_id || task.id,
@@ -920,23 +943,51 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                           <button
                             type="button"
                             onClick={() => handleToggleTaskStatus(item)}
-                            className="mt-0.5 shrink-0 focus:outline-none cursor-pointer"
-                            title={isDone ? "Mark as To Do" : "Mark as Completed"}
+                            disabled={item.approval_status === "PENDING_APPROVAL"}
+                            className={`mt-0.5 shrink-0 focus:outline-none ${
+                              item.approval_status === "PENDING_APPROVAL" ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                            }`}
+                            title={
+                              item.approval_status === "PENDING_APPROVAL"
+                                ? "Pending Manager Approval — Cannot be marked complete until approved by an Engineering Manager"
+                                : isDone
+                                ? "Mark as To Do"
+                                : "Mark as Completed"
+                            }
                           >
                             {isDone ? (
                               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                            ) : item.approval_status === "PENDING_APPROVAL" ? (
+                              <Lock className="h-4.5 w-4.5 text-amber-500" />
                             ) : (
                               <Circle className="h-5 w-5 text-slate-400 hover:text-amber-500 transition" />
                             )}
                           </button>
                           <div className="min-w-0">
-                            <span
-                              className={`font-semibold text-sm sm:text-base leading-snug block ${
-                                isDone ? "line-through text-slate-400" : "text-slate-900"
-                              }`}
-                            >
-                              #{item.sequence_order}. {item.title}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`font-semibold text-sm sm:text-base leading-snug block ${
+                                  isDone ? "line-through text-slate-400" : "text-slate-900"
+                                }`}
+                              >
+                                #{item.sequence_order}. {item.title}
+                              </span>
+                              {item.approval_status === "PENDING_APPROVAL" && (
+                                <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
+                                  <Clock className="h-3 w-3 text-amber-600" /> Pending Manager Approval
+                                </span>
+                              )}
+                              {item.approval_status === "REJECTED" && (
+                                <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300 font-semibold">
+                                  <AlertTriangle className="h-3 w-3 text-rose-600" /> Rejected by Manager
+                                </span>
+                              )}
+                              {item.approval_status === "APPROVED" && (
+                                <span className="inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+                                  <Check className="h-2.5 w-2.5 text-emerald-600" /> Approved Work
+                                </span>
+                              )}
+                            </div>
                             {item.why_it_matters && (
                               <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mt-1">
                                 {item.why_it_matters}
@@ -962,15 +1013,31 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                           <button
                             type="button"
                             onClick={() => handleToggleTaskStatus(item)}
-                            className={`text-xs font-mono px-2.5 py-1 rounded-md border transition cursor-pointer font-bold ${
-                              isDone
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            disabled={item.approval_status === "PENDING_APPROVAL"}
+                            className={`text-xs font-mono px-2.5 py-1 rounded-md border transition font-bold ${
+                              item.approval_status === "PENDING_APPROVAL"
+                                ? "bg-amber-50 text-amber-800 border-amber-300 cursor-not-allowed opacity-80"
+                                : isDone
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 cursor-pointer"
                                 : inProgress
-                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                                : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 cursor-pointer"
+                                : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 cursor-pointer"
                             }`}
+                            title={
+                              item.approval_status === "PENDING_APPROVAL"
+                                ? "Pending Manager Approval — Cannot be updated until approved"
+                                : isDone
+                                ? "Click to set To Do"
+                                : "Click to toggle"
+                            }
                           >
-                            {isDone ? "Done" : inProgress ? "In Progress" : "To Do"}
+                            {item.approval_status === "PENDING_APPROVAL"
+                              ? "Pending Approval"
+                              : isDone
+                              ? "Done"
+                              : inProgress
+                              ? "In Progress"
+                              : "To Do"}
                           </button>
                         </div>
                       </div>
