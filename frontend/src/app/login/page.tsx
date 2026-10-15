@@ -88,20 +88,26 @@ export default function LoginPage() {
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <User className="h-3.5 w-3.5" />
-            <span>Forward-Deployed Engineer</span>
+            <User className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              <span className="hidden sm:inline">Forward-Deployed Engineer</span>
+              <span className="sm:hidden">Engineer</span>
+            </span>
           </button>
           <button
             type="button"
             onClick={() => handleRoleTabChange("MANAGER")}
-            className={`py-2.5 font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-2.5 px-2 font-semibold rounded-lg transition flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
               selectedRole === "MANAGER"
                 ? "bg-teal-600 text-slate-950 shadow-md"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Building2 className="h-3.5 w-3.5" />
-            <span>Engineering Manager</span>
+            <Building2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              <span className="hidden sm:inline">Engineering Manager</span>
+              <span className="sm:hidden">Manager</span>
+            </span>
           </button>
         </div>
 

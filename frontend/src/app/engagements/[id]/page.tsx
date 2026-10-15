@@ -59,23 +59,23 @@ function EngagementDetailContent() {
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Calm Workspace Header */}
         <div className="pb-3 border-b border-slate-200 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold font-display text-slate-900">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-lg sm:text-xl font-bold font-display text-slate-900 truncate">
                   {activeCustomer.customerName}
                 </h1>
                 <span className="text-slate-300">·</span>
-                <span className="text-sm text-slate-600 font-medium">
+                <span className="text-xs sm:text-sm text-slate-600 font-medium truncate">
                   {activeCustomer.engagementName}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">
                 Delivery Workspace · {activeEngagementData?.engagement?.current_work_cycle || "Step 4: Build & Integrate"}
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border ${
                 isHealthy
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -85,13 +85,13 @@ function EngagementDetailContent() {
                 <span>{isHealthy ? "Healthy" : "Needs Review"}</span>
               </span>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-mono">
-                Outcome Goals v{currentOutcomeVersion}
+                Goals v{currentOutcomeVersion}
               </span>
             </div>
           </div>
 
-          {/* Simple, Consistent Tabs Navigation */}
-          <nav className="flex items-center gap-1 border-t border-slate-100 pt-3 overflow-x-auto text-xs">
+          {/* Simple, Consistent Tabs Navigation (Swipeable horizontally on mobile) */}
+          <nav className="flex items-center gap-1.5 border-t border-slate-100 pt-2.5 overflow-x-auto text-xs whitespace-nowrap pb-1">
             <button
               onClick={() => setActiveTab("myday")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${

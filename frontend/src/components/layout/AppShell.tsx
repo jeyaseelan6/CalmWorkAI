@@ -23,11 +23,12 @@ import {
   Sparkles,
   Zap,
   Send,
-  Plus
+  Plus,
+  Menu,
+  X
 } from "lucide-react";
 import RecordWorknoteDrawer from "@/components/layout/RecordWorknoteDrawer";
 import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
-
 
 export interface NavItem {
   id: string;
@@ -37,14 +38,14 @@ export interface NavItem {
   badge?: number;
 }
 
-function NavLinks() {
+function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
   const { role } = useAuth();
   const { activeCustomer, pendingApprovalsCount } = useEngagement();
   const pathname = usePathname();
 
   const engagementHref = `/engagements/${activeCustomer?.id || "eng-acme-001"}`;
 
-  const fdeNav: NavItem[] = [
+  const currentNav: NavItem[] = [
     { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
     { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
@@ -52,20 +53,9 @@ function NavLinks() {
     { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
     { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
   ];
-
-  const managerNav: NavItem[] = [
-    { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
-    { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
-    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
-    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
-    { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
-  ];
-
-  const currentNav = role === "FDE" ? fdeNav : managerNav;
 
   return (
-    <nav className="space-y-0.5">
+    <nav className="space-y-1">
       {currentNav.map((item: NavItem) => {
         const Icon = item.icon;
         const isActive =
@@ -76,18 +66,21 @@ function NavLinks() {
           <Link
             key={item.id}
             href={item.href}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+            onClick={onItemClick}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
               isActive
-                ? "bg-slate-100 text-slate-900 font-semibold"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium"
+                ? "bg-slate-900 text-white font-semibold shadow-2xs"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium"
             }`}
           >
-            <div className="flex items-center gap-2">
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-slate-900" : "text-slate-400"}`} />
+            <div className="flex items-center gap-2.5">
+              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
               <span>{item.label}</span>
             </div>
             {item.badge ? (
-              <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded font-mono font-medium">
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                isActive ? "bg-amber-400 text-slate-950" : "bg-amber-100 text-amber-900"
+              }`}>
                 {item.badge}
               </span>
             ) : null}
@@ -102,17 +95,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, role, logout, isAuthenticated, isLoadingAuth } = useAuth();
-  const { customers, activeCustomer, setActiveCustomer, switchEngagement } = useEngagement();
+  const { customers, activeCustomer, switchEngagement, pendingApprovalsCount } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const filteredCustomers = customers.filter(c => {
     if (!customerSearch.trim()) return true;
     const q = customerSearch.toLowerCase();
     return c.customerName.toLowerCase().includes(q) || c.engagementName.toLowerCase().includes(q);
   });
+
+  // Automatically close mobile menu & dropdown on navigation
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    setDropdownOpen(false);
+  }, [pathname]);
 
   // Route protection: If unauthenticated, redirect to login screen
   useEffect(() => {
@@ -140,10 +140,182 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
 
+  const renderEngagementSwitcher = () => (
+    <div className="mb-3 relative px-1">
+      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
+        Active Engagement
+      </label>
+      <button
+        type="button"
+        onClick={() => setDropdownOpen(!dropdownOpen)}
+        className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 flex items-center justify-between text-left hover:border-slate-300 transition-all text-xs cursor-pointer"
+      >
+        <div className="truncate">
+          <span className="font-semibold text-slate-900 block truncate">{activeCustomer.customerName}</span>
+          <span className="text-[11px] text-slate-500 block truncate">{activeCustomer.engagementName}</span>
+        </div>
+        <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-1" />
+      </button>
+
+      {dropdownOpen && (
+        <div className="absolute left-1 right-1 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1.5 space-y-1">
+          <div className="px-1.5 py-1 text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
+            <span>Switch Workspace</span>
+            <span className="font-mono text-[9px] text-slate-500">{customers.length} total</span>
+          </div>
+
+          {customers.length > 4 && (
+            <div className="px-0.5 pb-1">
+              <input
+                type="text"
+                placeholder="Search engagement..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
+              />
+            </div>
+          )}
+
+          <div className="max-h-60 overflow-y-auto space-y-0.5">
+            {filteredCustomers.map((cust) => (
+              <button
+                key={cust.id}
+                type="button"
+                onClick={() => {
+                  switchEngagement(cust);
+                  setDropdownOpen(false);
+                  setIsMobileMenuOpen(false);
+                  setCustomerSearch("");
+                  if (pathname?.startsWith("/engagements")) {
+                    router.push(`/engagements/${cust.id}`);
+                  }
+                }}
+                className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                  cust.id === activeCustomer.id 
+                    ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-slate-900" 
+                    : "hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <div className="truncate">
+                  <div className="font-semibold truncate">{cust.customerName}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{cust.engagementName}</div>
+                </div>
+                {cust.status === "NEEDS_REASSESSMENT" && (
+                  <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 ml-1.5" title="Needs Reassessment" />
+                )}
+                {cust.status === "HEALTHY" && (
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5" title="Healthy" />
+                )}
+              </button>
+            ))}
+            {filteredCustomers.length === 0 && (
+              <div className="p-2 text-center text-xs text-slate-400">
+                No matching engagements
+              </div>
+            )}
+          </div>
+
+          <div className="pt-1 mt-1 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => {
+                setDropdownOpen(false);
+                setIsMobileMenuOpen(false);
+                setShowCreateModal(true);
+              }}
+              className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5 text-slate-500" />
+              <span>New Engagement...</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-60 border-r border-slate-200 bg-white flex flex-col justify-between p-3.5 shrink-0">
+      {/* Mobile Slide-Out Navigation Drawer */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex animate-fadeIn">
+          {/* Backdrop overlay */}
+          <div 
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+
+          {/* Drawer content */}
+          <div className="relative w-72 max-w-[85vw] bg-white h-full z-10 shadow-2xl flex flex-col justify-between p-4 overflow-y-auto">
+            <div>
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
+                <Link 
+                  href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5"
+                >
+                  <div className="h-7 w-7 rounded bg-slate-900 text-white flex items-center justify-center font-display font-bold text-sm shadow-2xs">
+                    C
+                  </div>
+                  <div>
+                    <h2 className="font-display font-bold text-slate-900 text-sm tracking-tight">CalmWork AI</h2>
+                    <p className="text-[10px] text-slate-500 font-mono">Mobile Workspace</p>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                  aria-label="Close navigation"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Engagement Switcher */}
+              {renderEngagementSwitcher()}
+
+              {/* Navigation Items */}
+              <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
+                <NavLinks onItemClick={() => setIsMobileMenuOpen(false)} />
+              </Suspense>
+            </div>
+
+            {/* User Profile in Drawer */}
+            <div className="pt-3 border-t border-slate-200 space-y-2 mt-4 text-xs">
+              {user && (
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs">
+                        {user.name.split(" ").map(n => n[0]).join("")}
+                      </div>
+                      <div className="truncate">
+                        <p className="text-xs font-semibold text-slate-900 truncate">{user.name}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{user.title}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-bold">
+                      {role}
+                    </span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center justify-center gap-1.5 text-xs text-rose-600 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 py-1.5 rounded-md transition font-semibold cursor-pointer"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar (hidden on mobile) */}
+      <aside className="hidden md:flex w-60 border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0">
         <div>
           {/* Logo & Application Header */}
           <Link href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`} className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
@@ -156,97 +328,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
 
-          {/* Active Customer Switcher (Sole dropdown for switching engagements) */}
-          <div className="mb-3 relative px-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
-              Active Engagement
-            </label>
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 flex items-center justify-between text-left hover:border-slate-300 transition-all text-xs cursor-pointer"
-            >
-              <div className="truncate">
-                <span className="font-semibold text-slate-900 block truncate">{activeCustomer.customerName}</span>
-                <span className="text-[11px] text-slate-500 block truncate">{activeCustomer.engagementName}</span>
-              </div>
-              <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-1" />
-            </button>
-
-            {dropdownOpen && (
-              <div className="absolute left-1 right-1 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1.5 space-y-1">
-                <div className="px-1.5 py-1 text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
-                  <span>Switch Workspace</span>
-                  <span className="font-mono text-[9px] text-slate-500">{customers.length} total</span>
-                </div>
-
-                {/* Search if there are multiple customers */}
-                {customers.length > 4 && (
-                  <div className="px-0.5 pb-1">
-                    <input
-                      type="text"
-                      placeholder="Search engagement..."
-                      value={customerSearch}
-                      onChange={(e) => setCustomerSearch(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
-                    />
-                  </div>
-                )}
-
-                <div className="max-h-60 overflow-y-auto space-y-0.5">
-                  {filteredCustomers.map((cust) => (
-                    <button
-                      key={cust.id}
-                      onClick={() => {
-                        switchEngagement(cust);
-                        setDropdownOpen(false);
-                        setCustomerSearch("");
-                        if (pathname?.startsWith("/engagements")) {
-                          router.push(`/engagements/${cust.id}`);
-                        }
-                      }}
-                      className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                        cust.id === activeCustomer.id 
-                          ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-slate-900" 
-                          : "hover:bg-slate-50 text-slate-700"
-                      }`}
-                    >
-                      <div className="truncate">
-                        <div className="font-semibold truncate">{cust.customerName}</div>
-                        <div className="text-[10px] text-slate-500 truncate">{cust.engagementName}</div>
-                      </div>
-                      {cust.status === "NEEDS_REASSESSMENT" && (
-                        <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 ml-1.5" title="Needs Reassessment" />
-                      )}
-                      {cust.status === "HEALTHY" && (
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5" title="Healthy" />
-                      )}
-                    </button>
-                  ))}
-                  {filteredCustomers.length === 0 && (
-                    <div className="p-2 text-center text-xs text-slate-400">
-                      No matching engagements
-                    </div>
-                  )}
-                </div>
-
-                {/* Manager & FDE Action: Create New Engagement */}
-                <div className="pt-1 mt-1 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDropdownOpen(false);
-                      setShowCreateModal(true);
-                    }}
-                    className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-slate-500" />
-                    <span>New Engagement...</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
+          {/* Active Customer Switcher */}
+          {renderEngagementSwitcher()}
 
           {/* Navigation Links wrapped in Suspense */}
           <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
@@ -294,11 +377,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content Workspace Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        {/* Top Header Bar */}
-        <header className="h-12 border-b border-slate-200 bg-white px-5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="relative w-64">
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 min-w-0">
+        {/* Top Header Bar (Mobile & Desktop) */}
+        <header className="h-13 sm:h-12 border-b border-slate-200 bg-white px-3 sm:px-5 flex items-center justify-between shrink-0 gap-2">
+          {/* Left Side: Mobile Menu Button & Brand Chip */}
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            {/* Mobile Hamburger Button */}
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-1.5 -ml-1 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition relative cursor-pointer"
+              aria-label="Open Navigation Drawer"
+            >
+              <Menu className="h-5 w-5" />
+              {pendingApprovalsCount > 0 && (
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </button>
+
+            {/* Mobile Title / Engagement Chip */}
+            <div className="flex md:hidden items-center gap-1.5 truncate">
+              <span className="font-display font-bold text-xs text-slate-900 truncate">
+                {activeCustomer.customerName}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">·</span>
+              <span className="text-[11px] text-slate-500 truncate max-w-[120px]">
+                {activeCustomer.engagementName}
+              </span>
+            </div>
+
+            {/* Desktop Search Bar */}
+            <div className="hidden md:block relative w-64">
               <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
@@ -308,35 +417,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right Side Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* "+ New Engagement" on desktop */}
             <button
               onClick={() => setShowCreateModal(true)}
-              className="border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+              className="hidden lg:flex border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md items-center gap-1.5 transition cursor-pointer shadow-2xs"
               title="Create a new customer engagement (Manager & FDE)"
             >
               <Building2 className="h-3.5 w-3.5 text-slate-500" />
               <span>+ New Engagement</span>
             </button>
 
+            {/* Record Note button */}
             <button
               onClick={() => setIsWorknoteDrawerOpen(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition cursor-pointer"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md flex items-center gap-1 sm:gap-1.5 transition cursor-pointer shadow-2xs"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>Record Note</span>
+              <span className="hidden sm:inline">Record Note</span>
+              <span className="sm:hidden text-[11px]">Note</span>
             </button>
 
-            <span className="text-xs px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700 font-medium">
+            <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700 font-mono font-medium">
               {role === "MANAGER" ? "Manager" : "Engineer"}
             </span>
 
             {user && (
-              <div className="flex items-center gap-2 border-l border-slate-200 pl-2.5">
+              <div className="hidden sm:flex items-center gap-2 border-l border-slate-200 pl-2.5">
                 <div className="flex items-center gap-1.5 text-xs text-slate-700">
                   <div className="h-5 w-5 rounded bg-slate-800 text-white font-bold flex items-center justify-center text-[10px]">
                     {user.name.split(" ").map(n => n[0]).join("")}
                   </div>
-                  <span className="font-semibold text-slate-800">{user.name}</span>
+                  <span className="font-semibold text-slate-800 hidden md:inline">{user.name}</span>
                 </div>
 
                 <button
@@ -345,7 +458,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   title="Sign out of current session"
                 >
                   <LogOut className="h-3 w-3" />
-                  <span>Sign Out</span>
+                  <span className="hidden md:inline">Sign Out</span>
                 </button>
               </div>
             )}
@@ -353,9 +466,76 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Main Body Canvas */}
-        <main className="flex-1 overflow-y-auto p-5">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 pb-24 md:pb-5">
           {children}
         </main>
+
+        {/* Mobile Bottom Navigation Bar (Fixed for quick 1-thumb touch navigation) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+          <Link
+            href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium transition ${
+              pathname?.startsWith("/engagements") || pathname === "/"
+                ? "text-slate-900 font-bold"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <Building2 className="h-4 w-4 mb-0.5" />
+            <span>Workspace</span>
+          </Link>
+
+          <Link
+            href="/approvals"
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium relative transition ${
+              pathname?.startsWith("/approvals")
+                ? "text-slate-900 font-bold"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <div className="relative">
+              <ShieldCheck className="h-4 w-4 mb-0.5" />
+              {pendingApprovalsCount > 0 && (
+                <span className="absolute -top-1 -right-2 bg-amber-500 text-slate-950 font-bold text-[9px] h-3.5 min-w-[14px] px-0.5 rounded-full flex items-center justify-center font-mono">
+                  {pendingApprovalsCount}
+                </span>
+              )}
+            </div>
+            <span>Approvals</span>
+          </Link>
+
+          <Link
+            href="/delivery"
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium transition ${
+              pathname?.startsWith("/delivery")
+                ? "text-slate-900 font-bold"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <Send className="h-4 w-4 mb-0.5" />
+            <span>Updates</span>
+          </Link>
+
+          <Link
+            href="/supervisor"
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium transition ${
+              pathname?.startsWith("/supervisor")
+                ? "text-slate-900 font-bold"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <Sparkles className="h-4 w-4 mb-0.5" />
+            <span>Ask AI</span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-900 cursor-pointer"
+          >
+            <Menu className="h-4 w-4 mb-0.5" />
+            <span>Menu</span>
+          </button>
+        </nav>
 
         {/* Global Quick Context Capture Drawer */}
         <RecordWorknoteDrawer
@@ -370,6 +550,5 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       </div>
     </div>
-
   );
 }

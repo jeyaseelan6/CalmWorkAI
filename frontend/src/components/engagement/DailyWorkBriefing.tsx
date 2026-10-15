@@ -175,13 +175,13 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-5 text-xs">
       {/* Header Banner & Refresh Trigger */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3.5 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-3.5 gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="p-2 bg-amber-500 text-slate-950 rounded-lg shadow-2xs shrink-0">
             <Sun className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-display font-bold text-sm text-slate-900 truncate">
                 Morning Brief &mdash; {brief.customer_name}
               </h2>
@@ -195,7 +195,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
           <button
             onClick={fetchBrief}
             disabled={loading}

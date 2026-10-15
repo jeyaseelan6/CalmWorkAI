@@ -226,13 +226,13 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
         <div className="flex items-center gap-2">
-          <Mail className="h-4.5 w-4.5 text-slate-700" />
+          <Mail className="h-4.5 w-4.5 text-slate-700 shrink-0" />
           <h3 className="text-sm font-display font-bold text-slate-900">DELIVER Agent — Customer Update Studio</h3>
         </div>
-        <div className="flex items-center gap-1 text-xs text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded font-mono font-semibold">
-          <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
+        <div className="flex items-center gap-1 text-xs text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded font-mono font-semibold self-start sm:self-auto">
+          <ShieldCheck className="h-3.5 w-3.5 text-slate-500 shrink-0" />
           <span>Executive Business Translation</span>
         </div>
       </div>

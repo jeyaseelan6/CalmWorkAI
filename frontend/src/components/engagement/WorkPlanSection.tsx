@@ -447,12 +447,12 @@ export default function WorkPlanSection({
             />
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-200">
             {activePlan && (
               <button
                 type="button"
                 onClick={() => setShowInputForm(false)}
-                className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer"
+                className="w-full sm:w-auto px-3 py-2 sm:py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer text-center"
               >
                 Cancel
               </button>
@@ -460,7 +460,7 @@ export default function WorkPlanSection({
             <button
               type="submit"
               disabled={isProposing || !naturalLanguageInput.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center gap-2 shadow-2xs cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center justify-center gap-2 shadow-2xs cursor-pointer text-center"
             >
               {isProposing ? (
                 <>
@@ -495,17 +495,17 @@ export default function WorkPlanSection({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
               <button
                 onClick={() => setDraftProposal(null)}
-                className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer"
+                className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer text-center"
               >
                 Discard Draft
               </button>
               <button
                 onClick={handleApprovePlan}
                 disabled={isApproving}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer text-center"
               >
                 {isApproving ? (
                   <>
@@ -515,7 +515,7 @@ export default function WorkPlanSection({
                 ) : (
                   <>
                     <Check className="h-4 w-4" />
-                    <span>Approve & Activate Plan</span>
+                    <span>Approve Plan</span>
                   </>
                 )}
               </button>

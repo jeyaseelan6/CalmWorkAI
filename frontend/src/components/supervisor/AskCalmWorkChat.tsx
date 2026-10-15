@@ -335,7 +335,7 @@ export default function AskCalmWorkChat() {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col h-[650px] text-xs">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col h-[calc(100vh-210px)] min-h-[480px] sm:h-[650px] text-xs">
       {/* Header */}
       <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
