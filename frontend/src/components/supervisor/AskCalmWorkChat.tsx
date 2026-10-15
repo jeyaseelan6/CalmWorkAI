@@ -36,6 +36,7 @@ interface ChatMessage {
   suggestedFollowups?: string[];
   timestamp: string;
 }
+import { API_BASE } from "@/utils/api";
 
 const AGENT_META: Record<string, {
   name: string;
@@ -294,7 +295,7 @@ export default function AskCalmWorkChat() {
     setLoading(true);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/supervisor/query`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: q.trim() })

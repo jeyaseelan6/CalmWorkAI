@@ -23,7 +23,7 @@ interface CustomerUpdatePanelProps {
   engagementName: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/utils/api";
 
 export default function CustomerUpdatePanel({ engagementId, customerName, engagementName }: CustomerUpdatePanelProps) {
   const { isManager, isFDE, user, token } = useAuth();

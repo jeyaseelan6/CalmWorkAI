@@ -25,7 +25,7 @@ import { MorningBriefData, WhatChangedItem } from "@/components/engagement/Daily
 import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
 import { formatISTDateTime, getNowISTTime } from "@/utils/date";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/utils/api";
 
 function formatWorkCycle(cycle?: string): string {
   if (!cycle) return "";

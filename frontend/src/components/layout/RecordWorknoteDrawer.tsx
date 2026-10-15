@@ -9,6 +9,8 @@ interface RecordWorknoteDrawerProps {
   onClose: () => void;
 }
 
+import { API_BASE } from "@/utils/api";
+
 export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknoteDrawerProps) {
   const { activeCustomer } = useEngagement();
   const [eventType, setEventType] = useState("WORKNOTE");
@@ -25,7 +27,7 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/timeline/worknotes`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/timeline/worknotes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

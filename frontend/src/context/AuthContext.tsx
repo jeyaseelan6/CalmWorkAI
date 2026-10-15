@@ -33,7 +33,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/utils/api";
 
 const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = {
   FDE: { email: "fde@calmwork.ai", password: "password123" },

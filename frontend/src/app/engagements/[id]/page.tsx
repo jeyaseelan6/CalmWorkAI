@@ -268,9 +268,6 @@ function EngagementDetailContent() {
 }
 
 export default function EngagementDetailPage() {
-  const routeParams = useParams();
-  const engagementId = (routeParams?.id as string) || "eng-acme-001";
-
   return (
     <React.Suspense
       fallback={
@@ -282,7 +279,7 @@ export default function EngagementDetailPage() {
         </div>
       }
     >
-      <EngagementDetailContent key={engagementId} />
+      <EngagementDetailContent />
     </React.Suspense>
   );
 }

@@ -26,7 +26,7 @@ interface SupervisorCardProps {
   customerName: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/utils/api";
 
 export default function SupervisorCard({ engagementId, customerName }: SupervisorCardProps) {
   const [summary, setSummary] = useState<SupervisorSummaryData | null>(null);

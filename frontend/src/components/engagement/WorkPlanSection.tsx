@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import AgentProgressStream, { AgentStreamEvent } from "./AgentProgressStream";
 
+import { API_BASE } from "@/utils/api";
+
 interface WorkTask {
   id: string;
   milestone_id: string;
@@ -137,7 +139,7 @@ export default function WorkPlanSection({
 
   const fetchPlan = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/plan`);
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data?.has_plan && json.data.plan) {
@@ -176,7 +178,7 @@ export default function WorkPlanSection({
         headers["Authorization"] = `Bearer ${authToken}`;
       }
 
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/plan/propose/stream`, {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan/propose/stream`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -256,7 +258,7 @@ export default function WorkPlanSection({
         headers["Authorization"] = `Bearer ${authToken}`;
       }
 
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/plan/approve`, {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan/approve`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -318,7 +320,7 @@ export default function WorkPlanSection({
     setActivePlan(updatedPlan);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${engagementId}/goals/${dodId}/toggle`, {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/goals/${dodId}/toggle`, {
         method: "PATCH"
       });
       if (res.ok) {

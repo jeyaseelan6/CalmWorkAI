@@ -18,6 +18,8 @@ import {
   AlertCircle
 } from "lucide-react";
 
+import { API_BASE } from "@/utils/api";
+
 export default function IntelligencePage() {
   const { activeCustomer, approvedAcme, handleApproveChange, activeEngagementData } = useEngagement();
   const { isManager } = useAuth();
@@ -35,7 +37,7 @@ export default function IntelligencePage() {
     setAnalysisError(null);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/engagements/${activeCustomer.id}/analyze-change`, {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/analyze-change`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ raw_change_text: text.trim() })

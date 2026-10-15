@@ -7,7 +7,7 @@ import Link from "next/link";
 import { getNowISTTime } from "@/utils/date";
 import AgentProgressStream, { AgentStreamEvent } from "./AgentProgressStream";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/utils/api";
 
 export interface WhatChangedItem {
   summary: string;
