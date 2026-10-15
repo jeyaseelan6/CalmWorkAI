@@ -16,8 +16,8 @@ from datetime import datetime
 
 from app.db.database import get_db
 from app.models import Engagement, Outcome, Approval, TimelineEvent
-from app.api.deps import supervisor_coordinator
-from app.api.schemas import UniversalSupervisorQueryPayload
+from app.api.deps import supervisor_coordinator, support_agent
+from app.api.schemas import UniversalSupervisorQueryPayload, SupportInvestigationRequest
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
 @router.post("/engagements/{engagement_id}/supervisor/brief")
 def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)):
     """
-    Proactive Intelligence Mode: Generates a sequential Morning Brief (UNDERSTAND -> KNOW -> MOVE -> Supervisor Plan).
+    Proactive Intelligence Mode: Generates a sequential Morning Brief (PLAN -> KNOW -> MOVE -> Supervisor Plan).
     Persists provenance in shared timeline without invoking DELIVER.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
@@ -132,7 +132,7 @@ def get_daily_work_brief(engagement_id: str, db: Session = Depends(get_db)):
         engagement_id=engagement_id,
         event_type="MORNING_BRIEF_GENERATED",
         title=f"Morning Brief Generated (v{version})",
-        description=f"Supervisor synthesized sequential Morning Brief (UNDERSTAND → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
+        description=f"Supervisor synthesized sequential Morning Brief (PLAN → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
         actor_type="SUPERVISOR",
         actor_id="supervisor_coordinator",
         created_at=datetime.utcnow()
@@ -198,7 +198,7 @@ async def get_daily_work_brief_stream(engagement_id: str, db: Session = Depends(
                         engagement_id=engagement_id,
                         event_type="MORNING_BRIEF_GENERATED",
                         title=f"Morning Brief Generated (v{version})",
-                        description=f"Supervisor synthesized sequential Morning Brief (UNDERSTAND → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
+                        description=f"Supervisor synthesized sequential Morning Brief (PLAN → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
                         actor_type="SUPERVISOR",
                         actor_id="supervisor_coordinator",
                         created_at=datetime.utcnow()
@@ -247,3 +247,46 @@ async def get_daily_work_brief_stream(engagement_id: str, db: Session = Depends(
             "X-Accel-Buffering": "no"
         }
     )
+
+
+@router.post("/engagements/{engagement_id}/support/investigate", tags=["Support"])
+def investigate_support_incident(
+    engagement_id: str,
+    payload: SupportInvestigationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    SUPPORT Agent: Production Support & Screenshot Intelligence endpoint.
+    Triages production incidents, diagnoses visual screenshots, and formulates runbook-grounded root cause analysis.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    result = support_agent.investigate_incident(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        issue_description=payload.issue_description,
+        error_logs=payload.error_logs,
+        screenshot_metadata=payload.screenshot_metadata,
+        screenshot_base64=payload.screenshot_base64,
+        session_id=payload.session_id
+    )
+
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="INCIDENT_INVESTIGATED",
+        title=f"Support Incident Triage ({result.severity})",
+        description=f"SUPPORT Agent diagnosed issue: '{result.summary[:80]}...'",
+        actor_type="SUPPORT_AGENT",
+        actor_id="agent_support",
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": result.model_dump(),
+        "message": f"Support incident triaged with {result.severity} severity."
+    }

@@ -70,7 +70,7 @@ export default function SupervisorCard({ engagementId, customerName }: Superviso
         <div className="flex items-center gap-2">
           <Cpu className="h-4.5 w-4.5 text-slate-700" />
           <h2 className="text-sm font-display font-bold text-slate-900">
-            Plan Agent — Central Orchestration & Telemetry
+            CalmWork Supervisor — Multi-Agent Routing &amp; Telemetry
           </h2>
         </div>
       </div>

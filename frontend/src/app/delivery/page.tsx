@@ -1,39 +1,31 @@
 "use client";
 
-import React from "react";
-import AppShell from "@/components/layout/AppShell";
-import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useEngagement } from "@/context/EngagementContext";
+import AppShell from "@/components/layout/AppShell";
+import Link from "next/link";
+import { RefreshCw } from "lucide-react";
 
-export default function DeliveryPage() {
-  const { activeCustomer } = useEngagement();
+export default function DeliveryLegacyPage() {
+  const router = useRouter();
+  const { activeCustomer, customers } = useEngagement();
+  const targetId = activeCustomer?.id || customers?.[0]?.id || "eng-acme-001";
+  const targetHref = `/engagements/${targetId}?tab=updates`;
+
+  useEffect(() => {
+    router.replace(targetHref);
+  }, [targetHref, router]);
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Calm Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold font-display text-slate-900">Customer Updates</h1>
-              <span className="text-slate-300">·</span>
-              <span className="text-sm text-slate-600 font-medium">{activeCustomer.customerName}</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Draft, review, and authorize executive stakeholder updates and milestone summaries
-            </p>
-          </div>
-        </div>
-
-        {/* Interactive Customer Update Studio Panel */}
-        <CustomerUpdatePanel
-          key={activeCustomer.id}
-          engagementId={activeCustomer.id}
-          customerName={activeCustomer.customerName}
-          engagementName={activeCustomer.engagementName}
-        />
+      <div className="flex h-[50vh] flex-col items-center justify-center text-xs text-slate-500 space-y-3">
+        <RefreshCw className="h-5 w-5 animate-spin text-slate-700" />
+        <p>Redirecting to Customer Updates in {activeCustomer?.customerName || "engagement"} workspace...</p>
+        <Link href={targetHref} className="text-purple-600 underline font-semibold">
+          Click here if not redirected automatically
+        </Link>
       </div>
     </AppShell>
   );
 }
-

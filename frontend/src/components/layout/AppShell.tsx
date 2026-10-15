@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import RecordWorknoteDrawer from "@/components/layout/RecordWorknoteDrawer";
 import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
+import AskCalmWorkChat from "@/components/supervisor/AskCalmWorkChat";
 
 export interface NavItem {
   id: string;
@@ -40,41 +41,67 @@ export interface NavItem {
 
 function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
   const { role } = useAuth();
-  const { activeCustomer, pendingApprovalsCount } = useEngagement();
+  const { activeCustomer, pendingApprovalsCount, activeTab } = useEngagement();
   const pathname = usePathname();
 
-  const engagementHref = `/engagements/${activeCustomer?.id || "eng-acme-001"}`;
+  const activeId = activeCustomer?.id || "eng-acme-001";
 
   const currentNav: NavItem[] = [
-    { id: "engagements", label: "Engagements", href: engagementHref, icon: Building2 },
-    { id: "approvals", label: "Approvals", href: "/approvals", icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
-    { id: "delivery", label: "Customer Updates", href: "/delivery", icon: Send },
-    { id: "knowledge", label: "Knowledge", href: "/knowledge", icon: BookOpen },
-    { id: "timeline", label: "Timeline", href: "/timeline", icon: Clock },
-    { id: "supervisor", label: "Ask CalmWork", href: "/supervisor", icon: Sparkles },
+    { 
+      id: "myday", 
+      label: "My Day", 
+      href: `/engagements/${activeId}?tab=myday`, 
+      icon: CheckSquare 
+    },
+    { 
+      id: "engagements", 
+      label: "My Engagements", 
+      href: "/engagements", 
+      icon: Building2 
+    },
+    { 
+      id: "supervisor", 
+      label: "Ask CalmWork", 
+      href: "/supervisor", 
+      icon: Sparkles 
+    },
+    { 
+      id: "approvals", 
+      label: "Approvals", 
+      href: "/approvals", 
+      icon: ShieldCheck, 
+      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined 
+    },
   ];
 
   return (
     <nav className="space-y-1">
       {currentNav.map((item: NavItem) => {
         const Icon = item.icon;
-        const isActive =
-          item.id === "engagements"
-            ? pathname?.startsWith("/engagements") || pathname === "/"
-            : pathname?.startsWith(item.href);
+        let isActive = false;
+        if (item.id === "myday") {
+          isActive = (pathname?.startsWith(`/engagements/${activeId}`) && activeTab === "myday") || pathname === "/";
+        } else if (item.id === "engagements") {
+          isActive = pathname === "/engagements" || (pathname?.startsWith("/engagements/") && activeTab !== "myday");
+        } else if (item.id === "supervisor") {
+          isActive = pathname?.startsWith("/supervisor") || false;
+        } else if (item.id === "approvals") {
+          isActive = pathname?.startsWith("/approvals") || false;
+        }
+
         return (
           <Link
             key={item.id}
             href={item.href}
             onClick={onItemClick}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-lg text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 ${
               isActive
                 ? "bg-slate-900 text-white font-semibold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium"
+                : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 font-medium"
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
+              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-slate-500"}`} />
               <span>{item.label}</span>
             </div>
             {item.badge ? (
@@ -95,7 +122,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, role, logout, isAuthenticated, isLoadingAuth, isManager } = useAuth();
-  const { customers, activeCustomer, switchEngagement, pendingApprovalsCount } = useEngagement();
+  const {
+    customers,
+    activeCustomer,
+    switchEngagement,
+    pendingApprovalsCount,
+    activeTab,
+    selectedItemContext,
+    isSupervisorDrawerOpen,
+    setIsSupervisorDrawerOpen,
+    supervisorInitialQuery
+  } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -107,6 +144,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const q = customerSearch.toLowerCase();
     return c.customerName.toLowerCase().includes(q) || c.engagementName.toLowerCase().includes(q);
   });
+
+  // Keyboard accessibility: Escape key closes active drawers and modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isSupervisorDrawerOpen) setIsSupervisorDrawerOpen(false);
+        if (isWorknoteDrawerOpen) setIsWorknoteDrawerOpen(false);
+        if (showCreateModal) setShowCreateModal(false);
+        if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+        if (dropdownOpen) setDropdownOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSupervisorDrawerOpen, isWorknoteDrawerOpen, showCreateModal, isMobileMenuOpen, dropdownOpen, setIsSupervisorDrawerOpen]);
 
   // Automatically close mobile menu & dropdown on navigation
   useEffect(() => {
@@ -433,6 +485,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             )}
 
+            {/* Ask CalmWork contextual drawer trigger */}
+            <button
+              onClick={() => setIsSupervisorDrawerOpen(true)}
+              className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-medium text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md flex items-center gap-1 sm:gap-1.5 transition cursor-pointer shadow-2xs"
+              title="Open contextual Ask CalmWork Assistant Drawer"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+              <span className="hidden sm:inline">Ask CalmWork</span>
+              <span className="sm:hidden text-[11px]">Ask</span>
+            </button>
+
             {/* Record Note button */}
             <button
               onClick={() => setIsWorknoteDrawerOpen(true)}
@@ -474,26 +537,44 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* Mobile Bottom Navigation Bar (Fixed for quick 1-thumb touch navigation) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+        {/* Mobile Bottom Navigation Bar (4 primary destinations + Menu) */}
+        <nav 
+          aria-label="Mobile Navigation"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-1 py-1 flex items-center justify-around shadow-lg"
+        >
+          {/* 1. My Day */}
           <Link
-            href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`}
-            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium transition ${
-              pathname?.startsWith("/engagements") || pathname === "/"
+            href={`/engagements/${activeCustomer?.id || "eng-acme-001"}?tab=myday`}
+            className={`flex flex-col items-center justify-center py-1 px-2 min-h-[44px] min-w-[44px] rounded-lg text-[10px] font-medium transition ${
+              (pathname?.startsWith("/engagements/") && activeTab === "myday") || pathname === "/"
                 ? "text-slate-900 font-bold"
-                : "text-slate-500 hover:text-slate-900"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <CheckSquare className="h-4 w-4 mb-0.5" />
+            <span>My Day</span>
+          </Link>
+
+          {/* 2. My Engagements */}
+          <Link
+            href="/engagements"
+            className={`flex flex-col items-center justify-center py-1 px-2 min-h-[44px] min-w-[44px] rounded-lg text-[10px] font-medium transition ${
+              pathname === "/engagements" || (pathname?.startsWith("/engagements/") && activeTab !== "myday")
+                ? "text-slate-900 font-bold"
+                : "text-slate-600 hover:text-slate-900"
             }`}
           >
             <Building2 className="h-4 w-4 mb-0.5" />
-            <span>Workspace</span>
+            <span>Engagements</span>
           </Link>
 
+          {/* 3. Approvals */}
           <Link
             href="/approvals"
-            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium relative transition ${
+            className={`flex flex-col items-center justify-center py-1 px-2 min-h-[44px] min-w-[44px] rounded-lg text-[10px] font-medium relative transition ${
               pathname?.startsWith("/approvals")
                 ? "text-slate-900 font-bold"
-                : "text-slate-500 hover:text-slate-900"
+                : "text-slate-600 hover:text-slate-900"
             }`}
           >
             <div className="relative">
@@ -507,34 +588,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span>Approvals</span>
           </Link>
 
-          <Link
-            href="/delivery"
-            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium transition ${
-              pathname?.startsWith("/delivery")
-                ? "text-slate-900 font-bold"
-                : "text-slate-500 hover:text-slate-900"
+          {/* 4. Ask CalmWork Drawer Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsSupervisorDrawerOpen(true)}
+            className={`flex flex-col items-center justify-center py-1 px-2 min-h-[44px] min-w-[44px] rounded-lg text-[10px] font-medium transition cursor-pointer ${
+              isSupervisorDrawerOpen
+                ? "text-purple-700 font-bold"
+                : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Send className="h-4 w-4 mb-0.5" />
-            <span>Updates</span>
-          </Link>
-
-          <Link
-            href="/supervisor"
-            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium transition ${
-              pathname?.startsWith("/supervisor")
-                ? "text-slate-900 font-bold"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <Sparkles className="h-4 w-4 mb-0.5" />
+            <Sparkles className="h-4 w-4 mb-0.5 text-purple-600" />
             <span>Ask AI</span>
-          </Link>
+          </button>
 
+          {/* 5. Menu Drawer */}
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(true)}
-            className="flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-medium text-slate-500 hover:text-slate-900 cursor-pointer"
+            className="flex flex-col items-center justify-center py-1 px-2 min-h-[44px] min-w-[44px] rounded-lg text-[10px] font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
+            aria-label="Open Workspace Navigation Menu"
           >
             <Menu className="h-4 w-4 mb-0.5" />
             <span>Menu</span>
@@ -552,6 +625,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
         />
+
+        {/* Contextual Supervisor Assistant Drawer */}
+        {isSupervisorDrawerOpen && (
+          <div
+            className="fixed inset-0 z-50 flex justify-end animate-fadeIn"
+            role="dialog"
+            aria-modal="true"
+            aria-label="CalmWork Supervisor Assistant"
+          >
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs transition-opacity cursor-pointer"
+              onClick={() => setIsSupervisorDrawerOpen(false)}
+              aria-label="Close assistant backdrop"
+            />
+
+            {/* Slide-out Drawer Panel */}
+            <div className="relative w-full sm:w-[500px] lg:w-[560px] max-w-[100vw] h-full bg-white z-10 shadow-2xl flex flex-col border-l border-slate-200">
+              <AskCalmWorkChat
+                isDrawer={true}
+                onClose={() => setIsSupervisorDrawerOpen(false)}
+                engagementId={activeCustomer?.id}
+                customerName={activeCustomer?.customerName}
+                activeTab={activeTab}
+                selectedItemContext={selectedItemContext}
+                initialQuery={supervisorInitialQuery}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -65,7 +65,8 @@ def test_supervisor_coordination():
     )
 
     assert summary.engagement_id == "eng-acme-001"
-    assert len(summary.agents) == 4
+    assert len(summary.agents) == 5
+    assert set(a.agent_name for a in summary.agents) == {"PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"}
     assert summary.privacy_guardrail_active is True
     assert summary.next_action is not None
     assert summary.customer_update is not None
@@ -75,7 +76,7 @@ def test_supervisor_coordination():
 def test_sequential_morning_brief_excludes_deliver():
     """
     Verifies that the Morning Brief:
-    1. Executes UNDERSTAND -> KNOW -> MOVE -> Supervisor synthesis in sequence.
+    1. Executes PLAN -> KNOW -> MOVE -> Supervisor synthesis in sequence.
     2. EXCLUDES DELIVER (deliver_invoked is False).
     3. Synthesizes a Supervisor Proposed Work Plan with ordered work items and first action.
     """
@@ -94,7 +95,7 @@ def test_sequential_morning_brief_excludes_deliver():
     # 1. Verification: DELIVER is strictly excluded
     assert brief.deliver_invoked is False, "DELIVER must not be invoked during Morning Brief"
     assert "DELIVER" not in brief.capabilities_invoked
-    assert set(brief.capabilities_invoked) == {"UNDERSTAND", "KNOW", "MOVE", "SUPERVISOR"}
+    assert set(brief.capabilities_invoked) == {"PLAN", "KNOW", "MOVE", "SUPERVISOR"}
 
     # 2. Verification: Supervisor Proposed Work Plan exists
     plan = brief.proposed_work_plan

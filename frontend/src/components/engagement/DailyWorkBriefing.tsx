@@ -190,7 +190,7 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
               </span>
             </div>
             <p className="text-[11px] text-slate-500 font-mono truncate">
-              Sequential Intelligence: UNDERSTAND &rarr; KNOW &rarr; MOVE &rarr; PLAN &middot; Refreshed {lastRefreshed || "Just now"}
+              Sequential Intelligence: PLAN &rarr; KNOW &rarr; MOVE &middot; Refreshed {lastRefreshed || "Just now"}
             </p>
           </div>
         </div>

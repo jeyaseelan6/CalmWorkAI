@@ -51,6 +51,15 @@ interface EngagementContextType {
   fetchPendingApprovals: () => Promise<void>;
   respondToApproval: (approvalId: string, action: "APPROVE" | "REJECT", decisionNote?: string) => Promise<boolean>;
   handleApproveChange: () => Promise<void>;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  selectedItemContext: string | null;
+  setSelectedItemContext: (ctx: string | null) => void;
+  isSupervisorDrawerOpen: boolean;
+  setIsSupervisorDrawerOpen: (open: boolean) => void;
+  openSupervisorWithContext: (opts?: { tab?: string; selectedItem?: string; initialQuery?: string }) => void;
+  supervisorInitialQuery: string | null;
+  setSupervisorInitialQuery: (q: string | null) => void;
 }
 
 const EngagementContext = createContext<EngagementContextType | undefined>(undefined);
@@ -63,6 +72,17 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
   const [loading, setLoading] = useState<boolean>(false);
   const [approvedAcme, setApprovedAcme] = useState<boolean>(false);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<string>("myday");
+  const [selectedItemContext, setSelectedItemContext] = useState<string | null>(null);
+  const [isSupervisorDrawerOpen, setIsSupervisorDrawerOpen] = useState<boolean>(false);
+  const [supervisorInitialQuery, setSupervisorInitialQuery] = useState<string | null>(null);
+
+  const openSupervisorWithContext = (opts?: { tab?: string; selectedItem?: string; initialQuery?: string }) => {
+    if (opts?.tab) setActiveTab(opts.tab);
+    if (opts?.selectedItem !== undefined) setSelectedItemContext(opts.selectedItem);
+    if (opts?.initialQuery) setSupervisorInitialQuery(opts.initialQuery);
+    setIsSupervisorDrawerOpen(true);
+  };
 
   const fetchPendingApprovals = async () => {
     try {
@@ -280,7 +300,16 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         pendingApprovals,
         pendingApprovalsCount: pendingApprovals.length,
         fetchPendingApprovals,
-        respondToApproval
+        respondToApproval,
+        activeTab,
+        setActiveTab,
+        selectedItemContext,
+        setSelectedItemContext,
+        isSupervisorDrawerOpen,
+        setIsSupervisorDrawerOpen,
+        openSupervisorWithContext,
+        supervisorInitialQuery,
+        setSupervisorInitialQuery
       }}
     >
       {children}

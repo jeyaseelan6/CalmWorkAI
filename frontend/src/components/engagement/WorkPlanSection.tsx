@@ -118,6 +118,12 @@ export default function WorkPlanSection({
   });
   const [version, setVersion] = useState<number>(outcomeVersion);
 
+  // Reassessment UI state
+  const [showReassessModal, setShowReassessModal] = useState<boolean>(false);
+  const [reassessEvidence, setReassessEvidence] = useState<string>("");
+  const [isReassessing, setIsReassessing] = useState<boolean>(false);
+  const [reassessmentResult, setReassessmentResult] = useState<any>(null);
+
   // Sync when initialWorkPlan or outcomeVersion changes
   useEffect(() => {
     setActivePlan(initialWorkPlan || null);
@@ -333,6 +339,49 @@ export default function WorkPlanSection({
     }
   };
 
+  const handleReassessPlan = async () => {
+    if (!reassessEvidence.trim() || isReassessing) return;
+    setIsReassessing(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || (isManager ? "demo-manager-token" : "demo-fde-token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan/reassess`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          new_evidence_items: [reassessEvidence.trim()],
+          session_id: engagementId
+        })
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success && json.data) {
+        setReassessmentResult(json.data);
+        setSuccessMsg("PLAN Agent completed iterative plan reassessment.");
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(`brief_cache_${engagementId}`);
+          localStorage.setItem(`brief_invalidated_${engagementId}`, Date.now().toString());
+        }
+        if (onPlanApproved && activePlan) {
+          onPlanApproved(activePlan, version);
+        }
+      } else {
+        setErrorMsg(json.detail || json.message || "Failed to reassess plan.");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Network error reassessing work plan.");
+    } finally {
+      setIsReassessing(false);
+    }
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-5">
       {/* Top Header */}
@@ -362,16 +411,32 @@ export default function WorkPlanSection({
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           {activePlan && !showInputForm && !draftProposal && (
-            <button
-              onClick={() => {
-                setShowInputForm(true);
-                setNaturalLanguageInput("");
-              }}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
-            >
-              <RotateCcw className="h-3.5 w-3.5 text-slate-600" />
-              <span>Revise Work Plan</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReassessModal(true);
+                  setReassessmentResult(null);
+                  setReassessEvidence("");
+                }}
+                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Iteratively reassess active plan against newly observed technical evidence or scope constraints"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                <span>Reassess Plan</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowInputForm(true);
+                  setNaturalLanguageInput("");
+                }}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-slate-600" />
+                <span>Revise Work Plan</span>
+              </button>
+            </>
           )}
 
           {!activePlan && !showInputForm && !draftProposal && (
@@ -398,6 +463,166 @@ export default function WorkPlanSection({
         <div className="bg-emerald-50 border border-emerald-200 rounded-md p-3 text-xs text-emerald-800 flex items-start gap-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
           <div className="flex-1">{successMsg}</div>
+        </div>
+      )}
+
+      {/* REASSESSMENT CARD */}
+      {showReassessModal && (
+        <div className="bg-amber-50/60 border border-amber-300 rounded-lg p-5 space-y-4 animate-fadeIn">
+          <div className="flex items-start justify-between border-b border-amber-200/80 pb-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded bg-amber-500 text-slate-950 font-bold">
+                  <Sparkles className="h-3.5 w-3.5" />
+                </span>
+                <h3 className="text-sm font-bold text-slate-900 font-display">
+                  Iterative Plan Reassessment (PLAN Agent)
+                </h3>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold border border-amber-200">
+                  Preserves Work History
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600">
+                Maintains all active task completion states while evaluating whether newly observed evidence or scope shifts require Outcome Goals updates.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowReassessModal(false);
+                setReassessmentResult(null);
+              }}
+              className="p-1 text-slate-400 hover:text-slate-700 rounded transition cursor-pointer"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          </div>
+
+          {!reassessmentResult ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider font-mono block">
+                  New Technical Evidence / Observed Constraints
+                </label>
+                <textarea
+                  rows={3}
+                  value={reassessEvidence}
+                  onChange={(e) => setReassessEvidence(e.target.value)}
+                  placeholder="Enter newly observed customer requirements, technical blockers, or worknote constraints to evaluate against the plan..."
+                  className="w-full bg-white border border-amber-300 rounded-md p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-mono text-slate-500">Quick Presets:</span>
+                  {[
+                    "Customer security team requires SAML 2.0 SSO validation prior to deployment.",
+                    "Cutover migration downtime window must be reduced to under 5 minutes.",
+                    "Customer requires data encryption in transit with custom KMS keys."
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setReassessEvidence(preset)}
+                      className="text-[11px] px-2 py-0.5 bg-white hover:bg-amber-100 text-slate-700 rounded border border-amber-200 transition truncate max-w-xs cursor-pointer shadow-2xs"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReassessModal(false)}
+                  className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReassessPlan}
+                  disabled={isReassessing || !reassessEvidence.trim()}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  {isReassessing ? (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                      <span>Reassessing with PLAN Agent...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>Reassess Active Plan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-amber-200 rounded-md p-4 space-y-3 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                    reassessmentResult.outcome_health === "HEALTHY"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-amber-50 text-amber-800 border-amber-200"
+                  }`}>
+                    Outcome Health: {reassessmentResult.outcome_health}
+                  </span>
+                  {reassessmentResult.scope_drift_detected && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 font-semibold">
+                      Scope Drift Detected
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {reassessmentResult.reassessed_at?.slice(0, 19).replace("T", " ")}
+                </span>
+              </div>
+
+              {reassessmentResult.scope_drift_explanation && (
+                <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded text-amber-900 text-xs">
+                  <strong>Scope Drift Analysis:</strong> {reassessmentResult.scope_drift_explanation}
+                </div>
+              )}
+
+              {reassessmentResult.recommended_modifications && reassessmentResult.recommended_modifications.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[11px] font-bold uppercase text-slate-500 font-mono block">
+                    PLAN Recommendations:
+                  </span>
+                  <ul className="space-y-1 text-slate-800">
+                    {reassessmentResult.recommended_modifications.map((rec: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-1.5">
+                        <span className="text-amber-600 font-bold">•</span>
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {reassessmentResult.requires_manager_approval && (
+                <div className="p-2.5 bg-purple-50 border border-purple-200 rounded text-purple-900 text-xs flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-purple-700 shrink-0" />
+                  <span>
+                    Consequential Scope Change: Requires Engineering Manager approval under SaaS governance.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowReassessModal(false)}
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition"
+                >
+                  Close &amp; View Plan
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -986,7 +1211,7 @@ export default function WorkPlanSection({
                 Active Milestones & Delivery Stages ({activePlan.milestones?.length || 0})
               </h3>
               <span className="text-[11px] text-slate-500">
-                Shared state active across UNDERSTAND, KNOW, MOVE & DELIVER
+                Shared state active across PLAN, KNOW, MOVE, DELIVER &amp; SUPPORT
               </span>
             </div>
 

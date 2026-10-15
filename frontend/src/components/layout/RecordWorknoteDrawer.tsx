@@ -45,6 +45,10 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
 
       if (res.ok) {
         setSuccessMessage("Context captured successfully in shared memory!");
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`brief_invalidated_${activeCustomer.id}`, Date.now().toString());
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId: activeCustomer.id, type: "WORKNOTE" } }));
+        }
         setTimeout(() => {
           setSuccessMessage("");
           setTitle("");
@@ -60,22 +64,33 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-2xs flex justify-end">
-      <div className="w-full max-w-md bg-white border-l border-slate-200 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
+    <div 
+      className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-2xs flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="record-worknote-title"
+      onClick={onClose}
+    >
+      <div 
+        className="w-full max-w-md bg-white border-l border-slate-200 h-full max-h-[100dvh] flex flex-col shadow-2xl animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-slate-900 text-white rounded">
               <Plus className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900 font-display">Record Work Context</h2>
+              <h2 id="record-worknote-title" className="text-sm font-bold text-slate-900 font-display">Record Work Context</h2>
               <p className="text-[11px] text-slate-500 font-mono">FDE Shared Memory Capture</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded transition"
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-md transition cursor-pointer"
+            aria-label="Close work context drawer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -87,7 +102,7 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-center space-y-1">
               <CheckCircle2 className="h-6 w-6 text-emerald-600 mx-auto" />
               <p className="font-semibold text-xs">{successMessage}</p>
-              <p className="text-[11px] text-emerald-600">All 4 specialist capabilities now reflect this reality.</p>
+              <p className="text-[11px] text-emerald-600">All 5 specialist capabilities (PLAN, KNOW, MOVE, DELIVER, SUPPORT) now reflect this reality.</p>
             </div>
           ) : (
             <>
@@ -110,7 +125,7 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
                         key={cat.id}
                         type="button"
                         onClick={() => setEventType(cat.id)}
-                        className={`p-2 rounded border text-left flex items-center gap-2 transition ${
+                        className={`p-2.5 min-h-[44px] rounded border text-left flex items-center gap-2 transition cursor-pointer ${
                           isSelected
                             ? "bg-slate-900 text-white border-slate-900 font-semibold shadow-2xs"
                             : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
@@ -135,7 +150,7 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
                   placeholder="e.g., Security team requested SAML 2.0 OAuth credentials"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 text-xs bg-slate-50/50"
+                  className="w-full px-3 py-2.5 min-h-[44px] border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 text-xs bg-slate-50/50"
                 />
               </div>
 
@@ -146,11 +161,11 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
                 </label>
                 <textarea
                   required
-                  rows={6}
+                  rows={5}
                   placeholder="Record what happened, customer feedback, decisions made, or technical progress..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 text-xs bg-slate-50/50 resize-none"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 text-xs bg-slate-50/50 resize-none"
                 />
               </div>
 
@@ -161,23 +176,23 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
                   <span>Shared Memory Protocol</span>
                 </div>
                 <p className="leading-relaxed">
-                  Submitting this context updates the authoritative engagement timeline. All specialists (UNDERSTAND, KNOW, MOVE, DELIVER) will read this new evidence immediately.
+                  Submitting this context updates the authoritative engagement timeline. All specialists (PLAN, KNOW, MOVE, DELIVER, SUPPORT) will read this new evidence immediately.
                 </p>
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200 pb-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-3.5 py-1.5 border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 font-semibold"
+                  className="px-4 py-2 min-h-[44px] border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold flex items-center gap-1.5 transition shadow-2xs disabled:opacity-50"
+                  className="px-4 py-2 min-h-[44px] bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold flex items-center gap-1.5 transition shadow-2xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? "Persisting..." : "Save to Shared Memory"}
                 </button>

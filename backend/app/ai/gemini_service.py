@@ -24,12 +24,13 @@ class GeminiService:
         self.model_name = settings.GEMINI_MODEL
 
         # Lazy initialize ADK agents
-        from app.agents.understand_agent import UnderstandAgent
+        from app.agents.plan_agent import PlanAgent
         from app.agents.know_agent import KnowAgent
         from app.agents.move_agent import MoveAgent
         from app.agents.deliver_agent import DeliverAgent
 
-        self._understand_agent = UnderstandAgent(privacy_engine=self.privacy_engine)
+        self._plan_agent = PlanAgent(privacy_engine=self.privacy_engine)
+        self._understand_agent = self._plan_agent  # backwards compatibility
         self._know_agent = KnowAgent(privacy_engine=self.privacy_engine)
         self._move_agent = MoveAgent(privacy_engine=self.privacy_engine)
         self._deliver_agent = DeliverAgent(privacy_engine=self.privacy_engine)
@@ -43,8 +44,8 @@ class GeminiService:
         current_success_criteria: List[Dict[str, Any]],
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Delegates change analysis to Google ADK UnderstandAgent."""
-        result = self._understand_agent.analyze_change(
+        """Delegates change analysis to Google ADK PlanAgent."""
+        result = self._plan_agent.analyze_change(
             raw_change_text=raw_change_text,
             current_outcome_statement=current_outcome_statement,
             current_success_criteria=current_success_criteria,

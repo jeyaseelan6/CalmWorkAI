@@ -1,6 +1,6 @@
 """
 Supervisor Coordinator Engine.
-Central Orchestrator coordinating all 4 specialized agents (UNDERSTAND, KNOW, MOVE, DELIVER)
+Central Orchestrator coordinating specialized agents (PLAN, KNOW, MOVE, DELIVER, SUPPORT)
 over 1 centralized engagement state across the 6 FDE Work Cycles.
 """
 
@@ -15,10 +15,14 @@ from datetime import datetime, timezone, timedelta
 IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
 from app.agents import (
-    UnderstandAgent, ChangeImpactAnalysis,
+    PlanAgent, ChangeImpactAnalysis,
+    StructuredWorkPlanProposal, WorkMilestone, WorkTask, FactAssumptionGap,
+    PlanReassessmentResult,
+    SupportAgent, IncidentInvestigationResult,
     KnowAgent, GroundedAnswer,
     MoveAgent, NextBestActionRecommendation,
-    DeliverAgent, CustomerUpdateDraft
+    DeliverAgent, CustomerUpdateDraft,
+    UnderstandAgent  # compatibility shim
 )
 from app.privacy import PrivacyPolicyEngine
 from app.ai.gemini_service import GeminiService
@@ -62,17 +66,17 @@ class SourceCitation(BaseModel):
 
 
 class DelegatedAgentInfo(BaseModel):
-    id: str  # "UNDERSTAND" | "MOVE" | "DELIVER" | "KNOW" | "MULTI_AGENT"
-    name: str  # e.g. "UNDERSTAND Agent"
-    role: str  # e.g. "Requirements & Scope Intelligence"
-    badge_label: str  # e.g. "Scope & Contract Specialist"
-    color: str  # "purple" | "amber" | "rose" | "blue" | "slate"
+    id: str  # "PLAN" | "MOVE" | "DELIVER" | "KNOW" | "SUPPORT" | "MULTI_AGENT" | "UNDERSTAND"
+    name: str  # e.g. "PLAN Agent"
+    role: str  # e.g. "Planning & Delivery Intelligence"
+    badge_label: str  # e.g. "Planning & Delivery Specialist"
+    color: str  # "purple" | "amber" | "rose" | "blue" | "emerald" | "slate"
 
 
 class SupervisorQueryResponse(BaseModel):
     engagement_id: str
     query: str
-    intent_detected: str  # "UNDERSTAND" | "KNOW" | "MOVE" | "DELIVER" | "MULTI_AGENT"
+    intent_detected: str  # "PLAN" | "KNOW" | "MOVE" | "DELIVER" | "SUPPORT" | "MULTI_AGENT"
     answer: str
     sources: List[SourceCitation]
     capabilities_used: List[str]
@@ -104,50 +108,6 @@ class ProposedWorkPlan(BaseModel):
     assumptions_and_questions: List[str] = []
     recommended_first_action: str
     status: str = "PROPOSED"
-    generated_at: str
-
-
-class WorkTask(BaseModel):
-    id: str
-    milestone_id: str
-    title: str
-    description: str
-    dependencies: List[str] = []
-    owner: Optional[str] = None
-    status: str = "PLANNED"  # "PLANNED" | "IN_PROGRESS" | "COMPLETED"
-
-
-class WorkMilestone(BaseModel):
-    id: str
-    title: str
-    sequence_order: int
-    deliverables: List[str] = []
-    dependencies: List[str] = []
-    customer_decisions_required: List[str] = []
-
-
-class FactAssumptionGap(BaseModel):
-    confirmed_facts: List[str] = []
-    inferred_assumptions: List[str] = []
-    unresolved_questions_or_gaps: List[str] = []
-
-
-class StructuredWorkPlanProposal(BaseModel):
-    proposal_id: str
-    engagement_id: str
-    customer_name: str
-    engagement_objective: str
-    outcomes: List[str] = []
-    definition_of_done: List[Dict[str, Any]] = []  # [{"id": str, "title": str, "completed": bool}]
-    milestones: List[WorkMilestone] = []
-    tasks: List[WorkTask] = []
-    risks: List[str] = []
-    facts_and_assumptions: FactAssumptionGap = FactAssumptionGap()
-    next_actions: List[str] = []
-    timeline_summary: str = "No explicit deadline committed."
-    is_provisional: bool = False
-    clarifying_questions: List[str] = []
-    status: str = "PROPOSED"  # "PROPOSED" | "APPROVED"
     generated_at: str
 
 
@@ -188,7 +148,7 @@ class DailyWorkBrief(BaseModel):
     next_best_action: Optional[Dict[str, Any]] = None  # Complete MOVE Agent Output
     evidence_and_confidence: List[EvidenceAndConfidenceItem]
     warnings_or_partial_failures: List[str] = []
-    capabilities_invoked: List[str] = ["UNDERSTAND", "KNOW", "MOVE", "SUPERVISOR"]
+    capabilities_invoked: List[str] = ["PLAN", "KNOW", "MOVE", "SUPERVISOR"]
     deliver_invoked: bool = False
     generated_at: str
 
@@ -210,13 +170,19 @@ class SupervisorCoordinator:
     """
     Supervisor Coordinator: Deterministic multi-agent orchestrator.
     Routes events to relevant agents, updates unified state, and ensures 360-degree governance.
+    Active Agents: PLAN, KNOW, MOVE, DELIVER, SUPPORT.
     """
 
     def __init__(
         self,
         privacy_engine: Optional[PrivacyPolicyEngine] = None,
         gemini_service: Optional[Any] = None,
-        session_service: Optional[BaseSessionService] = None
+        session_service: Optional[BaseSessionService] = None,
+        plan_agent: Optional[Any] = None,
+        support_agent: Optional[Any] = None,
+        know_agent: Optional[Any] = None,
+        move_agent: Optional[Any] = None,
+        deliver_agent: Optional[Any] = None
     ):
         self.privacy_engine = privacy_engine or PrivacyPolicyEngine()
         self.session_service = session_service or get_session_service()
@@ -224,31 +190,39 @@ class SupervisorCoordinator:
         self.gemini_service = gemini_service
         self.event_bus = EventBus()
 
-        # Instantiate specialized ADK agents
-        self.understand_agent = UnderstandAgent(
+        # Specialized agents: PLAN, KNOW, MOVE, DELIVER, SUPPORT
+        self.know_agent = know_agent or KnowAgent(
             privacy_engine=self.privacy_engine,
             session_service=self.session_service
         )
-        self.know_agent = KnowAgent(
+        self.plan_agent = plan_agent or PlanAgent(
+            privacy_engine=self.privacy_engine,
+            session_service=self.session_service,
+            know_agent=self.know_agent
+        )
+        self.move_agent = move_agent or MoveAgent(
             privacy_engine=self.privacy_engine,
             session_service=self.session_service
         )
-        self.move_agent = MoveAgent(
+        self.deliver_agent = deliver_agent or DeliverAgent(
             privacy_engine=self.privacy_engine,
             session_service=self.session_service
         )
-        self.deliver_agent = DeliverAgent(
+        self.support_agent = support_agent or SupportAgent(
             privacy_engine=self.privacy_engine,
-            session_service=self.session_service
+            session_service=self.session_service,
+            know_agent=self.know_agent
         )
+        # Compatibility property: understand_agent references plan_agent
+        self.understand_agent = self.plan_agent
 
-        # ADK Sequential Workflow for predictable Morning Brief orchestration
-        # CRITICAL INVARIANT: DELIVER is strictly EXCLUDED from Morning Brief
+        # ADK Sequential Workflow for predictable Morning Brief orchestration:
+        # PLAN -> KNOW -> MOVE (Supervisor consolidates). DELIVER is strictly EXCLUDED.
         self.morning_brief_workflow = SequentialAgent(
             name="morning_brief_sequential_workflow",
-            description="Sequential ADK workflow executing UNDERSTAND -> KNOW -> MOVE (DELIVER excluded).",
+            description="Sequential ADK workflow executing PLAN -> KNOW -> MOVE (DELIVER excluded).",
             sub_agents=[
-                self.understand_agent.adk_agent,
+                self.plan_agent.adk_agent,
                 self.know_agent.adk_agent,
                 self.move_agent.adk_agent
             ]
@@ -257,11 +231,11 @@ class SupervisorCoordinator:
         # Central Supervisor ADK Agent for conversational queries and synthesis
         self.supervisor_agent = Agent(
             name="supervisor_coordinator",
-            description="Central multi-agent coordinator for conversational queries and Morning Brief synthesis.",
+            description="Central multi-agent coordinator for conversational queries, intent routing, and delivery orchestration.",
             model=self.model,
             instruction=(
                 "You are the CalmWork Supervisor Multi-Agent Coordinator for Forward-Deployed Engineers. "
-                "Synthesize findings across UNDERSTAND, KNOW, MOVE, and DELIVER. "
+                "Synthesize findings across PLAN, KNOW, MOVE, DELIVER, and SUPPORT. "
                 "Respond helpfully, politely, and concisely based strictly on verified engagement facts."
             ),
             before_model_callback=create_privacy_guardrail_callback(self.privacy_engine)
@@ -373,13 +347,14 @@ class SupervisorCoordinator:
             classification_prompt = (
                 f"You are the intent router for CalmWork AI multi-agent platform.\n"
                 f"Classify the user message into EXACTLY ONE category:\n"
-                f"- UNDERSTAND: Questions about requirements, scope changes, what changed today/recently, contract drift, additions/deletions, or new customer mandates.\n"
+                f"- PLAN: Questions about delivery plans, milestones, tasks, scope changes, requirement drift, what changed today/recently, contract drift, definition of done, outcomes, or planning next steps.\n"
                 f"- MOVE: Questions about immediate next actions, what to do next, priorities, blockers, overdue tasks, or why production/progress is blocked.\n"
                 f"- DELIVER: Requests to prepare or draft a customer update, stakeholder communication, email, progress report, or status memo.\n"
                 f"- KNOW: Questions about technical architecture, specs, database schemas, cutover windows, runbooks, documentation, or how systems work.\n"
+                f"- SUPPORT: Questions about production incidents, system outages, errors, bugs, crashes, screenshot diagnostics, stack traces, or troubleshooting.\n"
                 f"- MULTI_AGENT: Inquiries spanning multiple areas or asking for a general project status overview.\n\n"
                 f"User Message: \"{sanitized_query}\"\n\n"
-                f"Return ONLY the single word category name: UNDERSTAND, MOVE, DELIVER, KNOW, or MULTI_AGENT."
+                f"Return ONLY the single word category name: PLAN, MOVE, DELIVER, KNOW, SUPPORT, or MULTI_AGENT."
             )
             try:
                 raw_cat = groq_service.generate_chat_completion(
@@ -389,9 +364,9 @@ class SupervisorCoordinator:
                 )
                 if raw_cat:
                     candidate = raw_cat.strip().upper()
-                    for cat in ["UNDERSTAND", "MOVE", "DELIVER", "KNOW", "MULTI_AGENT"]:
+                    for cat in ["SUPPORT", "PLAN", "MOVE", "DELIVER", "KNOW", "MULTI_AGENT", "UNDERSTAND"]:
                         if cat in candidate:
-                            intent = cat
+                            intent = "PLAN" if cat == "UNDERSTAND" else cat
                             break
             except Exception as ex:
                 logger.debug(f"LLM intent classification fallback to rule matching: {ex}")
@@ -399,6 +374,16 @@ class SupervisorCoordinator:
         # Semantic pattern matching fallback
         if not intent:
             if any(term in q_lower for term in [
+                "360", "operational briefing", "full operational update", "multi-agent",
+                "full overview", "project status overview", "complete status"
+            ]) or len([w for w in ["changed", "blocking", "customer", "next", "spec", "update", "plan", "support"] if w in q_lower]) >= 3:
+                intent = "MULTI_AGENT"
+            elif any(term in q_lower for term in [
+                "incident", "outage", "bug", "crash", "error log", "screenshot",
+                "diagnostic", "stack trace", "production issue", "triage", "support", "broken"
+            ]):
+                intent = "SUPPORT"
+            elif any(term in q_lower for term in [
                 "what should i do", "what to do next", "do next", "what next", "next action",
                 "next step", "what's next", "why is production blocked", "why is it blocked",
                 "blocked", "blocking", "blocker", "priority", "priorities", "focus on",
@@ -408,9 +393,10 @@ class SupervisorCoordinator:
             elif any(term in q_lower for term in [
                 "what changed", "what's changed", "changed today", "recent change", "scope change",
                 "scope drift", "new requirement", "requirement shift", "contract drift", "added",
-                "mandate", "in scope", "out of scope", "changed", "requirements"
+                "mandate", "in scope", "out of scope", "changed", "requirements", "plan",
+                "milestone", "planning", "delivery plan", "work plan", "reassess"
             ]):
-                intent = "UNDERSTAND"
+                intent = "PLAN"
             elif any(term in q_lower for term in [
                 "customer update", "client update", "stakeholder update", "prepare an update",
                 "prepare update", "draft update", "draft an update", "tell the customer",
@@ -423,24 +409,24 @@ class SupervisorCoordinator:
                 "documentation", "technical"
             ]):
                 intent = "KNOW"
-            elif len([w for w in ["changed", "blocking", "customer", "next", "spec", "update"] if w in q_lower]) >= 2:
+            elif len([w for w in ["changed", "blocking", "customer", "next", "spec", "update", "plan", "support"] if w in q_lower]) >= 2:
                 intent = "MULTI_AGENT"
             else:
                 intent = "KNOW"
 
-        capabilities_used = [intent] if intent != "MULTI_AGENT" else ["UNDERSTAND", "MOVE", "KNOW", "DELIVER"]
+        capabilities_used = [intent] if intent != "MULTI_AGENT" else ["PLAN", "MOVE", "KNOW", "DELIVER", "SUPPORT"]
         sources: List[SourceCitation] = []
         answer = ""
 
         # 4. Handover to Relevant Specialist Agent & Context-Aware Execution
 
-        if intent == "UNDERSTAND":
-            handover_banner = "🎯 **[Handed over to UNDERSTAND Agent — Requirements & Scope Intelligence]**\n\n"
+        if intent in ("PLAN", "UNDERSTAND"):
+            handover_banner = "🎯 **[Handed over to PLAN Agent — Planning & Delivery Intelligence]**\n\n"
 
             llm_response = None
             if groq_service.is_configured() or is_live_inference_enabled():
-                understand_prompt = (
-                    f"You are the UNDERSTAND Agent in CalmWork AI. You protect scope integrity and track requirement evolution.\n\n"
+                plan_prompt = (
+                    f"You are the CalmWork PLAN Agent, the planning and delivery-intelligence specialist for Forward-Deployed Engineers.\n\n"
                     f"{time_rule}\n\n"
                     f"Engagement Context:\n"
                     f"- Customer: {customer_name} ({engagement_id})\n"
@@ -449,18 +435,19 @@ class SupervisorCoordinator:
                     f"- Outcome Version {version}: \"{outcome_statement}\"\n"
                     f"- Progress: {engagement_progress}% ({len(completed_crits)}/{total_crits} criteria completed)\n\n"
                     f"Success Criteria (Outcome Goals):\n{crit_formatted}\n\n"
+                    f"Active Work Plan Tasks (Target Due Dates in IST):\n{tasks_formatted}\n\n"
                     f"Recent Timeline Events & Worknotes (All in IST):\n{timeline_formatted}\n\n"
                     f"User Query: \"{sanitized_query}\"\n\n"
-                    f"Provide a concise, direct, professional response answering the user's question with full context of recent timeline events, worknotes, and whether current work remains strictly within approved scope. Ensure any dates or times mentioned are strictly in IST 24h format."
+                    f"Provide a concise, direct, professional response answering the user's question with full context of delivery milestones, recent timeline events, worknotes, and whether current work remains strictly within approved scope. Ensure any dates or times mentioned are strictly in IST 24h format."
                 )
                 try:
                     llm_response = groq_service.generate_chat_completion(
-                        prompt=understand_prompt,
-                        system_instruction="You are the CalmWork UNDERSTAND Agent. Respond concisely and professionally. Keep all timestamps strictly in IST 24-hour clock notation.",
+                        prompt=plan_prompt,
+                        system_instruction="You are the CalmWork PLAN Agent. Respond concisely and professionally. Keep all timestamps strictly in IST 24-hour clock notation.",
                         max_tokens=600
                     )
                 except Exception as e:
-                    logger.debug(f"UNDERSTAND LLM call fallback: {e}")
+                    logger.debug(f"PLAN LLM call fallback: {e}")
 
             if llm_response:
                 answer = llm_response.strip()
@@ -487,6 +474,30 @@ class SupervisorCoordinator:
                 else:
                     parts.append("\n✅ Current engineering trajectory remains aligned with approved contractual scope.")
                 answer = "\n".join(parts)
+
+        elif intent == "SUPPORT":
+            handover_banner = "🛠️ **[Handed over to SUPPORT Agent — Production Support & Screenshot Intelligence]**\n\n"
+            support_result = self.support_agent.investigate_incident(
+                engagement_id=engagement_id,
+                customer_name=customer_name,
+                issue_description=sanitized_query
+            )
+            parts = [
+                f"**Incident Triage**: `{support_result.severity}` Severity\n",
+                f"**Summary**: {support_result.summary}\n",
+                f"**Root Cause Hypothesis**: {support_result.root_cause_hypothesis}\n",
+                f"**Affected Components**: {', '.join(support_result.affected_components) if support_result.affected_components else 'Core Services'}\n"
+            ]
+            if support_result.suggested_workaround:
+                parts.append(f"**Suggested Workaround**: {support_result.suggested_workaround}\n")
+            if support_result.runbook_recommendations:
+                parts.append("**Recommended Runbook Actions**:")
+                for r in support_result.runbook_recommendations:
+                    parts.append(f"- {r}")
+            if support_result.visual_diagnostic_findings:
+                parts.append(f"\n**Visual Diagnostic Findings**: {support_result.visual_diagnostic_findings}")
+            answer = "\n".join(parts)
+
 
         elif intent == "MOVE":
             handover_banner = "⚡ **[Handed over to MOVE Agent — Operational Velocity & Next Actions]**\n\n"
@@ -647,7 +658,7 @@ class SupervisorCoordinator:
         else:  # MULTI_AGENT / SUPERVISOR
             parts = [
                 f"### 360° Operational Briefing for {customer_name}\n",
-                f"**1. Scope & Requirements (UNDERSTAND)**:",
+                f"**1. Scope & Requirements (PLAN)**:",
                 f"- Outcome Version {version}: *\"{outcome_statement}\"*",
                 f"- Definition of Done: {len(completed_crits)}/{total_crits} criteria complete ({engagement_progress}% progress).",
                 f"- Status: `{status}`\n",
@@ -673,11 +684,17 @@ class SupervisorCoordinator:
         final_answer = re.sub(r'\bGMT\b', 'IST', final_answer)
 
         # 6. Dynamic Suggested Followups based on intent
-        if intent == "UNDERSTAND":
+        if intent in ("PLAN", "UNDERSTAND"):
             suggested_followups = [
                 "What success criteria are still incomplete?",
-                "Record a worknote on scope discussion",
+                "Reassess plan with recent evidence",
                 "What should I do next?"
+            ]
+        elif intent == "SUPPORT":
+            suggested_followups = [
+                "Investigate error logs and stack traces",
+                "Search technical runbooks with KNOW",
+                "What is the recommended next action?"
             ]
         elif intent == "MOVE":
             suggested_followups = [
@@ -706,12 +723,26 @@ class SupervisorCoordinator:
 
         # 7. Delegated Specialist Agent Metadata
         agent_directory = {
-            "UNDERSTAND": DelegatedAgentInfo(
-                id="UNDERSTAND",
-                name="UNDERSTAND Agent",
-                role="Requirements & Scope Intelligence",
-                badge_label="Scope & Contract Specialist",
+            "PLAN": DelegatedAgentInfo(
+                id="PLAN",
+                name="PLAN Agent",
+                role="Planning & Delivery Intelligence",
+                badge_label="Planning & Delivery Specialist",
                 color="purple"
+            ),
+            "UNDERSTAND": DelegatedAgentInfo(
+                id="PLAN",
+                name="PLAN Agent",
+                role="Planning & Delivery Intelligence",
+                badge_label="Planning & Delivery Specialist",
+                color="purple"
+            ),
+            "SUPPORT": DelegatedAgentInfo(
+                id="SUPPORT",
+                name="SUPPORT Agent",
+                role="Production Support & Screenshot Intelligence",
+                badge_label="Incident & Diagnostic Specialist",
+                color="emerald"
             ),
             "MOVE": DelegatedAgentInfo(
                 id="MOVE",
@@ -736,7 +767,7 @@ class SupervisorCoordinator:
             ),
             "MULTI_AGENT": DelegatedAgentInfo(
                 id="MULTI_AGENT",
-                name="CalmWork Plan Agent",
+                name="CalmWork Supervisor",
                 role="Central Multi-Agent Orchestration",
                 badge_label="Universal Orchestrator",
                 color="slate"
@@ -774,8 +805,8 @@ class SupervisorCoordinator:
         """
         Proactive Morning Brief Workflow (Sequential Execution):
         1. Load shared state snapshot
-        2. UNDERSTAND -> Outcome changes & scope risks
-        3. KNOW -> Guided retrieval of evidence & history based on UNDERSTAND findings
+        2. PLAN -> Outcome changes & scope risks
+        3. KNOW -> Guided retrieval of evidence & history based on PLAN findings
         4. MOVE -> Blockers, dependencies, pending decisions, Next Best Action
         5. SUPERVISOR -> Consolidates findings & creates Proposed Daily Work Plan
         * CRITICAL REQUIREMENT: DELIVER is EXCLUDED from default Morning Brief *
@@ -794,14 +825,14 @@ class SupervisorCoordinator:
         warnings: List[str] = []
 
         # -------------------------------------------------------------
-        # STEP 1: Invoke UNDERSTAND Agent (Identify Outcome & Scope Drift)
+        # STEP 1: Invoke PLAN Agent (Identify Outcome & Scope Drift)
         # -------------------------------------------------------------
         if progress_callback:
             progress_callback({
                 "type": "progress",
-                "agent": "UNDERSTAND",
+                "agent": "PLAN",
                 "stage": "SCOPE_ANALYSIS",
-                "message": "UNDERSTAND Agent analyzing requirement changes & scope drift...",
+                "message": "PLAN Agent analyzing requirement changes & scope drift...",
                 "step": 2,
                 "total_steps": 5
             })
@@ -821,20 +852,20 @@ class SupervisorCoordinator:
             else:
                 raw_change = f"Progress updated for {customer_name} across {current_work_cycle}."
 
-        understand_findings = None
+        plan_findings = None
         try:
             crit_titles = [c.get("title", "") if isinstance(c, dict) else str(c) for c in (success_criteria or [])]
-            understand_findings = self.understand_agent.analyze_change(
+            plan_findings = self.plan_agent.analyze_change(
                 raw_change_text=raw_change,
                 current_outcome_statement=outcome_statement or f"Deliver active outcome for {customer_name}.",
                 current_success_criteria=crit_titles
             )
         except Exception as e:
-            logger.warning(f"UNDERSTAND agent execution warning in Morning Brief: {str(e)}")
-            warnings.append("UNDERSTAND analysis completed with partial scope evidence.")
+            logger.warning(f"PLAN agent execution warning in Morning Brief: {str(e)}")
+            warnings.append("PLAN analysis completed with partial scope evidence.")
 
         # -------------------------------------------------------------
-        # STEP 2: Invoke KNOW Agent (Guided RAG Retrieval using UNDERSTAND findings)
+        # STEP 2: Invoke KNOW Agent (Guided RAG Retrieval using PLAN findings)
         # -------------------------------------------------------------
         if progress_callback:
             progress_callback({
@@ -1126,7 +1157,7 @@ class SupervisorCoordinator:
             next_best_action=move_findings.model_dump() if move_findings else None,
             evidence_and_confidence=evidence_items,
             warnings_or_partial_failures=warnings,
-            capabilities_invoked=["UNDERSTAND", "KNOW", "MOVE", "SUPERVISOR"],
+            capabilities_invoked=["PLAN", "KNOW", "MOVE", "SUPERVISOR"],
             deliver_invoked=False,  # CRITICAL INVARIANT: DELIVER EXCLUDED
             generated_at=now_iso
         )
@@ -1144,7 +1175,7 @@ class SupervisorCoordinator:
         pending_approvals: int = 0
     ) -> SupervisorSummary:
         """
-        Runs Supervisor orchestration across all 4 agents for complete 360-degree synthesis.
+        Runs Supervisor orchestration across all agents for complete 360-degree synthesis.
         """
         logger.info(f"Supervisor Coordinator orchestrating engagement {engagement_id} ({customer_name})")
 
@@ -1171,10 +1202,10 @@ class SupervisorCoordinator:
         # 3. Formulate Agent Status Summary
         agents_summary = [
             AgentStatusSummary(
-                agent_name="UNDERSTAND",
-                role_description="Outcome Drift & Scope Change Analysis",
+                agent_name="PLAN",
+                role_description="Planning & Delivery Intelligence",
                 status="RECOMMENDATION_PENDING" if status == "NEEDS_REASSESSMENT" else "ACTIVE",
-                last_output_summary="Evaluates requirement changes via Evidence -> Reasoning -> Recommendation pattern."
+                last_output_summary="Evaluates requirement changes and structured delivery milestones."
             ),
             AgentStatusSummary(
                 agent_name="KNOW",
@@ -1193,6 +1224,12 @@ class SupervisorCoordinator:
                 role_description="Executive Customer Communication Studio",
                 status="ACTIVE",
                 last_output_summary=f"Subject: {customer_update.subject}"
+            ),
+            AgentStatusSummary(
+                agent_name="SUPPORT",
+                role_description="Production Support & Screenshot Intelligence",
+                status="ACTIVE",
+                last_output_summary="Triages production incidents and diagnoses visual screenshot errors."
             )
         ]
 
@@ -1220,226 +1257,19 @@ class SupervisorCoordinator:
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> StructuredWorkPlanProposal:
         """
-        Supervisor Work Planning Engine:
-        Interprets a manager's natural language work description,
-        scrubs sensitive PII through Privacy Guardrails,
-        invokes the Google ADK Supervisor Agent to formulate a structured plan,
-        and returns a schema-validated, editable proposal without mutating authoritative state.
+        Supervisor Work Planning Orchestration:
+        Delegates exclusively to dedicated PLAN Agent without duplicating planning logic.
         """
-        if not natural_language_description or not natural_language_description.strip():
-            raise ValueError("Work description cannot be empty.")
-
-        now_iso = datetime.now(timezone.utc).isoformat()
-        proposal_id = f"prop-{uuid.uuid4().hex[:8]}"
-
-        # 1. Apply Pre-LLM Privacy Guardrail
-        if progress_callback:
-            progress_callback({
-                "type": "progress",
-                "agent": "SUPERVISOR",
-                "stage": "PRIVACY",
-                "message": "Sanitizing input through Privacy Guardrail...",
-                "step": 1,
-                "total_steps": 4
-            })
-        sanitized_desc, mapping = self.privacy_engine.process_llm_input(
-            natural_language_description,
-            session_id=engagement_id
-        )
-
-        # 2. Retrieve any relevant indexed specifications
-        if progress_callback:
-            progress_callback({
-                "type": "progress",
-                "agent": "KNOW",
-                "stage": "RETRIEVAL",
-                "message": f"KNOW Agent retrieving indexed technical documentation for {customer_name}...",
-                "step": 2,
-                "total_steps": 4
-            })
-        grounded_context = ""
-        try:
-            know_res = self.know_agent.answer_question(
-                engagement_id=engagement_id,
-                raw_question=f"{customer_name} architecture constraints and requirements",
-                top_k=2
-            )
-            if know_res.evidence_sufficient and know_res.citations:
-                grounded_context = "\n".join([f"- {c.document_title}: {c.snippet}" for c in know_res.citations])
-        except Exception as e:
-            logger.warning(f"Could not retrieve KNOW context for planning: {e}")
-
-        # 3. Construct Google ADK Prompt
-        prompt = (
-            f"You are the CalmWork Supervisor Multi-Agent Work Planning Engine for Forward Deployed Engineering.\n"
-            f"Customer: {customer_name}\n"
-            f"Engagement ID: {engagement_id}\n\n"
-            f"Manager's Natural Language Description:\n{sanitized_desc}\n\n"
-        )
-        if grounded_context:
-            prompt += f"Grounded Technical Documentation:\n{grounded_context}\n\n"
-
-        prompt += (
-            "CRITICAL WORK PLANNING RULES:\n"
-            "1. Transform this description into an actionable, structured enterprise delivery plan.\n"
-            "2. DO NOT fabricate specific dates, deadlines, or timelines unless explicitly stated by the manager in the prompt.\n"
-            "3. DO NOT fabricate team members, owners, or effort commitments unless provided.\n"
-            "4. Clearly separate:\n"
-            "   - Confirmed facts directly provided by the manager.\n"
-            "   - Inferred assumptions you made (marked explicitly as assumptions).\n"
-            "   - Unresolved questions or missing information gaps.\n"
-            "5. If important information is missing, formulate 1-3 targeted clarifying questions.\n"
-            "6. Formulate 2-4 ordered milestones with concrete tasks, deliverables, dependencies, and any required customer decisions/approvals.\n"
-            "7. Formulate a crisp Outcome Goals (acceptance criteria) list.\n\n"
-            "Output MUST be a single valid JSON object strictly matching this structure:\n"
-            "{\n"
-            '  "engagement_objective": "...",\n'
-            '  "outcomes": ["..."],\n'
-            '  "definition_of_done": [{"id": "sc-1", "title": "...", "completed": false}],\n'
-            '  "milestones": [\n'
-            '    {\n'
-            '      "id": "ms-1",\n'
-            '      "title": "...",\n'
-            '      "sequence_order": 1,\n'
-            '      "deliverables": ["..."],\n'
-            '      "dependencies": ["..."],\n'
-            '      "customer_decisions_required": ["..."]\n'
-            '    }\n'
-            '  ],\n'
-            '  "tasks": [\n'
-            '    {\n'
-            '      "id": "task-1",\n'
-            '      "milestone_id": "ms-1",\n'
-            '      "title": "...",\n'
-            '      "description": "...",\n'
-            '      "dependencies": ["..."],\n'
-            '      "owner": null,\n'
-            '      "status": "PLANNED"\n'
-            '    }\n'
-            '  ],\n'
-            '  "risks": ["..."],\n'
-            '  "facts_and_assumptions": {\n'
-            '    "confirmed_facts": ["..."],\n'
-            '    "inferred_assumptions": ["..."],\n'
-            '    "unresolved_questions_or_gaps": ["..."]\n'
-            '  },\n'
-            '  "next_actions": ["..."],\n'
-            '  "timeline_summary": "...",\n'
-            '  "is_provisional": false,\n'
-            '  "clarifying_questions": ["..."]\n'
-            "}"
-        )
-
-        parsed_data = None
-        has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
-        if has_credentials:
-            try:
-                if progress_callback:
-                    progress_callback({
-                        "type": "progress",
-                        "agent": "SUPERVISOR",
-                        "stage": "INFERENCE",
-                        "message": "Planning Engine synthesizing structured delivery plan with AI...",
-                        "step": 3,
-                        "total_steps": 4
-                    })
-                raw_reply = execute_adk_runner(
-                    runner=self.runner,
-                    user_id="manager_user",
-                    session_id=f"plan-{engagement_id}",
-                    message_text=prompt,
-                    system_instruction=(
-                        "You are the CalmWork Supervisor Work Planning Engine. "
-                        "Produce valid JSON enterprise work plans strictly grounded on provided manager input."
-                    ),
-                    json_mode=True
-                )
-                if raw_reply:
-                    clean_json = raw_reply.strip()
-                    if clean_json.startswith("```"):
-                        clean_json = re.sub(r"^```(?:json)?\s*", "", clean_json)
-                        clean_json = re.sub(r"\s*```$", "", clean_json)
-                    parsed_data = json.loads(clean_json)
-            except Exception as e:
-                logger.warning(f"ADK runner planning generation error: {e}")
-
-        # Strictly enforce LLM generation — zero deterministic mock or fallback fabrication
-        if not parsed_data or not isinstance(parsed_data, dict):
-            raise HTTPException(
-                status_code=503,
-                detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
-            )
-
-        if progress_callback:
-            progress_callback({
-                "type": "progress",
-                "agent": "SUPERVISOR",
-                "stage": "VALIDATION",
-                "message": "Validating milestone hierarchy, dependencies & Outcome Goals...",
-                "step": 4,
-                "total_steps": 4
-            })
-
-        # Merge any existing manager edits if provided
-        if existing_plan_edits and isinstance(existing_plan_edits, dict):
-            for k, v in existing_plan_edits.items():
-                if v is not None and k in parsed_data:
-                    parsed_data[k] = v
-
-        # Validate with Pydantic
-        milestones = [WorkMilestone(**m) for m in parsed_data.get("milestones", [])]
-        tasks = [WorkTask(**t) for t in parsed_data.get("tasks", [])]
-        faa_data = parsed_data.get("facts_and_assumptions", {})
-        facts_and_assumptions = FactAssumptionGap(
-            confirmed_facts=faa_data.get("confirmed_facts", []),
-            inferred_assumptions=faa_data.get("inferred_assumptions", []),
-            unresolved_questions_or_gaps=faa_data.get("unresolved_questions_or_gaps", [])
-        )
-
-        dod_list = parsed_data.get("outcome_goals") or parsed_data.get("definition_of_done", [])
-        formatted_dod = []
-        for idx, item in enumerate(dod_list):
-            if isinstance(item, dict):
-                formatted_dod.append({
-                    "id": item.get("id", f"sc-{idx+1}"),
-                    "title": item.get("title", f"Outcome Goal {idx+1}"),
-                    "completed": item.get("completed", False)
-                })
-            elif isinstance(item, str):
-                formatted_dod.append({
-                    "id": f"sc-{idx+1}",
-                    "title": item,
-                    "completed": False
-                })
-
-        raw_risks = parsed_data.get("risks", [])
-        raw_next_actions = parsed_data.get("next_actions", [])
-
-        proposal = StructuredWorkPlanProposal(
-            proposal_id=proposal_id,
+        return self.plan_agent.generate_natural_language_work_plan(
             engagement_id=engagement_id,
             customer_name=customer_name,
-            engagement_objective=self.privacy_engine.sanitize_output(
-                parsed_data.get("engagement_objective", f"Deliver initiative for {customer_name}."),
-                mapping
-            ),
-            outcomes=[self.privacy_engine.sanitize_output(o, mapping) for o in parsed_data.get("outcomes", [])],
-            definition_of_done=formatted_dod,
-            milestones=milestones,
-            tasks=tasks,
-            risks=[self.privacy_engine.sanitize_output(r, mapping) for r in raw_risks],
-            facts_and_assumptions=facts_and_assumptions,
-            next_actions=[self.privacy_engine.sanitize_output(a, mapping) for a in raw_next_actions],
-            timeline_summary=self.privacy_engine.sanitize_output(
-                parsed_data.get("timeline_summary", "No explicit timeline committed."),
-                mapping
-            ),
-            is_provisional=bool(parsed_data.get("is_provisional", False)),
-            clarifying_questions=[self.privacy_engine.sanitize_output(q, mapping) for q in parsed_data.get("clarifying_questions", [])],
-            status="PROPOSED",
-            generated_at=now_iso
+            natural_language_description=natural_language_description,
+            existing_plan_edits=existing_plan_edits,
+            current_outcome_statement=current_outcome_statement,
+            current_success_criteria=current_success_criteria,
+            session_id=session_id,
+            progress_callback=progress_callback
         )
 
-        return proposal
 
 

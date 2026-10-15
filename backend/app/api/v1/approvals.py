@@ -122,7 +122,7 @@ def respond_to_approval(
             engagement_id=engagement_id,
             new_statement=current_outcome.statement if current_outcome else eng.name,
             new_success_criteria=updated_criteria,
-            proposed_by="understand_agent",
+            proposed_by="plan_agent",
             reason=f"Manager approved scope expansion for {eng.customer_name}."
         )
 
@@ -236,7 +236,7 @@ def respond_to_specific_approval(
                     engagement_id=eng.id,
                     new_statement=current_outcome.statement if current_outcome else eng.name,
                     new_success_criteria=updated_criteria,
-                    proposed_by="understand_agent",
+                    proposed_by="plan_agent",
                     reason=f"Manager approved scope expansion for {eng.customer_name}."
                 )
                 outcome_service.approve_outcome_version(

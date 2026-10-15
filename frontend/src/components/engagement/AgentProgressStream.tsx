@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, BookOpen, Activity, Compass, Cpu, Sparkles, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, BookOpen, Activity, Compass, Cpu, Sparkles, CheckCircle2, Zap, Send } from "lucide-react";
 
 export interface AgentStreamEvent {
   type: "progress" | "complete" | "error";
-  agent?: "SUPERVISOR" | "KNOW" | "UNDERSTAND" | "MOVE" | "DELIVER" | string;
+  agent?: "SUPERVISOR" | "PLAN" | "KNOW" | "MOVE" | "DELIVER" | "SUPPORT" | string;
   stage?: string;
   message?: string;
   step?: number;
@@ -28,27 +28,48 @@ const AGENT_CONFIG: Record<
     bg: "bg-indigo-50 dark:bg-indigo-950/40",
     text: "text-indigo-700 dark:text-indigo-300",
     border: "border-indigo-200 dark:border-indigo-800",
-    icon: ShieldCheck,
+    icon: Sparkles,
+  },
+  PLAN: {
+    label: "PLAN Agent (Scope & Planning)",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
+    icon: Compass,
   },
   KNOW: {
-    label: "KNOW Agent (RAG)",
-    bg: "bg-emerald-50 dark:bg-emerald-950/40",
-    text: "text-emerald-700 dark:text-emerald-300",
-    border: "border-emerald-200 dark:border-emerald-800",
+    label: "KNOW Agent (Technical Evidence)",
+    bg: "bg-blue-50 dark:bg-blue-950/40",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200 dark:border-blue-800",
     icon: BookOpen,
   },
-  UNDERSTAND: {
-    label: "UNDERSTAND Agent",
-    bg: "bg-sky-50 dark:bg-sky-950/40",
-    text: "text-sky-700 dark:text-sky-300",
-    border: "border-sky-200 dark:border-sky-800",
-    icon: Activity,
-  },
   MOVE: {
-    label: "MOVE Agent",
+    label: "MOVE Agent (Velocity & Blockers)",
     bg: "bg-amber-50 dark:bg-amber-950/40",
     text: "text-amber-700 dark:text-amber-300",
     border: "border-amber-200 dark:border-amber-800",
+    icon: Zap,
+  },
+  DELIVER: {
+    label: "DELIVER Agent (Executive Updates)",
+    bg: "bg-rose-50 dark:bg-rose-950/40",
+    text: "text-rose-700 dark:text-rose-300",
+    border: "border-rose-200 dark:border-rose-800",
+    icon: Send,
+  },
+  SUPPORT: {
+    label: "SUPPORT Agent (Diagnostics)",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+    icon: ShieldCheck,
+  },
+  UNDERSTAND: {
+    label: "PLAN Agent (Scope & Planning)",
+    bg: "bg-purple-50 dark:bg-purple-950/40",
+    text: "text-purple-700 dark:text-purple-300",
+    border: "border-purple-200 dark:border-purple-800",
     icon: Compass,
   },
 };

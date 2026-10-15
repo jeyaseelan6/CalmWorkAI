@@ -12,10 +12,20 @@ import {
   ArrowRight,
   ShieldCheck,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Paperclip,
+  Image as ImageIcon,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  Lock,
+  Layers,
+  Radio,
+  ExternalLink
 } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
 import { getNowISTTime } from "@/utils/date";
+import { API_BASE } from "@/utils/api";
 
 interface DelegatedAgent {
   id: string;
@@ -23,6 +33,22 @@ interface DelegatedAgent {
   role: string;
   badge_label: string;
   color: string;
+}
+
+export interface IncidentInvestigationResult {
+  incident_id: string;
+  engagement_id: string;
+  customer_name: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | string;
+  summary: string;
+  root_cause_hypothesis: string;
+  affected_components: string[];
+  suggested_workaround?: string | null;
+  runbook_recommendations: string[];
+  visual_diagnostic_findings?: string | null;
+  evidence_citations: string[];
+  privacy_scrubbed: boolean;
+  investigated_at: string;
 }
 
 interface ChatMessage {
@@ -34,9 +60,27 @@ interface ChatMessage {
   capabilitiesUsed?: string[];
   sources?: { title: string; snippet: string; source_type?: string }[];
   suggestedFollowups?: string[];
+  screenshotPreview?: string;
+  supportResult?: IncidentInvestigationResult;
   timestamp: string;
 }
-import { API_BASE } from "@/utils/api";
+
+interface AttachedScreenshot {
+  dataUrl: string;
+  filename: string;
+  sizeBytes: number;
+  fileType: string;
+}
+
+export interface AskCalmWorkChatProps {
+  isDrawer?: boolean;
+  onClose?: () => void;
+  engagementId?: string;
+  customerName?: string;
+  activeTab?: string;
+  selectedItemContext?: string | null;
+  initialQuery?: string | null;
+}
 
 const AGENT_META: Record<string, {
   name: string;
@@ -48,15 +92,35 @@ const AGENT_META: Record<string, {
   iconCol: string;
   badgeBg: string;
 }> = {
-  UNDERSTAND: {
-    name: "UNDERSTAND Agent",
-    role: "Requirements & Scope Intelligence",
-    badge: "Scope & Contract Specialist",
+  PLAN: {
+    name: "PLAN Agent",
+    role: "Planning & Scope Intelligence",
+    badge: "Planning & Scope Specialist",
     icon: Compass,
     headerBg: "bg-purple-50/90",
     borderCol: "border-purple-200",
     iconCol: "text-purple-600",
     badgeBg: "bg-purple-100 text-purple-800 border-purple-300"
+  },
+  UNDERSTAND: {
+    name: "PLAN Agent",
+    role: "Planning & Scope Intelligence",
+    badge: "Scope & Planning Specialist",
+    icon: Compass,
+    headerBg: "bg-purple-50/90",
+    borderCol: "border-purple-200",
+    iconCol: "text-purple-600",
+    badgeBg: "bg-purple-100 text-purple-800 border-purple-300"
+  },
+  SUPPORT: {
+    name: "SUPPORT Agent",
+    role: "Production Support & Visual Diagnostics",
+    badge: "Incident & Diagnostic Specialist",
+    icon: ShieldCheck,
+    headerBg: "bg-emerald-50/90",
+    borderCol: "border-emerald-200",
+    iconCol: "text-emerald-600",
+    badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-300"
   },
   MOVE: {
     name: "MOVE Agent",
@@ -89,7 +153,7 @@ const AGENT_META: Record<string, {
     badgeBg: "bg-blue-100 text-blue-800 border-blue-300"
   },
   MULTI_AGENT: {
-    name: "CalmWork Plan Agent",
+    name: "CalmWork Supervisor",
     role: "Central Multi-Agent Orchestration",
     badge: "Universal Orchestrator",
     icon: Sparkles,
@@ -101,7 +165,6 @@ const AGENT_META: Record<string, {
 };
 
 function renderFormattedInline(str: string) {
-  // Parse **bold**, *italic*, and `code`
   const segments = str.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
   return segments.map((seg, i) => {
     if (seg.startsWith("**") && seg.endsWith("**")) {
@@ -118,7 +181,6 @@ function renderFormattedInline(str: string) {
 }
 
 function FormattedMessageBody({ rawText }: { rawText: string }) {
-  // Strip out redundant handover banners and trailing Source: lines
   const cleaned = rawText
     .replace(/^([🎯⚡📢📚🧭\s]*(\*{1,2})?\[Handed over to [^\]]+\](\*{1,2})?\s*\n*)+/i, "")
     .replace(/^(\*{1,2})?\[Handed over to [^\]]+\](\*{1,2})?\s*\n*/i, "")
@@ -186,7 +248,6 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
       return;
     }
 
-    // Header ###
     if (trimmed.startsWith("### ")) {
       elements.push(
         <h4 key={idx} className="font-display font-bold text-xs text-slate-900 mt-2.5 pt-1 pb-0.5 border-b border-slate-200">
@@ -196,7 +257,6 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
       return;
     }
 
-    // Bullet point
     if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
       const content = trimmed.substring(2);
       elements.push(
@@ -208,7 +268,6 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
       return;
     }
 
-    // Highlight alerts (⚠️, ✅, ⏳)
     if (trimmed.startsWith("⚠️") || trimmed.startsWith("✅") || trimmed.startsWith("⏳")) {
       const isWarning = trimmed.startsWith("⚠️");
       elements.push(
@@ -226,7 +285,6 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
       return;
     }
 
-    // Standard paragraph
     elements.push(
       <p key={idx}>
         {renderFormattedInline(trimmed)}
@@ -241,26 +299,50 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
   return <div className="space-y-2 text-xs leading-relaxed text-slate-800">{elements}</div>;
 }
 
-export default function AskCalmWorkChat() {
-  const { activeCustomer } = useEngagement();
-  const [query, setQuery] = useState("");
+export default function AskCalmWorkChat({
+  isDrawer = false,
+  onClose,
+  engagementId,
+  customerName,
+  activeTab: propActiveTab,
+  selectedItemContext: propSelectedItemContext,
+  initialQuery
+}: AskCalmWorkChatProps) {
+  const {
+    activeCustomer,
+    activeTab: contextActiveTab,
+    selectedItemContext: contextSelectedItem,
+    setSelectedItemContext
+  } = useEngagement();
+
+  const targetEngagementId = engagementId || activeCustomer.id;
+  const targetCustomerName = customerName || activeCustomer.customerName;
+  const currentTab = propActiveTab || contextActiveTab || "myday";
+  const currentSelectedItem = propSelectedItemContext !== undefined ? propSelectedItemContext : contextSelectedItem;
+
+  const [query, setQuery] = useState(initialQuery || "");
   const [loading, setLoading] = useState(false);
+  const [attachedScreenshot, setAttachedScreenshot] = useState<AttachedScreenshot | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [simulatedEscalations, setSimulatedEscalations] = useState<Record<string, boolean>>({});
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "msg-welcome",
       sender: "SUPERVISOR",
-      text: `Hello! I am the CalmWork Universal Plan Agent. Ask me anything about ${activeCustomer.customerName}'s current state, scope changes, blockers, or stakeholder communications. I will automatically route your request to the specialized agent best equipped to assist you.`,
+      text: `Hello! I am the CalmWork Universal Supervisor for ${targetCustomerName}. Ask me anything about current state, scope changes, work plans, blockers, production support, or customer updates. You can also paste or attach screenshots of errors or logs for automated SUPPORT agent investigation.`,
       intent: "MULTI_AGENT",
       delegatedAgent: {
         id: "MULTI_AGENT",
-        name: "CalmWork Plan Agent",
-        role: "Central Multi-Agent Orchestration",
+        name: "CalmWork Supervisor Coordinator",
+        role: "Universal Routing & Multi-Agent Orchestration",
         badge_label: "Universal Orchestrator",
         color: "slate"
       },
-      capabilitiesUsed: ["UNDERSTAND", "MOVE", "DELIVER", "KNOW"],
+      capabilitiesUsed: ["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
       suggestedFollowups: [
         "What changed today?",
         "Why is production blocked?",
@@ -279,95 +361,280 @@ export default function AskCalmWorkChat() {
     scrollToBottom();
   }, [messages, loading]);
 
+  // File size limit: 4.5 MB
+  const MAX_FILE_BYTES = 4.5 * 1024 * 1024;
+
+  const processImageFile = (file: File, fallbackName = "screenshot.png") => {
+    setAttachmentError(null);
+
+    // Validate MIME type
+    if (!file.type.startsWith("image/")) {
+      setAttachmentError("Unsupported file type. Please select an image (PNG, JPEG, WebP, GIF).");
+      return;
+    }
+
+    // Validate File Size
+    if (file.size > MAX_FILE_BYTES) {
+      const mbSize = (file.size / (1024 * 1024)).toFixed(1);
+      setAttachmentError(`Image size (${mbSize} MB) exceeds maximum allowed payload limit of 4.5 MB.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachedScreenshot({
+        dataUrl: reader.result as string,
+        filename: file.name || fallbackName,
+        sizeBytes: file.size,
+        fileType: file.type || "image/png"
+      });
+    };
+    reader.onerror = () => {
+      setAttachmentError("Failed to read image file. Please try again.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+    // Reset file input so the same file can be re-selected if removed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          processImageFile(file, `pasted-screenshot-${Date.now().toString().slice(-4)}.png`);
+          break;
+        }
+      }
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
-    const q = textToSend || query;
-    if (!q.trim() || loading) return;
+    const q = textToSend !== undefined ? textToSend : query;
+    if ((!q.trim() && !attachedScreenshot) || loading) return;
+
+    const userText = q.trim() || (attachedScreenshot ? "Analyze attached screenshot for production incident diagnostic." : "");
+    const capturedScreenshot = attachedScreenshot;
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       sender: "USER",
-      text: q.trim(),
+      text: userText,
+      screenshotPreview: capturedScreenshot?.dataUrl,
       timestamp: getNowISTTime(true)
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setQuery("");
+    setAttachedScreenshot(null);
+    setAttachmentError(null);
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q.trim() })
-      });
-      const data = await res.json();
+      if (capturedScreenshot) {
+        // Route screenshot investigation through SUPPORT Agent endpoint
+        const res = await fetch(`${API_BASE}/engagements/${targetEngagementId}/support/investigate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            issue_description: userText,
+            screenshot_base64: capturedScreenshot.dataUrl,
+            screenshot_metadata: {
+              filename: capturedScreenshot.filename,
+              size_bytes: capturedScreenshot.sizeBytes,
+              mime_type: capturedScreenshot.fileType,
+              active_tab: currentTab,
+              selected_item: currentSelectedItem
+            }
+          })
+        });
 
-      if (data.success) {
-        const intentDetected = data.data.intent_detected || "MULTI_AGENT";
-        const meta = AGENT_META[intentDetected] || AGENT_META["MULTI_AGENT"];
+        const data = await res.json();
+        if (data.success && data.data) {
+          const inv: IncidentInvestigationResult = data.data;
+          const supMsg: ChatMessage = {
+            id: `msg-${Date.now()}-sup`,
+            sender: "SUPERVISOR",
+            text: inv.summary,
+            intent: "SUPPORT",
+            delegatedAgent: {
+              id: "SUPPORT",
+              name: "SUPPORT Agent",
+              role: "Production Support & Visual Diagnostics",
+              badge_label: "Incident & Diagnostic Specialist",
+              color: "emerald"
+            },
+            supportResult: inv,
+            capabilitiesUsed: ["SUPPORT", "KNOW"],
+            sources: inv.evidence_citations?.map((c, i) => ({
+              title: `Runbook Citation #${i + 1}`,
+              snippet: c,
+              source_type: "INCIDENT_EVIDENCE"
+            })),
+            suggestedFollowups: [
+              "What is the recommended runbook fix?",
+              "Simulate SRE escalation",
+              "How does this incident affect current milestone tasks?"
+            ],
+            timestamp: getNowISTTime(true)
+          };
+          setMessages((prev) => [...prev, supMsg]);
+        } else {
+          throw new Error(data.detail || data.message || "Failed to investigate screenshot");
+        }
+      } else {
+        // Normal text query through Supervisor Query endpoint with contextual grounding
+        const contextPrefix = currentTab
+          ? `[Context: Active Tab "${currentTab}"${currentSelectedItem ? `, Selected: "${currentSelectedItem}"` : ""}] `
+          : "";
 
-        const delegated = data.data.delegated_agent || {
-          id: intentDetected,
-          name: meta.name,
-          role: meta.role,
-          badge_label: meta.badge,
-          color: "slate"
-        };
+        const res = await fetch(`${API_BASE}/engagements/${targetEngagementId}/supervisor/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: `${contextPrefix}${userText}` })
+        });
+        const data = await res.json();
 
-        const supMsg: ChatMessage = {
-          id: `msg-${Date.now()}-sup`,
-          sender: "SUPERVISOR",
-          text: data.data.answer,
-          intent: intentDetected,
-          delegatedAgent: delegated,
-          capabilitiesUsed: data.data.capabilities_used,
-          sources: data.data.sources,
-          suggestedFollowups: data.data.suggested_followups,
-          timestamp: getNowISTTime(true)
-        };
-        setMessages((prev) => [...prev, supMsg]);
+        if (data.success) {
+          const intentDetected = data.data.intent_detected || "MULTI_AGENT";
+          const meta = AGENT_META[intentDetected] || AGENT_META["MULTI_AGENT"];
+
+          const delegated = data.data.delegated_agent || {
+            id: intentDetected,
+            name: meta.name,
+            role: meta.role,
+            badge_label: meta.badge,
+            color: "slate"
+          };
+
+          const supMsg: ChatMessage = {
+            id: `msg-${Date.now()}-sup`,
+            sender: "SUPERVISOR",
+            text: data.data.answer,
+            intent: intentDetected,
+            delegatedAgent: delegated,
+            capabilitiesUsed: data.data.capabilities_used,
+            sources: data.data.sources,
+            suggestedFollowups: data.data.suggested_followups,
+            timestamp: getNowISTTime(true)
+          };
+          setMessages((prev) => [...prev, supMsg]);
+        }
       }
-    } catch (err) {
-      console.error("Supervisor query failed:", err);
+    } catch (err: any) {
+      console.error("Supervisor / Support query failed:", err);
+      const errMsg: ChatMessage = {
+        id: `msg-${Date.now()}-err`,
+        sender: "SUPERVISOR",
+        text: `⚠️ Query processing error: ${err.message || "Unable to reach CalmWork Supervisor"}. Please check connectivity or retry.`,
+        intent: "MULTI_AGENT",
+        timestamp: getNowISTTime(true)
+      };
+      setMessages((prev) => [...prev, errMsg]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSimulateEscalation = (incidentId: string) => {
+    setSimulatedEscalations((prev) => ({
+      ...prev,
+      [incidentId]: true
+    }));
+  };
+
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col h-[calc(100vh-210px)] min-h-[480px] sm:h-[650px] text-xs">
+    <div
+      onPaste={handlePaste}
+      className={`bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col text-xs ${
+        isDrawer ? "h-full w-full rounded-none border-0 shadow-none" : "h-[calc(100vh-210px)] min-h-[480px] sm:h-[650px]"
+      }`}
+    >
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-slate-900 text-white rounded">
+      <div className="px-4 sm:px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-1.5 bg-slate-900 text-white rounded shrink-0">
             <Sparkles className="h-4 w-4" />
           </div>
-          <div>
-            <h2 className="font-display font-bold text-sm text-slate-900">Ask CalmWork (Universal Assistant)</h2>
-            <p className="text-[11px] text-slate-500 font-mono">Plan Agent — Central Intent Classification & Specialist Handover</p>
+          <div className="truncate">
+            <div className="flex items-center gap-2">
+              <h2 className="font-display font-bold text-sm text-slate-900 truncate">Ask CalmWork</h2>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-mono font-semibold uppercase">
+                {currentTab}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-mono truncate">
+              {targetCustomerName} · Supervisor Multi-Agent Router & SUPPORT Diagnostics
+            </p>
           </div>
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-500">
-          <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">UNDERSTAND</span>
-          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">MOVE</span>
-          <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">DELIVER</span>
-          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">KNOW</span>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-slate-500">
+            <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">PLAN</span>
+            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">KNOW</span>
+            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">MOVE</span>
+            <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">DELIVER</span>
+            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">SUPPORT</span>
+          </div>
+
+          {isDrawer && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-md transition cursor-pointer"
+              aria-label="Close Assistant Drawer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Selected Item Context Banner (if provided) */}
+      {currentSelectedItem && (
+        <div className="px-3.5 py-1.5 bg-purple-50/70 border-b border-purple-100 flex items-center justify-between text-[11px] text-purple-900 shrink-0">
+          <div className="flex items-center gap-1.5 truncate">
+            <Compass className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+            <span className="font-semibold text-purple-700">Item Context:</span>
+            <span className="truncate font-mono">{currentSelectedItem}</span>
+          </div>
+          <button
+            onClick={() => setSelectedItemContext(null)}
+            className="text-purple-500 hover:text-purple-800 ml-2 text-[10px] underline cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Suggested Prompt Chips */}
-      <div className="p-3 bg-slate-50/60 border-b border-slate-200 flex items-center gap-2 overflow-x-auto text-[11px]">
+      <div className="p-2.5 bg-slate-50/60 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto text-[11px] shrink-0">
         <span className="font-semibold text-slate-400 shrink-0 uppercase tracking-wider text-[10px] font-mono">Suggested:</span>
         {[
           { label: "What changed today?", tag: "Scope" },
           { label: "Why is production blocked?", tag: "Blockers" },
-          { label: "What should I do next?", tag: "Velocity" },
+          { label: "Diagnose screenshot error", tag: "Support" },
           { label: "Prepare a customer update.", tag: "Stakeholders" }
         ].map((chip, idx) => (
           <button
             key={idx}
             onClick={() => handleSend(chip.label)}
-            className="px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-400 text-slate-700 rounded-full shrink-0 transition font-medium flex items-center gap-1 shadow-2xs hover:bg-slate-50"
+            className="px-2.5 py-1 bg-white border border-slate-200 hover:border-slate-400 text-slate-700 rounded-full shrink-0 transition font-medium flex items-center gap-1 shadow-2xs hover:bg-slate-50 cursor-pointer"
           >
             <span>{chip.label}</span>
           </button>
@@ -375,7 +642,7 @@ export default function AskCalmWorkChat() {
       </div>
 
       {/* Message Feed */}
-      <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-slate-50/30">
+      <div className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-4 bg-slate-50/30">
         {messages.map((m) => {
           const isUser = m.sender === "USER";
           const intentKey = m.intent || "MULTI_AGENT";
@@ -383,17 +650,17 @@ export default function AskCalmWorkChat() {
           const AgentIcon = meta.icon;
 
           return (
-            <div key={m.id} className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+            <div key={m.id} className={`flex gap-2.5 sm:gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
               {!isUser && (
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 border shadow-2xs ${meta.headerBg} ${meta.borderCol}`}>
-                  <AgentIcon className={`h-4 w-4 ${meta.iconCol}`} />
+                <div className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full flex items-center justify-center shrink-0 border shadow-2xs ${meta.headerBg} ${meta.borderCol}`}>
+                  <AgentIcon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${meta.iconCol}`} />
                 </div>
               )}
 
               <div className={`max-w-2xl space-y-2 ${isUser ? "text-right" : "text-left"}`}>
                 <div className={`inline-block rounded-lg text-xs overflow-hidden ${
                   isUser 
-                    ? "p-3.5 bg-slate-900 text-white shadow-2xs" 
+                    ? "p-3 bg-slate-900 text-white shadow-2xs" 
                     : "p-4 bg-white border border-slate-200 text-slate-900 shadow-2xs w-full"
                 }`}>
                   {/* Explicit Specialist Handover Banner */}
@@ -423,9 +690,153 @@ export default function AskCalmWorkChat() {
                   {/* Message Content */}
                   {isUser ? (
                     <div>
+                      {m.screenshotPreview && (
+                        <div className="mb-2 rounded overflow-hidden border border-slate-700 bg-slate-950/40 p-1">
+                          <img
+                            src={m.screenshotPreview}
+                            alt="Attached screenshot telemetry"
+                            className="max-h-48 w-auto rounded object-contain mx-auto"
+                          />
+                        </div>
+                      )}
                       <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
                       <div className="text-[9px] text-slate-400 font-mono mt-1 text-right">
                         {m.timestamp}
+                      </div>
+                    </div>
+                  ) : m.supportResult ? (
+                    /* Structured SUPPORT Diagnostic Result */
+                    <div className="space-y-3">
+                      {/* Severity & Incident Badge */}
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                            m.supportResult.severity === "CRITICAL"
+                              ? "bg-rose-100 text-rose-800 border-rose-300"
+                              : m.supportResult.severity === "HIGH"
+                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              : m.supportResult.severity === "MEDIUM"
+                              ? "bg-yellow-100 text-yellow-800 border-yellow-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          }`}>
+                            {m.supportResult.severity} Incident
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-400">
+                            ID: {m.supportResult.incident_id}
+                          </span>
+                        </div>
+                        {m.supportResult.privacy_scrubbed && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono">
+                            <Lock className="h-2.5 w-2.5" />
+                            <span>Privacy Scrubbed</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Summary */}
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs mb-1">Diagnostic Summary</h4>
+                        <p className="text-slate-700 leading-relaxed">{m.supportResult.summary}</p>
+                      </div>
+
+                      {/* Visual Findings if present */}
+                      {m.supportResult.visual_diagnostic_findings && (
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-1">
+                          <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                            <ImageIcon className="h-3 w-3 text-slate-600" />
+                            <span>Visual Telemetry Findings</span>
+                          </div>
+                          <p className="text-slate-600 font-mono text-[10px] leading-relaxed">
+                            {m.supportResult.visual_diagnostic_findings}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Root Cause Hypothesis (Clearly labeled with uncertainty) */}
+                      <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded text-[11px] space-y-1">
+                        <div className="font-semibold text-amber-900 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                            <span>Root Cause Hypothesis</span>
+                          </div>
+                          <span className="text-[9px] font-mono font-medium text-amber-700 uppercase">
+                            Hypothesis Grounded
+                          </span>
+                        </div>
+                        <p className="text-amber-950 leading-relaxed font-sans">
+                          {m.supportResult.root_cause_hypothesis}
+                        </p>
+                      </div>
+
+                      {/* Affected Components */}
+                      {m.supportResult.affected_components && m.supportResult.affected_components.length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
+                            Affected Components:
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {m.supportResult.affected_components.map((comp, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono text-[10px] text-slate-800">
+                                {comp}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Suggested Workaround */}
+                      {m.supportResult.suggested_workaround && (
+                        <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded text-[11px] space-y-1">
+                          <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Suggested Immediate Workaround</span>
+                          </div>
+                          <p className="text-emerald-950 leading-relaxed">
+                            {m.supportResult.suggested_workaround}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Runbook Recommendations */}
+                      {m.supportResult.runbook_recommendations && m.supportResult.runbook_recommendations.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <h5 className="font-semibold text-slate-900 text-[11px] flex items-center gap-1.5">
+                            <BookOpen className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Runbook Remediation Steps:</span>
+                          </h5>
+                          <ul className="space-y-1 pl-1">
+                            {m.supportResult.runbook_recommendations.map((step, sIdx) => (
+                              <li key={sIdx} className="flex items-start gap-1.5 text-slate-700 text-[11px]">
+                                <span className="font-mono text-blue-600 font-bold text-[10px] mt-0.5">{sIdx + 1}.</span>
+                                <span>{step}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Simulated Human Handoff (Constraint: Honest, explicit simulation) */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                        {simulatedEscalations[m.supportResult.incident_id] ? (
+                          <div className="p-2 bg-slate-100 border border-slate-200 rounded text-[10px] text-slate-600 w-full flex items-start gap-1.5">
+                            <Radio className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+                            <div>
+                              <span className="font-bold text-slate-800">Simulated Incident Alert: </span>
+                              <span>
+                                Incident diagnosis recorded to CalmWork internal timeline. Note: No external paging or ticketing service was dispatched per sandbox environment policy.
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSimulateEscalation(m.supportResult!.incident_id)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-700 rounded text-[11px] font-medium transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          >
+                            <Radio className="h-3 w-3 text-slate-500" />
+                            <span>Simulate SRE Escalation</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -461,7 +872,8 @@ export default function AskCalmWorkChat() {
                         OBSERVATION: "bg-cyan-100 text-cyan-800 border-cyan-200",
                         WORK_PLAN: "bg-indigo-100 text-indigo-800 border-indigo-200",
                         OUTCOME: "bg-rose-100 text-rose-800 border-rose-200",
-                        TIMELINE: "bg-slate-200 text-slate-800 border-slate-300"
+                        TIMELINE: "bg-slate-200 text-slate-800 border-slate-300",
+                        INCIDENT_EVIDENCE: "bg-emerald-100 text-emerald-800 border-emerald-200"
                       }[s.source_type || "DOCUMENT"] || "bg-blue-100 text-blue-800 border-blue-200";
 
                       return (
@@ -490,7 +902,7 @@ export default function AskCalmWorkChat() {
                         <button
                           key={fIdx}
                           onClick={() => handleSend(followUp)}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-700 rounded-full text-[10px] transition font-medium flex items-center gap-1 shadow-2xs"
+                          className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-700 rounded-full text-[10px] transition font-medium flex items-center gap-1 shadow-2xs cursor-pointer"
                         >
                           <span>{followUp}</span>
                           <ArrowRight className="h-2.5 w-2.5 text-slate-400" />
@@ -502,8 +914,8 @@ export default function AskCalmWorkChat() {
               </div>
 
               {isUser && (
-                <div className="h-8 w-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
-                  <User className="h-4 w-4" />
+                <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
+                  <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </div>
               )}
             </div>
@@ -512,13 +924,62 @@ export default function AskCalmWorkChat() {
 
         {/* Dynamic Specialist Routing State */}
         {loading && (
-          <div className="flex items-center gap-2.5 text-slate-600 font-mono text-[11px] p-3 bg-white border border-slate-200 rounded-lg w-fit shadow-2xs">
+          <div className="flex items-center gap-2.5 text-slate-600 font-mono text-[11px] p-3 bg-white border border-slate-200 rounded-lg w-fit shadow-2xs animate-fadeIn">
             <RefreshCw className="h-3.5 w-3.5 text-slate-700 animate-spin" />
-            <span>Plan Agent detecting intent & handing over to specialist agent...</span>
+            <span>CalmWork Supervisor detecting intent & handing over to specialist agent...</span>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Attachment Preview Chip */}
+      {attachedScreenshot && (
+        <div className="px-3 py-2 bg-emerald-50/60 border-t border-emerald-200 flex items-center justify-between text-xs shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src={attachedScreenshot.dataUrl}
+              alt="Screenshot attachment preview"
+              className="h-9 w-9 rounded object-cover border border-emerald-300 shadow-2xs shrink-0"
+            />
+            <div className="truncate">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-emerald-950 truncate">{attachedScreenshot.filename}</span>
+                <span className="text-[10px] font-mono text-emerald-700">
+                  ({(attachedScreenshot.sizeBytes / 1024).toFixed(0)} KB)
+                </span>
+              </div>
+              <span className="text-[10px] text-emerald-800 font-medium">
+                Routes to SUPPORT Agent · Diagnostic Investigation
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAttachedScreenshot(null)}
+            className="p-1 rounded text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100 transition cursor-pointer"
+            aria-label="Remove screenshot attachment"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Attachment Error Notice */}
+      {attachmentError && (
+        <div className="px-3 py-2 bg-rose-50 border-t border-rose-200 flex items-center justify-between text-xs text-rose-800 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+            <span>{attachmentError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAttachmentError(null)}
+            className="text-rose-600 hover:text-rose-800 text-[10px] font-bold uppercase underline cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Input Bar */}
       <form
@@ -526,21 +987,47 @@ export default function AskCalmWorkChat() {
           e.preventDefault();
           handleSend();
         }}
-        className="p-3 border-t border-slate-200 bg-white flex items-center gap-2"
+        className="p-3 border-t border-slate-200 bg-white flex items-center gap-2 shrink-0"
       >
+        {/* Hidden File Input for Image Selection */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+          aria-label="Upload screenshot or error image"
+        />
+
+        {/* Paperclip / Image Attachment Button */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer border border-slate-200 shrink-0 shadow-2xs"
+          title="Attach or paste screenshot for SUPPORT agent diagnostic (Ctrl+V / Cmd+V supported)"
+          aria-label="Attach screenshot or error log"
+        >
+          <ImageIcon className="h-4 w-4" />
+        </button>
+
         <input
           type="text"
-          placeholder="Ask CalmWork anything about requirements, blockers, or next steps..."
+          placeholder={
+            attachedScreenshot
+              ? "Describe observed issue or leave blank for automated visual triage..."
+              : "Ask CalmWork anything, or paste a screenshot (Ctrl+V)..."
+          }
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1 px-3.5 py-2 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-slate-900 bg-slate-50/50"
         />
+
         <button
           type="submit"
-          disabled={loading || !query.trim()}
-          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold text-xs transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+          disabled={loading || (!query.trim() && !attachedScreenshot)}
+          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md font-semibold text-xs transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer shrink-0"
         >
-          <span>Ask</span>
+          <span>{attachedScreenshot ? "Investigate" : "Ask"}</span>
           <Send className="h-3.5 w-3.5" />
         </button>
       </form>

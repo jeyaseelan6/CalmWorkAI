@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import MyDayView from "@/components/engagement/MyDayView";
 import EvidenceReasoningCard from "@/components/engagement/EvidenceReasoningCard";
+import ChangeAnalysisPanel from "@/components/intelligence/ChangeAnalysisPanel";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
 import WorkPlanSection from "@/components/engagement/WorkPlanSection";
@@ -23,11 +24,12 @@ function EngagementDetailContent() {
     nextActionData,
     approvedAcme,
     handleApproveChange,
-    fetchEngagementDetail
+    fetchEngagementDetail,
+    activeTab,
+    setActiveTab
   } = useEngagement();
-  const [activeTab, setActiveTab] = useState<"myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline">("myday");
 
-  // Sync route parameter with active engagement context
+  // Sync route parameter and query tab with active engagement context
   React.useEffect(() => {
     if (engagementId) {
       if (activeCustomer.id !== engagementId) {
@@ -38,7 +40,24 @@ function EngagementDetailContent() {
       }
       fetchEngagementDetail(engagementId);
     }
+
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get("tab");
+      if (tabParam && ["myday", "plan", "knowledge", "changes", "updates", "timeline"].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
+    }
   }, [engagementId, customers]);
+
+  const handleTabChange = (tab: "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline") => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
 
   const isAcme = engagementId === "eng-acme-001";
 
@@ -93,7 +112,7 @@ function EngagementDetailContent() {
           {/* Simple, Consistent Tabs Navigation (Swipeable horizontally on mobile) */}
           <nav className="flex items-center gap-1.5 border-t border-slate-100 pt-2.5 overflow-x-auto text-xs whitespace-nowrap pb-1">
             <button
-              onClick={() => setActiveTab("myday")}
+              onClick={() => handleTabChange("myday")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 activeTab === "myday"
                   ? "bg-slate-900 text-white"
@@ -103,7 +122,7 @@ function EngagementDetailContent() {
               My Day
             </button>
             <button
-              onClick={() => setActiveTab("plan")}
+              onClick={() => handleTabChange("plan")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 activeTab === "plan"
                   ? "bg-slate-900 text-white"
@@ -113,7 +132,7 @@ function EngagementDetailContent() {
               Plan &amp; Tasks
             </button>
             <button
-              onClick={() => setActiveTab("knowledge")}
+              onClick={() => handleTabChange("knowledge")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 activeTab === "knowledge"
                   ? "bg-slate-900 text-white"
@@ -123,7 +142,7 @@ function EngagementDetailContent() {
               Knowledge
             </button>
             <button
-              onClick={() => setActiveTab("changes")}
+              onClick={() => handleTabChange("changes")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 activeTab === "changes"
                   ? "bg-slate-900 text-white"
@@ -133,7 +152,7 @@ function EngagementDetailContent() {
               Changes &amp; Risks
             </button>
             <button
-              onClick={() => setActiveTab("updates")}
+              onClick={() => handleTabChange("updates")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 activeTab === "updates"
                   ? "bg-slate-900 text-white"
@@ -143,7 +162,7 @@ function EngagementDetailContent() {
               Customer Updates
             </button>
             <button
-              onClick={() => setActiveTab("timeline")}
+              onClick={() => handleTabChange("timeline")}
               className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 activeTab === "timeline"
                   ? "bg-slate-900 text-white"
@@ -185,29 +204,17 @@ function EngagementDetailContent() {
           </div>
         )}
 
-        {/* 4. CHANGES & RISKS TAB: Scope drift, reasoning, and approval */}
+        {/* 4. CHANGES & RISKS TAB: Live scope drift, reasoning, and approval */}
         {activeTab === "changes" && (
           <div className="space-y-6">
-            <EvidenceReasoningCard
+            <ChangeAnalysisPanel
               key={engagementId}
-              title="UNDERSTAND Change Impact Reasoning"
-              evidence={[
-                `Customer requirement input: 'Enterprise SSO is mandatory before cutover.'`,
-                `Current Outcome v1 success criteria lacks enterprise authentication clause.`,
-                `Step 4 production validation gated on security compliance.`
-              ]}
-              reasoning={[
-                `Adding Enterprise SSO is a mandatory gating requirement for customer IT security sign-off.`,
-                `Outcome Goals progress affected: Step 4 requires SSO validation item before Step 5 deployment.`
-              ]}
-              recommendation={
-                approvedAcme
-                  ? "Outcome Version 2 active. Enterprise SSO requirement integrated into Outcome Goals."
-                  : "Upgrade Outcome to Version 2. Add Enterprise SSO configuration & validation to Outcome Goals and request Manager approval."
-              }
-              confidence="High (96.4%)"
-              approvalRequired={!approvedAcme}
-              onApprove={!approvedAcme ? handleApproveChange : undefined}
+              engagementId={engagementId}
+              customerName={activeCustomer.customerName}
+              outcomeVersion={currentOutcomeVersion}
+              onPlanUpdated={() => {
+                fetchEngagementDetail(engagementId);
+              }}
             />
           </div>
         )}

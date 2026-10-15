@@ -105,6 +105,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     step?: number;
     total_steps?: number;
   } | null>(null);
+  const [hasFreshEvidence, setHasFreshEvidence] = useState(false);
 
   // Clear brief and local tasks when active customer changes so it never auto-runs
   useEffect(() => {
@@ -112,16 +113,30 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     setLastRefreshed("");
     setStreamEvent(null);
     setLocalTasks([]);
+    setHasFreshEvidence(false);
   }, [activeCustomer?.id]);
 
-  // Run sequential Morning Brief (UNDERSTAND -> PLAN/KNOW -> MOVE) only on explicit click
+  // Listen for state changes (worknotes, plan approvals, task changes) to signal fresh evidence
+  useEffect(() => {
+    const handleStateChange = (e: any) => {
+      if (e?.detail?.engagementId === activeCustomer?.id) {
+        setHasFreshEvidence(true);
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("calmwork-state-change", handleStateChange);
+      return () => window.removeEventListener("calmwork-state-change", handleStateChange);
+    }
+  }, [activeCustomer?.id]);
+
+  // Run sequential Morning Brief (PLAN -> KNOW -> MOVE) only on explicit click
   const runMorningBrief = useCallback(async () => {
     if (!activeCustomer?.id) return;
     setBriefLoading(true);
     setStreamEvent({
       agent: "SUPERVISOR",
       stage: "INIT",
-      message: "Starting sequential Morning Brief across UNDERSTAND, PLAN, and MOVE agents...",
+      message: "Starting sequential Morning Brief across PLAN, KNOW, and MOVE agents...",
       step: 1,
       total_steps: 5
     });
@@ -578,7 +593,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 type="button"
                 onClick={runMorningBrief}
                 disabled={briefLoading}
-                title="Run UNDERSTAND, PLAN, and MOVE agents to generate Morning Brief"
+                title="Run PLAN, KNOW, and MOVE agents to generate Morning Brief"
                 className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
@@ -634,7 +649,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
               type="button"
               onClick={runMorningBrief}
               disabled={briefLoading}
-              title="Run UNDERSTAND, PLAN, and MOVE agents to generate Morning Brief"
+              title="Run PLAN, KNOW, and MOVE agents to generate Morning Brief"
               className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
             >
               <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
@@ -654,7 +669,26 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
         </div>
       )}
 
-      {/* Live Multi-Agent Execution Progress Banner (UNDERSTAND -> PLAN/KNOW -> MOVE) */}
+      {/* Fresh Evidence Invalidation Notice */}
+      {hasFreshEvidence && brief && (
+        <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900 flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>New work notes, decisions, or scope shifts recorded. Refresh to incorporate fresh evidence into Morning Brief.</span>
+          </div>
+          <button
+            onClick={() => {
+              setHasFreshEvidence(false);
+              runMorningBrief();
+            }}
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded text-xs transition shadow-2xs shrink-0 cursor-pointer"
+          >
+            Re-run Brief
+          </button>
+        </div>
+      )}
+
+      {/* Live Multi-Agent Execution Progress Banner (PLAN -> KNOW -> MOVE) */}
       {briefLoading && (
         <div className="p-5 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-md space-y-4 animate-fadeIn">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -669,7 +703,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                   Running Morning Brief Multi-Agent Orchestration
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Executing UNDERSTAND, PLAN (KNOW), and MOVE agents sequentially
+                  Executing PLAN, KNOW, and MOVE specialists under Supervisor orchestration
                 </p>
               </div>
             </div>
@@ -680,45 +714,45 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
 
           {/* 3 Core Agent Stages */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Agent 1: UNDERSTAND */}
+            {/* Agent 1: PLAN */}
             <div className={`p-3 rounded-lg border transition ${
-              streamEvent?.agent === "UNDERSTAND"
-                ? "bg-sky-950/70 border-sky-500 text-sky-100 shadow-sm"
+              streamEvent?.agent === "PLAN"
+                ? "bg-purple-950/70 border-purple-500 text-purple-100 shadow-sm"
                 : streamEvent?.step && streamEvent.step > 2
                 ? "bg-slate-800/40 border-slate-700/60 text-slate-300"
                 : "bg-slate-800/20 border-slate-800 text-slate-500"
             }`}>
               <div className="flex items-center justify-between text-xs font-bold mb-1">
-                <span>1. UNDERSTAND</span>
-                {streamEvent?.agent === "UNDERSTAND" ? (
-                  <span className="text-[10px] font-mono text-sky-300 animate-pulse">Analyzing...</span>
+                <span>1. PLAN</span>
+                {streamEvent?.agent === "PLAN" ? (
+                  <span className="text-[10px] font-mono text-purple-300 animate-pulse">Evaluating Scope...</span>
                 ) : streamEvent?.step && streamEvent.step > 2 ? (
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 ) : null}
               </div>
               <p className="text-[11px] leading-snug">
-                Evaluates requirement shifts and scope drift.
+                Evaluates requirement shifts, dependencies, and contract drift.
               </p>
             </div>
 
-            {/* Agent 2: PLAN & KNOW */}
+            {/* Agent 2: KNOW */}
             <div className={`p-3 rounded-lg border transition ${
-              streamEvent?.agent === "KNOW" || (streamEvent?.agent === "SUPERVISOR" && streamEvent?.stage === "SYNTHESIS")
-                ? "bg-emerald-950/70 border-emerald-500 text-emerald-100 shadow-sm"
+              streamEvent?.agent === "KNOW"
+                ? "bg-blue-950/70 border-blue-500 text-blue-100 shadow-sm"
                 : streamEvent?.step && streamEvent.step > 3
                 ? "bg-slate-800/40 border-slate-700/60 text-slate-300"
                 : "bg-slate-800/20 border-slate-800 text-slate-500"
             }`}>
               <div className="flex items-center justify-between text-xs font-bold mb-1">
-                <span>2. PLAN &amp; KNOW</span>
-                {streamEvent?.agent === "KNOW" || (streamEvent?.agent === "SUPERVISOR" && streamEvent?.stage === "SYNTHESIS") ? (
-                  <span className="text-[10px] font-mono text-emerald-300 animate-pulse">Synthesizing...</span>
-                ) : streamEvent?.step && streamEvent.step > 4 ? (
+                <span>2. KNOW</span>
+                {streamEvent?.agent === "KNOW" ? (
+                  <span className="text-[10px] font-mono text-blue-300 animate-pulse">Retrieving Evidence...</span>
+                ) : streamEvent?.step && streamEvent.step > 3 ? (
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 ) : null}
               </div>
               <p className="text-[11px] leading-snug">
-                Grounded evidence retrieval &amp; daily work sequence.
+                Grounded evidence retrieval &amp; knowledge verification.
               </p>
             </div>
 
@@ -733,7 +767,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
               <div className="flex items-center justify-between text-xs font-bold mb-1">
                 <span>3. MOVE</span>
                 {streamEvent?.agent === "MOVE" ? (
-                  <span className="text-[10px] font-mono text-amber-300 animate-pulse">Evaluating...</span>
+                  <span className="text-[10px] font-mono text-amber-300 animate-pulse">Evaluating Velocity...</span>
                 ) : streamEvent?.step && streamEvent.step > 4 ? (
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 ) : null}
@@ -1142,7 +1176,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-1">
                       <div className="flex items-center gap-1.5 font-bold">
                         <ShieldCheck className="h-4 w-4 text-amber-700" />
-                        <span>Scope Drift Flagged by UNDERSTAND Agent</span>
+                        <span>Scope Drift Flagged by PLAN Agent</span>
                       </div>
                       <p className="text-[11px] leading-relaxed text-amber-800">
                         {brief.scope_drift_explanation || "New customer constraints detected requiring outcome alignment."}

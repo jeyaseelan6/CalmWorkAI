@@ -18,8 +18,12 @@ from app.db.database import get_db
 from app.models import Engagement, Outcome, OutcomeStatus, TimelineEvent
 from app.services import OutcomeService
 from app.auth import require_role
-from app.api.deps import supervisor_coordinator, know_agent
-from app.api.schemas import ProposeWorkPlanRequest, ApproveWorkPlanRequest
+from app.api.deps import supervisor_coordinator, know_agent, plan_agent
+from app.api.schemas import (
+    ProposeWorkPlanRequest,
+    ApproveWorkPlanRequest,
+    PlanReassessmentRequest
+)
 
 logger = logging.getLogger(__name__)
 
@@ -453,4 +457,37 @@ def get_work_plan(engagement_id: str, db: Session = Depends(get_db)):
             "plan": current_outcome.work_plan if current_outcome else None
         },
         "message": "Work plan retrieved successfully."
+    }
+
+
+@router.post("/engagements/{engagement_id}/plan/reassess")
+def reassess_work_plan(
+    engagement_id: str,
+    payload: PlanReassessmentRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    PLAN Agent: Iteratively reassesses an existing work plan when new evidence or worknotes arrive.
+    Detects scope drift, evaluates outcome health, and flags if manager approval is required.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    plan_dict = current_outcome.work_plan if current_outcome and current_outcome.work_plan else {}
+
+    result = plan_agent.reassess_plan_with_evidence(
+        engagement_id=engagement_id,
+        customer_name=eng.customer_name,
+        current_work_plan=plan_dict,
+        new_evidence_items=payload.new_evidence_items,
+        worknotes=payload.worknotes,
+        session_id=payload.session_id
+    )
+
+    return {
+        "success": True,
+        "data": result.model_dump(),
+        "message": "Work plan reassessed against new evidence."
     }

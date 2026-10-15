@@ -9,11 +9,56 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timezone
 
+import json
 from app.models import Base, Engagement, Outcome, TimelineEvent, Approval, EngagementStatus, WorkCycleStep, OutcomeStatus, ApprovalType, ApprovalStatus
 from app.privacy import PrivacyPolicyEngine
 from app.services import OutcomeService
-from app.agents import UnderstandAgent, KnowAgent, MoveAgent, DeliverAgent
+from app.agents import PlanAgent, UnderstandAgent, KnowAgent, MoveAgent, DeliverAgent
 from app.supervisor import SupervisorCoordinator
+from app.agents.adk_runtime import set_mock_adk_response, clear_mock_adk_responses
+
+
+@pytest.fixture(autouse=True)
+def setup_e2e_mocks():
+    mock_change_analysis = json.dumps({
+        "change_title": "Enterprise SSO requirement addition",
+        "evidence": ["Customer IT contact stated: Enterprise SSO is required."],
+        "reasoning": ["SSO requirement expands scope and introduces gating dependency."],
+        "recommendation": "Upgrade Outcome to Version 2 with Manager approval.",
+        "suggested_outcome_statement": "Reduce manual processing time by 40% with Enterprise SSO.",
+        "suggested_success_criteria": [
+            {"id": "sc-1", "title": "Workflow implemented", "completed": True},
+            {"id": "sc-2", "title": "Benchmark complete", "completed": True},
+            {"id": "sc-3", "title": "Production validation complete", "completed": False},
+            {"id": "sc-4", "title": "Enterprise SSO identity provider configured", "completed": False}
+        ],
+        "risk_score": "HIGH",
+        "affected_dimensions": ["Authentication", "Outcome Goals", "Security"]
+    })
+    mock_move = json.dumps({
+        "action_title": "Configure SAML SSO Integration",
+        "situation": "Enterprise SSO gating dependency approved by Manager.",
+        "recommendation": "Configure IdP credentials in vault.",
+        "why_now": "Unblocks production deployment.",
+        "impact": "Fulfills customer security mandate.",
+        "priority_level": "CRITICAL",
+        "confidence": "High",
+        "approval_required": False,
+        "affected_role": "FDE"
+    })
+    mock_deliver = json.dumps({
+        "subject": "Executive Update: Enterprise SSO Scope Approved",
+        "executive_summary": "Manager has approved the addition of enterprise SSO to Outcome Version 2.",
+        "key_milestones_achieved": ["Workflow implemented", "Benchmark complete"],
+        "next_milestone_target": "IdP Integration & Cutover",
+        "customer_action_items": ["Provide SAML metadata XML"]
+    })
+    set_mock_adk_response("anonymized requirement input", mock_change_analysis)
+    set_mock_adk_response("current work cycle", mock_move)
+    set_mock_adk_response("engineer notes", mock_deliver)
+    set_mock_adk_response("target outcome", mock_deliver)
+    yield
+    clear_mock_adk_responses()
 
 
 @pytest.fixture
@@ -61,7 +106,7 @@ def test_db():
 
 def test_complete_e2e_intelligence_workflow(test_db):
     privacy_engine = PrivacyPolicyEngine(use_cloud_dlp=False)
-    understand_agent = UnderstandAgent(privacy_engine=privacy_engine)
+    plan_agent = PlanAgent(privacy_engine=privacy_engine)
     move_agent = MoveAgent(privacy_engine=privacy_engine)
     deliver_agent = DeliverAgent(privacy_engine=privacy_engine)
     outcome_service = OutcomeService(test_db)
@@ -79,8 +124,8 @@ def test_complete_e2e_intelligence_workflow(test_db):
     assert "john@acme.com" not in anon_text
     assert "[EMAIL_001]" in anon_text or "[PERSON_001]" in anon_text or len(mapping.reference_to_original) > 0
 
-    # 4. Run UNDERSTAND Agent Change Impact Analysis
-    analysis = understand_agent.analyze_change(
+    # 4. Run PLAN Agent Change Impact Analysis (migrated from UNDERSTAND)
+    analysis = plan_agent.analyze_change(
         raw_change_text=raw_requirement,
         current_outcome_statement=outcome_v1.statement,
         current_success_criteria=outcome_v1.success_criteria,
@@ -101,7 +146,7 @@ def test_complete_e2e_intelligence_workflow(test_db):
         engagement_id=eng.id,
         new_statement=outcome_v1.statement,
         new_success_criteria=analysis.suggested_success_criteria,
-        proposed_by="understand_agent",
+        proposed_by="plan_agent",
         reason="Manager approved Enterprise SSO scope expansion."
     )
 

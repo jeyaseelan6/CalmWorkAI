@@ -17,7 +17,7 @@ from app.models import (
     Approval, ApprovalType, ApprovalStatus
 )
 from app.auth import require_role
-from app.api.deps import understand_agent, move_agent, deliver_agent
+from app.api.deps import plan_agent, move_agent, deliver_agent, understand_agent
 from app.api.schemas import (
     ChangeAnalysisRequest,
     GenerateCustomerUpdateRequest,
@@ -31,7 +31,7 @@ router = APIRouter()
 
 @router.post("/engagements/{engagement_id}/analyze-change", tags=["Intelligence"])
 def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisRequest, db: Session = Depends(get_db)):
-    """UNDERSTAND Agent: Evaluates requirement shifts and scope creep against Outcome Goals."""
+    """PLAN Agent: Evaluates requirement shifts and scope creep against Outcome Goals."""
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -41,7 +41,7 @@ def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisRequest, db
     criteria = current_outcome.success_criteria if current_outcome else []
 
     try:
-        analysis = understand_agent.analyze_change(
+        analysis = plan_agent.analyze_change(
             raw_change_text=payload.raw_change_text,
             current_outcome_statement=statement,
             current_success_criteria=criteria,
@@ -53,9 +53,9 @@ def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisRequest, db
             engagement_id=engagement_id,
             event_type="CHANGE_DETECTED",
             title="Change Impact Analysis Generated",
-            description=f"UNDERSTAND Agent evaluated requirement shift: '{payload.raw_change_text[:80]}...'",
-            actor_type="UNDERSTAND_AGENT",
-            actor_id="agent_understand",
+            description=f"PLAN Agent evaluated requirement shift: '{payload.raw_change_text[:80]}...'",
+            actor_type="PLAN_AGENT",
+            actor_id="agent_plan",
             created_at=datetime.utcnow()
         ))
         db.commit()

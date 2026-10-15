@@ -73,23 +73,33 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white border border-slate-200 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fadeIn">
+    <div 
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-3 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-engagement-title"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-slate-200 rounded-xl shadow-2xl w-full max-w-lg max-h-[92dvh] overflow-y-auto animate-fadeIn"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-md bg-blue-50 text-blue-600">
               <Building2 className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold font-display text-slate-900">Create New Customer Engagement</h3>
+              <h3 id="create-engagement-title" className="text-sm font-bold font-display text-slate-900">Create New Customer Engagement</h3>
               <p className="text-[11px] text-slate-500">Manager &amp; FDE Grounding: Immediately syncs to workspace &amp; daily work sequence</p>
             </div>
           </div>
           <button 
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-2 rounded-md transition cursor-pointer"
+            aria-label="Close create engagement modal"
           >
             <X className="h-4 w-4" />
           </button>
@@ -199,11 +209,11 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
             />
           </div>
 
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 pb-1">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              className="px-4 py-2 min-h-[44px] text-xs text-slate-600 hover:text-slate-800 transition cursor-pointer font-medium"
             >
               Cancel
             </button>
@@ -211,7 +221,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
               type="submit"
               disabled={submitting || !isManager}
               title={!isManager ? "Manager role required to create engagements" : "Create customer engagement"}
-              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-md transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+              className="px-4 py-2 min-h-[44px] bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-md transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
             >
               {!isManager ? <Lock className="h-3.5 w-3.5 text-slate-400" /> : <Plus className="h-3.5 w-3.5" />}
               <span>{submitting ? "Creating..." : !isManager ? "Manager Role Required" : "Create Engagement"}</span>

@@ -11,7 +11,7 @@ export default function MainPage() {
 
   useEffect(() => {
     const targetId = activeCustomer?.id || customers[0]?.id || "eng-acme-001";
-    router.replace(`/engagements/${targetId}`);
+    router.replace(`/engagements/${targetId}?tab=myday`);
   }, [activeCustomer?.id, customers, router]);
 
   return (

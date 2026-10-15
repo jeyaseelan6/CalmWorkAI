@@ -91,9 +91,13 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
         const json = await res.json();
         if (json.success && json.data) {
           setDraft(json.data);
-          // New draft starts unapproved unless backend already had an approved record
-          const localApproved = typeof window !== "undefined" ? localStorage.getItem(`cu_approved_${engagementId}`) === "true" : false;
-          setApproved(localApproved);
+          // New draft must always start unapproved; changing content requires reapproval
+          setApproved(false);
+          setApprovedBy(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(`cu_approved_${engagementId}`);
+            localStorage.removeItem(`cu_approver_${engagementId}`);
+          }
         } else {
           setError(json.message || "Failed to generate AI customer update.");
           setDraft(null);
@@ -174,7 +178,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   const handleDownloadPdf = async () => {
     if (!draft) return;
     if (!approved) {
-      alert("Manager Approval Required: This DELIVER agent report cannot be downloaded as PDF until approved by an Engineering Manager.");
+      setError("Manager Approval Required: An Engineering Manager must review and sign off on this executive update draft before downloading the PDF.");
       return;
     }
 
@@ -183,7 +187,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
       if (!res.ok) {
-        alert("Manager Approval Required: The DELIVER agent report cannot be downloaded as PDF until approved by an Engineering Manager.");
+        setError("Manager Approval Required: The executive customer update cannot be downloaded as PDF until approved by an Engineering Manager.");
         return;
       }
     } catch (e) {
@@ -207,7 +211,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   const handlePrintPdf = async () => {
     if (!draft) return;
     if (!approved) {
-      alert("Manager Approval Required: This DELIVER agent report cannot be viewed as PDF until approved by an Engineering Manager.");
+      setError("Manager Approval Required: An Engineering Manager must review and sign off on this executive update draft before viewing or printing the PDF.");
       return;
     }
 
@@ -216,7 +220,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
       if (!res.ok) {
-        alert("Manager Approval Required: The DELIVER agent report cannot be viewed as PDF until approved by an Engineering Manager.");
+        setError("Manager Approval Required: The executive customer update cannot be viewed as PDF until approved by an Engineering Manager.");
         return;
       }
     } catch (e) {

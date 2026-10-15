@@ -67,3 +67,17 @@ class WorknotePayload(BaseModel):
     title: str
     description: str
     actor_name: str = "FDE User"
+
+
+class SupportInvestigationRequest(BaseModel):
+    issue_description: str
+    error_logs: Optional[str] = None
+    screenshot_metadata: Optional[Dict[str, Any]] = None
+    screenshot_base64: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class PlanReassessmentRequest(BaseModel):
+    new_evidence_items: List[str] = []
+    worknotes: Optional[List[str]] = None
+    session_id: Optional[str] = None

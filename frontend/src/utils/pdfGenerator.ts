@@ -279,9 +279,6 @@ export function buildCustomerUpdatePdfBlob(data: CustomerUpdatePdfData): Blob {
  */
 export function downloadCustomerUpdatePdf(data: CustomerUpdatePdfData): boolean {
   if (!data.isApproved) {
-    if (typeof window !== "undefined") {
-      alert("Manager Approval Required: This executive summary must be reviewed and approved by an Engineering Manager before downloading the PDF.");
-    }
     return false;
   }
 
@@ -309,9 +306,6 @@ export function downloadCustomerUpdatePdf(data: CustomerUpdatePdfData): boolean 
  */
 export function printCustomerUpdateDocument(data: CustomerUpdatePdfData): boolean {
   if (!data.isApproved) {
-    if (typeof window !== "undefined") {
-      alert("Manager Approval Required: This executive summary must be reviewed and approved by an Engineering Manager before viewing or printing the PDF.");
-    }
     return false;
   }
 
