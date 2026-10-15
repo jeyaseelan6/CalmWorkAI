@@ -6,7 +6,7 @@ import {
   CheckCircle2, AlertTriangle, UploadCloud, FileUp, Folder,
   RefreshCw, Check, Layers, Clock, Lock, FileCode,
   Eye, Download, ZoomIn, ZoomOut, RotateCcw, X, Copy,
-  ExternalLink, Image as ImageIcon, Filter
+  ExternalLink, Image as ImageIcon, Filter, ChevronDown
 } from "lucide-react";
 import { formatISTDateTime } from "@/utils/date";
 
@@ -71,8 +71,6 @@ const CATEGORIES = [
 ];
 
 export default function KnowledgePanel({ engagementId, customerName }: KnowledgePanelProps) {
-  const [activeTab, setActiveTab] = useState<"documents" | "query">("documents");
-
   // Query State
   const [query, setQuery] = useState("");
   const [queryLoading, setQueryLoading] = useState(false);
@@ -90,7 +88,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   // Search & Filtering State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<"all" | "pdf" | "image" | "text">("all");
+  const askCardRef = useRef<HTMLDivElement>(null);
 
   // Document Viewer Modal State
   const [viewingDoc, setViewingDoc] = useState<IndexedDocument | null>(null);
@@ -199,11 +197,6 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
       if (selectedCategory !== "All" && doc.category !== selectedCategory) {
         return false;
       }
-      // Type filter
-      if (selectedTypeFilter !== "all") {
-        const ftype = doc.file_type || (doc.title.toLowerCase().endsWith(".pdf") ? "pdf" : "text");
-        if (ftype !== selectedTypeFilter) return false;
-      }
       // Keyword search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -213,7 +206,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
       }
       return true;
     });
-  }, [documents, searchQuery, selectedCategory, selectedTypeFilter]);
+  }, [documents, searchQuery, selectedCategory]);
 
   // Handle RAG Q&A
   const handleSearch = async (e: React.FormEvent) => {
@@ -347,177 +340,303 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-slate-200 bg-slate-50/50">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-700">
-            <BookOpen className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              KNOW Agent Grounded Intelligence
-              <span className="text-xs bg-teal-100 text-teal-800 font-mono px-2 py-0.5 rounded font-semibold">
-                RAG Active
-              </span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Document library, reading interfaces, and verified citations for <strong className="text-slate-700">{customerName}</strong>
-            </p>
+    <div className="space-y-6">
+      {/* ========================================================= */}
+      {/* CARD 1: Grounded Q&A Interface (Ask KNOW Agent)           */}
+      {/* ========================================================= */}
+      <div ref={askCardRef} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        {/* Card 1 Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 shadow-2xs">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                Ask KNOW Agent
+                <span className="text-[10px] bg-teal-100 text-teal-800 font-mono px-2 py-0.5 rounded font-semibold border border-teal-200">
+                  RAG Active
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Grounded questions across verified technical documents and architecture for <strong className="text-slate-700 font-semibold">{customerName}</strong>
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-lg text-xs font-medium self-stretch sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab("documents")}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
-              activeTab === "documents"
-                ? "bg-white text-slate-900 shadow-xs font-semibold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Folder className="h-3.5 w-3.5" />
-            <span>Document Library ({documents.length})</span>
-          </button>
+        {/* Card 1 Body */}
+        <div className="p-4 sm:p-5 space-y-4">
+          {/* Query Search Form */}
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder={`Ask anything about ${customerName}'s architecture, security policies, or specifications...`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition shadow-2xs"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={queryLoading}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50 shrink-0 cursor-pointer shadow-2xs"
+            >
+              {queryLoading ? (
+                <>
+                  <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                  <span>Synthesizing...</span>
+                </>
+              ) : (
+                <>
+                  <span>Ask Agent</span>
+                  <Send className="h-3.5 w-3.5" />
+                </>
+              )}
+            </button>
+          </form>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("query")}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
-              activeTab === "query"
-                ? "bg-white text-slate-900 shadow-xs font-semibold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Ask Agent</span>
-          </button>
+          {/* Quick suggestions based on uploaded docs */}
+          {documents.length > 0 && !answerData && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-xs text-slate-400 font-medium">Quick Queries:</span>
+              <button
+                type="button"
+                onClick={() => setQuery("What are the enterprise security and SSO requirements?")}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition cursor-pointer"
+              >
+                &ldquo;What are the SSO requirements?&rdquo;
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuery("What is the database cutover window and migration pipeline?")}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition cursor-pointer"
+              >
+                &ldquo;What is the cutover window?&rdquo;
+              </button>
+            </div>
+          )}
+
+          {/* Error Output */}
+          {queryError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+              <span>{queryError}</span>
+            </div>
+          )}
+
+          {/* Answer Output */}
+          {answerData && (
+            <div className="space-y-4 pt-3 border-t border-slate-100 animate-fadeIn">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-teal-600" />
+                  Grounded Knowledge Synthesis:
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-700 font-mono font-bold bg-slate-100 px-2 py-0.5 rounded">
+                    Confidence: {Math.round(answerData.confidence_score * 100)}%
+                  </span>
+                  {answerData.privacy_scrubbed && (
+                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-mono text-xs font-bold flex items-center gap-1">
+                      <Lock className="h-3 w-3 text-emerald-600" />
+                      Privacy Scrubbed
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Synthesized Answer */}
+              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 text-xs text-slate-900 leading-relaxed whitespace-pre-wrap font-medium">
+                {answerData.answer}
+              </div>
+
+              {/* Insufficient Evidence Warning Banner */}
+              {(answerData.evidence_sufficient === false ||
+                (answerData.citations?.length === 0 && answerData.confidence_score < 0.5) ||
+                answerData.answer.toLowerCase().includes("don't have enough verified engagement evidence")) && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div className="space-y-1">
+                    <span className="font-bold block">Authorized Evidence Insufficient</span>
+                    <p className="text-amber-800 leading-relaxed">
+                      The KNOW agent found insufficient verified engagement documents or operational records to ground a definitive answer without speculation. Please upload relevant technical specifications, runbooks, or architecture notes to expand verified evidence.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Citations & Evidence Context */}
+              {answerData.citations && answerData.citations.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-teal-600" />
+                      Verified Source Evidence ({answerData.citations.length} Chunks)
+                    </span>
+                    <span className="text-xs text-slate-400">Strictly grounded &middot; zero hallucinations</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {answerData.citations.map((c, i) => {
+                      const matchedDoc = documents.find(
+                        (d) => d.title.toLowerCase() === c.document_title.toLowerCase()
+                      );
+
+                      return (
+                        <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
+                          <div className="flex items-center justify-between font-semibold text-xs text-slate-900">
+                            <span className="flex items-center gap-1.5 text-teal-800 truncate">
+                              <FileText className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                              <span className="truncate">{c.document_title}</span>
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-slate-500 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded">
+                                Relevance: {c.relevance_score}
+                              </span>
+                              {matchedDoc && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenViewer(matchedDoc)}
+                                  className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 border border-teal-200 transition cursor-pointer"
+                                >
+                                  View Source
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-slate-600 italic text-xs leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
+                            &ldquo;{c.snippet}&rdquo;
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 italic">
+                  No specific document chunks were cited for this response.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Upload Feedback Banner */}
-      {uploadSuccess && (
-        <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-            <span>{uploadSuccess}</span>
+      {/* ========================================================= */}
+      {/* CARD 2: Document Library                                  */}
+      {/* ========================================================= */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        {/* Card 2 Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-5 border-b border-slate-200 bg-slate-50/50">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 shadow-2xs">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                Document Library
+                <span className="text-xs bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded font-semibold border border-slate-200">
+                  {documents.length} {documents.length === 1 ? "document" : "documents"}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Document repository, reading interfaces, and verified citations for <strong className="text-slate-700 font-semibold">{customerName}</strong>
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setUploadSuccess(null)}
-            className="text-slate-400 hover:text-slate-700 cursor-pointer"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+
+          {/* Action Buttons: Refresh + Upload Document */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={fetchDocuments}
+              disabled={docsLoading}
+              title="Refresh documents"
+              className="p-2 text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition cursor-pointer shadow-2xs"
+            >
+              <RefreshCw className={`h-4 w-4 ${docsLoading ? "animate-spin" : ""}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowUploadForm(!showUploadForm)}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
+                showUploadForm
+                  ? "bg-slate-200 text-slate-800"
+                  : "bg-slate-900 hover:bg-slate-800 text-white"
+              }`}
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              <span>{showUploadForm ? "Hide Upload Form" : "Upload Document"}</span>
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* ========================================================= */}
-      {/* TAB 1: Document Library & Reading Interfaces               */}
-      {/* ========================================================= */}
-      {activeTab === "documents" && (
-        <div className="p-5 space-y-5">
-          {/* Action Row: Search Bar + Filter Pills + Upload Toggle */}
-          <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              {/* Search Bar */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search documents by keyword, title, or category..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
+        {/* Upload Feedback Banner */}
+        {uploadSuccess && (
+          <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span>{uploadSuccess}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadSuccess(null)}
+              className="text-slate-400 hover:text-slate-700 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+        <div className="p-4 sm:p-5 space-y-4">
+          {/* Action Row: Search Bar + Category Dropdown */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {/* Search Bar */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search documents by keyword, title, or category..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition shadow-2xs"
+              />
+              {searchQuery && (
                 <button
-                  type="button"
-                  onClick={fetchDocuments}
-                  disabled={docsLoading}
-                  title="Refresh documents"
-                  className="p-2 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
-                  <RefreshCw className={`h-4 w-4 ${docsLoading ? "animate-spin" : ""}`} />
+                  <X className="h-3.5 w-3.5" />
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowUploadForm(!showUploadForm)}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                    showUploadForm
-                      ? "bg-slate-200 text-slate-800"
-                      : "bg-slate-900 hover:bg-slate-800 text-white"
-                  }`}
-                >
-                  <FileUp className="h-3.5 w-3.5" />
-                  <span>{showUploadForm ? "Hide Upload Form" : "Upload Document"}</span>
-                </button>
-              </div>
+              )}
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
-              <span className="text-xs text-slate-400 font-medium mr-1 flex items-center gap-1">
-                <Filter className="h-3 w-3" />
-                Category:
-              </span>
-              {["All", ...CATEGORIES].map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                    selectedCategory === cat
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                  }`}
+            {/* Category Dropdown */}
+            <div className="flex items-center gap-2 shrink-0">
+              <label htmlFor="knowledge-category-select" className="text-xs text-slate-500 font-medium flex items-center gap-1 shrink-0">
+                <Filter className="h-3.5 w-3.5 text-slate-400" />
+                <span>Category:</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="knowledge-category-select"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs rounded-lg pl-3 pr-8 py-2 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition cursor-pointer shadow-2xs"
                 >
-                  {cat}
-                </button>
-              ))}
-
-              <span className="text-slate-300 mx-1">|</span>
-
-              {/* Type Pills */}
-              <button
-                type="button"
-                onClick={() => setSelectedTypeFilter(selectedTypeFilter === "pdf" ? "all" : "pdf")}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
-                  selectedTypeFilter === "pdf"
-                    ? "bg-rose-700 text-white"
-                    : "bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200"
-                }`}
-              >
-                <FileText className="h-3 w-3" />
-                <span>PDFs Only</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedTypeFilter(selectedTypeFilter === "image" ? "all" : "image")}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
-                  selectedTypeFilter === "image"
-                    ? "bg-purple-700 text-white"
-                    : "bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200"
-                }`}
-              >
-                <ImageIcon className="h-3 w-3" />
-                <span>Images Only</span>
-              </button>
+                  <option value="All">All Categories ({documents.length})</option>
+                  {CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              </div>
             </div>
           </div>
 
@@ -745,8 +864,8 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                       <button
                         type="button"
                         onClick={() => {
-                          setActiveTab("query");
                           setQuery(`Summarize the key requirements from ${doc.title}`);
+                          askCardRef.current?.scrollIntoView({ behavior: "smooth" });
                         }}
                         className="text-xs text-teal-700 hover:text-teal-900 font-semibold px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200 transition flex items-center gap-1 cursor-pointer"
                       >
@@ -760,170 +879,7 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
             </div>
           )}
         </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* TAB 2: Grounded Q&A Interface (Ask Agent)                  */}
-      {/* ========================================================= */}
-      {activeTab === "query" && (
-        <div className="p-5 space-y-4">
-          {/* Query Search Form */}
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder={`Ask anything about ${customerName}'s architecture, security policies, or specifications...`}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={queryLoading}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50 shrink-0 cursor-pointer"
-            >
-              {queryLoading ? (
-                <>
-                  <Sparkles className="h-3.5 w-3.5 animate-spin" />
-                  <span>Synthesizing...</span>
-                </>
-              ) : (
-                <>
-                  <span>Ask Agent</span>
-                  <Send className="h-3.5 w-3.5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Quick suggestions based on uploaded docs */}
-          {documents.length > 0 && !answerData && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-xs text-slate-400 font-medium">Quick Queries:</span>
-              <button
-                type="button"
-                onClick={() => setQuery("What are the enterprise security and SSO requirements?")}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded transition cursor-pointer"
-              >
-                &ldquo;What are the SSO requirements?&rdquo;
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuery("What is the database cutover window and migration pipeline?")}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded transition cursor-pointer"
-              >
-                &ldquo;What is the cutover window?&rdquo;
-              </button>
-            </div>
-          )}
-
-          {/* Error Output */}
-          {queryError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-              <span>{queryError}</span>
-            </div>
-          )}
-
-          {/* Answer Output */}
-          {answerData && (
-            <div className="space-y-4 pt-3 border-t border-slate-100 animate-fadeIn">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-semibold flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                  Grounded Knowledge Synthesis:
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-700 font-mono font-bold bg-slate-100 px-2 py-0.5 rounded">
-                    Confidence: {Math.round(answerData.confidence_score * 100)}%
-                  </span>
-                  {answerData.privacy_scrubbed && (
-                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-mono text-xs font-bold flex items-center gap-1">
-                      <Lock className="h-3 w-3 text-emerald-600" />
-                      Privacy Scrubbed
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Synthesized Answer */}
-              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 text-xs text-slate-900 leading-relaxed whitespace-pre-wrap font-medium">
-                {answerData.answer}
-              </div>
-
-              {/* Insufficient Evidence Warning Banner */}
-              {(answerData.evidence_sufficient === false ||
-                (answerData.citations?.length === 0 && answerData.confidence_score < 0.5) ||
-                answerData.answer.toLowerCase().includes("don't have enough verified engagement evidence")) && (
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-                  <div className="space-y-1">
-                    <span className="font-bold block">Authorized Evidence Insufficient</span>
-                    <p className="text-amber-800 leading-relaxed">
-                      The KNOW agent found insufficient verified engagement documents or operational records to ground a definitive answer without speculation. Please upload relevant technical specifications, runbooks, or architecture notes to expand verified evidence.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Citations & Evidence Context */}
-              {answerData.citations && answerData.citations.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                      <Layers className="h-3.5 w-3.5 text-teal-600" />
-                      Verified Source Evidence ({answerData.citations.length} Chunks)
-                    </span>
-                    <span className="text-xs text-slate-400">Strictly grounded &middot; zero hallucinations</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    {answerData.citations.map((c, i) => {
-                      const matchedDoc = documents.find(
-                        (d) => d.title.toLowerCase() === c.document_title.toLowerCase()
-                      );
-
-                      return (
-                        <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
-                          <div className="flex items-center justify-between font-semibold text-xs text-slate-900">
-                            <span className="flex items-center gap-1.5 text-teal-800 truncate">
-                              <FileText className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                              <span className="truncate">{c.document_title}</span>
-                            </span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-slate-500 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded">
-                                Relevance: {c.relevance_score}
-                              </span>
-                              {matchedDoc && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenViewer(matchedDoc)}
-                                  className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 border border-teal-200 transition cursor-pointer"
-                                >
-                                  View Source
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-slate-600 italic text-xs leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
-                            &ldquo;{c.snippet}&rdquo;
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 italic">
-                  No specific document chunks were cited for this response.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      </div>
 
       {/* ========================================================= */}
       {/* DOCUMENT VIEWER MODAL (PDF / IMAGE / TEXT READER)         */}
