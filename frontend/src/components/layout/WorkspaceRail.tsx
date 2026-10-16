@@ -60,7 +60,7 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
         {/* CalmWork Logo Icon */}
         <Link
           href="/engagements"
-          title="CalmWork AI · All Engagements"
+          title="CalmWork AI · All Workspaces"
           className="relative group p-1 flex items-center justify-center focus:outline-none"
         >
           <div className="w-10 h-10 rounded-2xl bg-white text-slate-950 font-display font-black text-base flex items-center justify-center shadow-md transition-all group-hover:rounded-xl group-hover:scale-105">
@@ -143,20 +143,20 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
           );
         })}
 
-        {/* "+ New Engagement" Button (Manager role) */}
+        {/* "+ New Workspace" Button (Manager role) */}
         {isManager && onOpenCreateModal && (
           <div className="relative group flex items-center justify-center w-full mt-1 shrink-0 pb-1">
             <button
               type="button"
               onClick={onOpenCreateModal}
-              title="Create New Engagement"
+              title="Create New Workspace"
               className="w-10 h-10 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-dashed border-slate-700/80 hover:border-slate-500 transition-all duration-200 cursor-pointer hover:rounded-xl focus:outline-none"
             >
               <Plus className="h-4 w-4" />
             </button>
             {/* Tooltip */}
             <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md shadow-xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-              New Engagement
+              New Workspace
             </div>
           </div>
         )}
@@ -166,7 +166,7 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
       <div className="flex flex-col items-center gap-2 w-full pt-2 border-t border-slate-900 shrink-0">
         <Link
           href="/engagements"
-          title="All Engagements Portfolio"
+          title="All Workspaces Portfolio"
           className="relative group p-2 text-slate-400 hover:text-white hover:bg-slate-900 rounded-xl transition-all cursor-pointer focus:outline-none"
         >
           <LayoutGrid className="h-5 w-5" />

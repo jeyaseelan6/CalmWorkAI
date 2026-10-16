@@ -75,9 +75,22 @@ def analyze_change_impact(engagement_id: str, payload: ChangeAnalysisRequest, db
         )
 
 
+_NEXT_ACTION_CACHE: Dict[str, Any] = {}
+
+
 @router.get("/engagements/{engagement_id}/next-action", tags=["Intelligence"])
 def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
-    """MOVE Agent: Evaluates next optimal action from current operational state."""
+    """MOVE Agent: Evaluates next optimal action from current operational state (cached with 180s TTL)."""
+    import time
+    now_ts = time.time()
+    cached = _NEXT_ACTION_CACHE.get(engagement_id)
+    if cached and (now_ts - cached["ts"] < 180):
+        return {
+            "success": True,
+            "data": cached["data"],
+            "message": "MOVE Agent Next Best Action retrieved from cache."
+        }
+
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
@@ -95,10 +108,12 @@ def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
             outcome_version=version,
             pending_approvals=len(approvals)
         )
+        rec_data = recommendation.model_dump()
+        _NEXT_ACTION_CACHE[engagement_id] = {"ts": now_ts, "data": rec_data}
 
         return {
             "success": True,
-            "data": recommendation.model_dump(),
+            "data": rec_data,
             "message": "MOVE Agent Next Best Action evaluated successfully."
         }
     except HTTPException:
@@ -109,7 +124,7 @@ def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
             "success": False,
             "data": None,
             "error": "ai_unavailable",
-            "message": "AI agents are temporarily unavailable due to rate limits. Click 'Morning Brief' to retry when ready."
+            "message": "AI agents are temporarily unavailable. Click 'Morning Brief' to retry when ready."
         }
 
 

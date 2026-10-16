@@ -32,7 +32,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isManager) {
-      setErrorMsg("Manager role required: Creating new customer engagements is restricted to Engineering Managers.");
+      setErrorMsg("Manager role required: Creating new customer workspaces is restricted to Engineering Managers.");
       return;
     }
     if (!customerName.trim() || !engagementName.trim()) {
@@ -54,7 +54,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
     setSubmitting(false);
 
     if (res.success) {
-      setSuccessMsg(`Engagement for ${customerName} initialized! Navigating to workspace...`);
+      setSuccessMsg(`Workspace for ${customerName} initialized! Navigating to workspace...`);
       const createdId = res.data?.id;
       setTimeout(() => {
         onClose();
@@ -68,7 +68,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
         }
       }, 800);
     } else {
-      setErrorMsg(res.error || "Failed to create engagement.");
+      setErrorMsg(res.error || "Failed to create workspace.");
     }
   };
 
@@ -91,7 +91,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
               <Building2 className="h-4 w-4" />
             </div>
             <div>
-              <h3 id="create-engagement-title" className="text-sm font-bold font-display text-slate-900">Create New Customer Engagement</h3>
+              <h3 id="create-engagement-title" className="text-sm font-bold font-display text-slate-900">Create New Workspace</h3>
               <p className="text-[11px] text-slate-500">Manager &amp; FDE Grounding: Immediately syncs to workspace &amp; daily work sequence</p>
             </div>
           </div>
@@ -99,7 +99,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 p-2 rounded-md transition cursor-pointer"
-            aria-label="Close create engagement modal"
+            aria-label="Close create workspace modal"
           >
             <X className="h-4 w-4" />
           </button>
@@ -112,7 +112,7 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <strong className="block font-semibold">Manager Role Required</strong>
-                <span>Only Engineering Managers can initialize new customer engagements. FDEs operate within authorized customer workspaces.</span>
+                <span>Only Engineering Managers can initialize new customer workspaces. FDEs operate within authorized customer workspaces.</span>
               </div>
             </div>
           )}
@@ -220,11 +220,11 @@ export default function CreateEngagementModal({ isOpen, onClose }: CreateEngagem
             <button
               type="submit"
               disabled={submitting || !isManager}
-              title={!isManager ? "Manager role required to create engagements" : "Create customer engagement"}
+              title={!isManager ? "Manager role required to create workspaces" : "Create customer workspace"}
               className="px-4 py-2 min-h-[44px] bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-md transition flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
             >
               {!isManager ? <Lock className="h-3.5 w-3.5 text-slate-400" /> : <Plus className="h-3.5 w-3.5" />}
-              <span>{submitting ? "Creating..." : !isManager ? "Manager Role Required" : "Create Engagement"}</span>
+              <span>{submitting ? "Creating..." : !isManager ? "Manager Role Required" : "Create Workspace"}</span>
             </button>
           </div>
         </form>

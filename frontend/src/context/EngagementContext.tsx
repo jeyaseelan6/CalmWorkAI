@@ -207,21 +207,23 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         setBackendError(errJson?.message || "The server is unavailable right now.");
         return;
       }
-      // Fetch next-action concurrently without blocking core UI rendering
-      fetch(`${API_BASE}/engagements/${id}/next-action`)
-        .then((r) => r.json())
-        .then((nextJson) => {
-          if (nextJson.success && nextJson.data) {
-            setNextActionData(nextJson.data);
-            setNextActionError(null);
-          } else if (!nextJson.success && nextJson.message) {
-            setNextActionData(null);
-            setNextActionError(nextJson.message);
-          }
-        })
-        .catch(() => {
-          setNextActionError("AI agents are temporarily unavailable. Click 'Morning Brief' to retry.");
-        });
+      // Fetch next-action only on explicit workspace switch or initial load (not on background heartbeat)
+      if (wipeOldState) {
+        fetch(`${API_BASE}/engagements/${id}/next-action`)
+          .then((r) => r.json())
+          .then((nextJson) => {
+            if (nextJson.success && nextJson.data) {
+              setNextActionData(nextJson.data);
+              setNextActionError(null);
+            } else if (!nextJson.success && nextJson.message) {
+              setNextActionData(null);
+              setNextActionError(nextJson.message);
+            }
+          })
+          .catch(() => {
+            setNextActionError("AI agents are temporarily unavailable. Click 'Morning Brief' to retry.");
+          });
+      }
     } catch (e) {
       console.warn("Backend API offline or unreachable; using local engagement state fallback.");
       setBackendError("The server is unavailable right now.");
@@ -262,14 +264,14 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     };
   }, [activeCustomer.id, fetchEngagementDetail]);
 
-  // Periodic heartbeat (every 6 seconds) to guarantee multi-device state consistency
+  // Periodic heartbeat (every 20 seconds) to guarantee multi-device state consistency without exhausting API quota
   useEffect(() => {
     const timer = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchPendingApprovals();
         fetchEngagementDetail(activeCustomer.id, false);
       }
-    }, 6000);
+    }, 20000);
     return () => clearInterval(timer);
   }, [activeCustomer.id, fetchEngagementDetail]);
 

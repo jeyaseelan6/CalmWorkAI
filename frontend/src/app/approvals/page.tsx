@@ -169,7 +169,7 @@ export default function ApprovalsPage() {
             </button>
           </div>
 
-          {/* Engagement Scope Filter */}
+          {/* Workspace Scope Filter */}
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[11px] font-mono text-slate-400">Scope:</span>
             <select
@@ -177,7 +177,7 @@ export default function ApprovalsPage() {
               onChange={(e) => setSelectedEngagementFilter(e.target.value)}
               className="bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-slate-400"
             >
-              <option value="ALL">All Engagements ({customers.length})</option>
+              <option value="ALL">All Workspaces ({customers.length})</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.customerName}

@@ -119,7 +119,7 @@ export default function LoginPage() {
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
               {selectedRole === "FDE"
-                ? "Access customer engagement cockpits, 6 work cycles, knowledge search & work plans."
+                ? "Access client workspaces, 6 work cycles, knowledge search & work plans."
                 : "Access manager governance, outcome version approvals, Outcome Goals sign-off & customer updates."}
             </p>
           </div>

@@ -176,7 +176,7 @@ export default function RecordWorknoteDrawer({ isOpen, onClose }: RecordWorknote
                   <span>Shared Memory Protocol</span>
                 </div>
                 <p className="leading-relaxed">
-                  Submitting this context updates the authoritative engagement timeline. All specialists (PLAN, KNOW, MOVE, DELIVER, SUPPORT) will read this new evidence immediately.
+                  Submitting this context updates the authoritative workspace timeline. All specialists (PLAN, KNOW, MOVE, DELIVER, SUPPORT) will read this new evidence immediately.
                 </p>
               </div>
 

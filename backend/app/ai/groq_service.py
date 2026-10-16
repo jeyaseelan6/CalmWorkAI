@@ -61,7 +61,7 @@ class GroqService:
         }
 
         # Try configured model, fallback to alternative models if rate-limited (429)
-        candidate_models = [self.model, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+        candidate_models = [self.model, "qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
         seen_models = set()
         models_to_try = []
         for m in candidate_models:

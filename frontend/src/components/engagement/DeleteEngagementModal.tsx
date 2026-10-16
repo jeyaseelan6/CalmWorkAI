@@ -34,7 +34,7 @@ export default function DeleteEngagementModal({
   const handleDelete = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isManager) {
-      setErrorMsg("Authorization Error: Only Engineering Managers can delete customer engagements.");
+      setErrorMsg("Authorization Error: Only Engineering Managers can delete customer workspaces.");
       return;
     }
 
@@ -49,7 +49,7 @@ export default function DeleteEngagementModal({
       onClose();
       router.push("/");
     } else {
-      setErrorMsg(res.error || "Failed to delete engagement.");
+      setErrorMsg(res.error || "Failed to delete workspace.");
     }
   };
 
@@ -62,9 +62,9 @@ export default function DeleteEngagementModal({
               <Trash2 className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Delete Customer Engagement</h2>
+              <h2 className="text-base font-bold text-slate-900">Delete Workspace</h2>
               <p className="text-xs text-slate-500">
-                Permanent deletion of engagement and all related assets
+                Permanent deletion of workspace and all related assets
               </p>
             </div>
           </div>
@@ -103,7 +103,7 @@ export default function DeleteEngagementModal({
           {!isManager && (
             <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
               <Lock className="h-4 w-4 text-amber-600 shrink-0" />
-              <span>Restricted: Only users with the <strong>Manager</strong> role have permission to delete engagements.</span>
+              <span>Restricted: Only users with the <strong>Manager</strong> role have permission to delete workspaces.</span>
             </div>
           )}
 
@@ -135,7 +135,7 @@ export default function DeleteEngagementModal({
               ) : (
                 <>
                   <Trash2 className="h-3.5 w-3.5" />
-                  <span>Permanently Delete Engagement</span>
+                  <span>Permanently Delete Workspace</span>
                 </>
               )}
             </button>

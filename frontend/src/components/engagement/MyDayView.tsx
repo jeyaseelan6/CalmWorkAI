@@ -711,10 +711,10 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 type="button"
                 onClick={() => setShowCreateEngagementModal(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs"
-                title="Create a new customer engagement (Manager & FDE)"
+                title="Create a new workspace (Manager & FDE)"
               >
                 <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                <span>+ New Engagement</span>
+                <span>+ New Workspace</span>
               </button>
 
               <Link
@@ -1032,7 +1032,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 <p className="text-xs text-slate-400 mt-0.5">
                   {brief
                     ? `Synthesized by Plan Agent &middot; Refreshed at ${lastRefreshed}`
-                    : "Active Engagement Work Plan &middot; Click 'Morning Brief' to re-prioritize"}
+                    : "Active Workspace Work Plan &middot; Click 'Morning Brief' to re-prioritize"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
