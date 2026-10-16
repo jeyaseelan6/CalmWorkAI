@@ -200,11 +200,45 @@ def respond_to_approval(
         }
     else:
         eng.status = "HEALTHY"
+        current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+        decision_note = payload.decision_note.strip() if payload.decision_note and payload.decision_note.strip() else "Rejected by Manager"
+
+        # Mark all pending approvals for this engagement as REJECTED
+        pending_approvals_list = db.query(Approval).filter(
+            Approval.engagement_id == engagement_id,
+            Approval.status == ApprovalStatus.PENDING
+        ).all()
+        for appr in pending_approvals_list:
+            appr.status = ApprovalStatus.REJECTED
+            appr.reviewed_by = manager_name
+            appr.decision_note = decision_note
+            appr.reviewed_at = datetime.utcnow()
+            if appr.type == ApprovalType.TASK_CREATION and current_outcome and current_outcome.work_plan:
+                from sqlalchemy.orm.attributes import flag_modified
+                wp = dict(current_outcome.work_plan)
+                tasks = list(wp.get("tasks", []))
+                for t in tasks:
+                    if isinstance(t, dict) and t.get("id") == appr.target_id:
+                        t["approval_status"] = "REJECTED"
+                wp["tasks"] = tasks
+                current_outcome.work_plan = wp
+                flag_modified(current_outcome, "work_plan")
+
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="APPROVAL_REJECTED",
+            title="Approval Proposal Rejected",
+            description=f"Manager ({manager_name}) rejected proposal for {eng.customer_name}: {decision_note}",
+            actor_type="MANAGER",
+            actor_id=current_user.get("id", "usr-mgr-002"),
+            created_at=datetime.utcnow()
+        ))
         db.commit()
         return {
             "success": True,
-            "data": {"engagement_id": engagement_id, "status": "HEALTHY"},
-            "message": "Outcome change proposal rejected."
+            "data": {"engagement_id": engagement_id, "status": "HEALTHY", "decision": "REJECTED"},
+            "message": f"Proposal rejected by {manager_name}."
         }
 
 

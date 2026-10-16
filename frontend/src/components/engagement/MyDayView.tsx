@@ -293,6 +293,9 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     const criteria = outcome?.success_criteria || [];
 
     const existingTaskMap: Record<string, any> = {};
+    const taskList: any[] = [];
+    const seenTaskIds = new Set<string>();
+
     if (wp?.tasks && Array.isArray(wp.tasks)) {
       wp.tasks.forEach((t: any) => {
         if (t && typeof t === "object") {
@@ -302,8 +305,9 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       });
     }
 
+    // 1. Map all outcome success criteria into work items
     if (criteria.length > 0) {
-      return criteria.map((c: any, idx: number) => {
+      criteria.forEach((c: any, idx: number) => {
         const critId = typeof c === "object" && c.id ? c.id : `sc-${idx + 1}`;
         const critTitle = typeof c === "object" ? (c.title || c.statement || `Milestone ${idx + 1}`) : String(c);
         const isDone = typeof c === "object" ? Boolean(c.completed) : false;
@@ -311,34 +315,46 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
         const taskDue = matched?.due_date || (typeof c === "object" && c.due_date) || computePresetDue(idx === 0 ? 0 : idx, 17, 0);
         const taskStatus = isDone ? "COMPLETED" : (matched?.status || "TODO");
         const finalTitle = matched?.title && !matched.title.startsWith("task-") ? matched.title : critTitle;
+        const apprStatus = matched?.approval_status || (taskStatus === "COMPLETED" ? "APPROVED" : "APPROVED");
 
-        return {
-          id: critId,
+        seenTaskIds.add(critId);
+        if (matched?.id) seenTaskIds.add(matched.id);
+
+        taskList.push({
+          id: matched?.id || critId,
           title: finalTitle,
-          sequence_order: idx + 1,
-          why_it_matters: `Fulfills Outcome Goal criterion for ${activeCustomer.customerName}.`,
+          sequence_order: matched?.sequence_order || idx + 1,
+          why_it_matters: matched?.why_it_matters || matched?.description || `Fulfills Outcome Goal criterion for ${activeCustomer.customerName}.`,
           status: taskStatus === "COMPLETED" ? "COMPLETED" : taskStatus === "IN_PROGRESS" ? "IN_PROGRESS" : "TODO",
+          approval_status: apprStatus,
           due_date: taskDue,
           linked_goal_id: critId
-        };
+        });
       });
     }
 
-    if (wp?.tasks && Array.isArray(wp.tasks) && wp.tasks.length > 0) {
-      return wp.tasks
-        .filter((t: any) => t && t.title && !t.title.startsWith("task-"))
-        .map((t: any, idx: number) => ({
-          id: t.id || `task-${idx + 1}`,
-          title: t.title,
-          sequence_order: t.sequence_order || idx + 1,
-          why_it_matters: t.why_it_matters || `Fulfills Outcome Goal criterion for ${activeCustomer.customerName}.`,
-          status: t.status === "COMPLETED" ? "COMPLETED" : t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "TODO",
-          due_date: t.due_date || computePresetDue(idx, 17, 0),
-          linked_goal_id: t.linked_goal_id || t.id
-        }));
+    // 2. Also append any additional work plan tasks (e.g. routine tasks created by FDE or Plan Agent)
+    if (wp?.tasks && Array.isArray(wp.tasks)) {
+      wp.tasks.forEach((t: any, idx: number) => {
+        if (!t || typeof t !== "object" || !t.title || t.title.startsWith("task-")) return;
+        const tId = t.id || `task-${idx + 1}`;
+        if (!seenTaskIds.has(tId) && (!t.linked_goal_id || !seenTaskIds.has(t.linked_goal_id))) {
+          seenTaskIds.add(tId);
+          taskList.push({
+            id: tId,
+            title: t.title,
+            sequence_order: t.sequence_order || taskList.length + 1,
+            why_it_matters: t.why_it_matters || t.description || `Operational work task for ${activeCustomer.customerName}.`,
+            status: t.status === "COMPLETED" ? "COMPLETED" : t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "TODO",
+            approval_status: t.approval_status || "APPROVED",
+            due_date: t.due_date || computePresetDue(taskList.length, 17, 0),
+            linked_goal_id: t.linked_goal_id || tId
+          });
+        }
+      });
     }
 
-    return [];
+    return taskList;
   }, [activeEngagementData, activeCustomer.customerName]);
 
   const workItems = proposedPlan?.work_items || [];
@@ -527,6 +543,10 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     if (updatingTaskId === task.id) return; // Prevent duplicate concurrent submissions
     if (task.approval_status === "PENDING_APPROVAL") {
       setAlertNotification("Action blocked: This task is pending Manager approval before it can become approved work.");
+      return;
+    }
+    if (task.approval_status === "REJECTED") {
+      setAlertNotification("Action blocked: This task proposal was rejected by the Manager. You can remove it or revise it.");
       return;
     }
 
@@ -1062,13 +1082,15 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                           <button
                             type="button"
                             onClick={() => handleToggleTaskStatus(item)}
-                            disabled={item.approval_status === "PENDING_APPROVAL"}
+                            disabled={item.approval_status === "PENDING_APPROVAL" || item.approval_status === "REJECTED"}
                             className={`mt-0.5 shrink-0 focus:outline-none ${
-                              item.approval_status === "PENDING_APPROVAL" ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                              item.approval_status === "PENDING_APPROVAL" || item.approval_status === "REJECTED" ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
                             }`}
                             title={
                               item.approval_status === "PENDING_APPROVAL"
                                 ? "Pending Manager Approval — Cannot be marked complete until approved by an Engineering Manager"
+                                : item.approval_status === "REJECTED"
+                                ? "Rejected by Manager — Cannot be executed unless revised or deleted"
                                 : isDone
                                 ? "Mark as To Do"
                                 : "Mark as Completed"
@@ -1078,6 +1100,8 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                             ) : item.approval_status === "PENDING_APPROVAL" ? (
                               <Lock className="h-4.5 w-4.5 text-amber-500" />
+                            ) : item.approval_status === "REJECTED" ? (
+                              <AlertTriangle className="h-4.5 w-4.5 text-rose-500" />
                             ) : (
                               <Circle className="h-5 w-5 text-slate-400 hover:text-amber-500 transition" />
                             )}
@@ -1132,10 +1156,12 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                           <button
                             type="button"
                             onClick={() => handleToggleTaskStatus(item)}
-                            disabled={item.approval_status === "PENDING_APPROVAL"}
+                            disabled={item.approval_status === "PENDING_APPROVAL" || item.approval_status === "REJECTED"}
                             className={`text-xs font-mono px-2.5 py-1 rounded-md border transition font-bold ${
                               item.approval_status === "PENDING_APPROVAL"
                                 ? "bg-amber-50 text-amber-800 border-amber-300 cursor-not-allowed opacity-80"
+                                : item.approval_status === "REJECTED"
+                                ? "bg-rose-50 text-rose-800 border-rose-300 cursor-not-allowed opacity-80"
                                 : isDone
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 cursor-pointer"
                                 : inProgress
@@ -1145,6 +1171,8 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                             title={
                               item.approval_status === "PENDING_APPROVAL"
                                 ? "Pending Manager Approval — Cannot be updated until approved"
+                                : item.approval_status === "REJECTED"
+                                ? "Proposal was rejected by Manager — Cannot be updated"
                                 : isDone
                                 ? "Click to set To Do"
                                 : "Click to toggle"
@@ -1152,6 +1180,8 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                           >
                             {item.approval_status === "PENDING_APPROVAL"
                               ? "Pending Approval"
+                              : item.approval_status === "REJECTED"
+                              ? "Rejected"
                               : isDone
                               ? "Done"
                               : inProgress

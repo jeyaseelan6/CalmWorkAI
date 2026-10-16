@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { downloadCustomerUpdatePdf, printCustomerUpdateDocument } from "@/utils/pdfGenerator";
 import { FileCheck, Sparkles, CheckCircle2, ShieldCheck, Mail, Lock, AlertTriangle, Download, Printer, UserCheck } from "lucide-react";
@@ -39,8 +39,7 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
   const [wasEdited, setWasEdited] = useState(false);
 
   // Sync approval state strictly from authoritative backend endpoint (never from localStorage)
-  useEffect(() => {
-    let isCancelled = false;
+  const checkApprovalStatus = useCallback(() => {
     const headers: Record<string, string> = {};
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
@@ -52,27 +51,53 @@ export default function CustomerUpdatePanel({ engagementId, customerName, engage
         return res.json();
       })
       .then((json) => {
-        if (!isCancelled) {
-          if (json.success && json.data?.approved) {
-            setApproved(true);
-            setApprovedBy(json.data.reviewed_by || "David Miller (Engineering Manager)");
-          } else {
-            setApproved(false);
-            setApprovedBy(null);
-          }
-        }
-      })
-      .catch(() => {
-        if (!isCancelled) {
+        if (json.success && json.data?.approved) {
+          setApproved(true);
+          setApprovedBy(json.data.reviewed_by || "David Miller (Engineering Manager)");
+        } else {
           setApproved(false);
           setApprovedBy(null);
         }
+      })
+      .catch(() => {
+        setApproved(false);
+        setApprovedBy(null);
       });
+  }, [engagementId, token]);
+
+  useEffect(() => {
+    checkApprovalStatus();
+
+    // Listen to local event
+    const handleSync = (e: any) => {
+      if (!e?.detail?.engagementId || e.detail.engagementId === engagementId) {
+        checkApprovalStatus();
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("calmwork-state-change", handleSync);
+    }
+
+    // Listen to cross-tab BroadcastChannel
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      channel = new BroadcastChannel("calmwork_governance_bus");
+      channel.onmessage = (event) => {
+        if (!event?.data?.engagementId || event.data.engagementId === engagementId) {
+          checkApprovalStatus();
+        }
+      };
+    }
 
     return () => {
-      isCancelled = true;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("calmwork-state-change", handleSync);
+      }
+      if (channel) {
+        channel.close();
+      }
     };
-  }, [engagementId, token]);
+  }, [checkApprovalStatus, engagementId]);
 
   const handleGenerateUpdate = async () => {
     setLoading(true);

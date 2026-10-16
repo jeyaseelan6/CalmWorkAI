@@ -120,7 +120,29 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
 
       if (res.ok) {
         await fetchPendingApprovals();
-        await fetchEngagementDetail(activeCustomer.id);
+        await fetchEngagementDetail(activeCustomer.id, false);
+
+        // Broadcast immediately across all open tabs & windows
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("calmwork-state-change", {
+              detail: { engagementId: activeCustomer.id, type: "APPROVAL_DECISION", action, approvalId }
+            })
+          );
+          try {
+            const channel = new BroadcastChannel("calmwork_governance_bus");
+            channel.postMessage({
+              type: "APPROVAL_DECISION",
+              action,
+              approvalId,
+              engagementId: activeCustomer.id
+            });
+            channel.close();
+          } catch (e) {
+            // BroadcastChannel fallback
+          }
+        }
+
         return true;
       }
       return false;
@@ -166,8 +188,8 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
       setNextActionData(null);
       setNextActionError(null);
       setApprovedAcme(false);
+      setLoading(true);
     }
-    setLoading(true);
     setBackendError(null);
     try {
       const res = await fetch(`${API_BASE}/engagements/${id}`);
@@ -184,24 +206,28 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         setBackendError(errJson?.message || "The server is unavailable right now.");
         return;
       }
-      const nextRes = await fetch(`${API_BASE}/engagements/${id}/next-action`);
-      if (nextRes.ok) {
-        const nextJson = await nextRes.json();
-        if (nextJson.success && nextJson.data) {
-          setNextActionData(nextJson.data);
-          setNextActionError(null);
-        } else if (!nextJson.success && nextJson.message) {
-          setNextActionData(null);
-          setNextActionError(nextJson.message);
-        }
-      } else {
-        setNextActionError("AI agents are temporarily unavailable. Click 'Morning Brief' to retry.");
-      }
+      // Fetch next-action concurrently without blocking core UI rendering
+      fetch(`${API_BASE}/engagements/${id}/next-action`)
+        .then((r) => r.json())
+        .then((nextJson) => {
+          if (nextJson.success && nextJson.data) {
+            setNextActionData(nextJson.data);
+            setNextActionError(null);
+          } else if (!nextJson.success && nextJson.message) {
+            setNextActionData(null);
+            setNextActionError(nextJson.message);
+          }
+        })
+        .catch(() => {
+          setNextActionError("AI agents are temporarily unavailable. Click 'Morning Brief' to retry.");
+        });
     } catch (e) {
       console.warn("Backend API offline or unreachable; using local engagement state fallback.");
       setBackendError("The server is unavailable right now.");
     } finally {
-      setLoading(false);
+      if (wipeOldState) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -218,7 +244,33 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     fetchEngagementDetail(activeCustomer.id);
-  }, [activeCustomer.id]);
+  }, [activeCustomer.id, fetchEngagementDetail]);
+
+  // Cross-Tab & Cross-Window Governance Listener
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
+    const channel = new BroadcastChannel("calmwork_governance_bus");
+    channel.onmessage = (event) => {
+      if (event?.data?.type === "APPROVAL_DECISION" || event?.data?.type === "TASK_CHANGE") {
+        fetchPendingApprovals();
+        fetchEngagementDetail(activeCustomer.id, false);
+      }
+    };
+    return () => {
+      channel.close();
+    };
+  }, [activeCustomer.id, fetchEngagementDetail]);
+
+  // Periodic heartbeat (every 6 seconds) to guarantee multi-device state consistency
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchPendingApprovals();
+        fetchEngagementDetail(activeCustomer.id, false);
+      }
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [activeCustomer.id, fetchEngagementDetail]);
 
   const handleApproveChange = async () => {
     try {
@@ -236,11 +288,30 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
 
       if (res.ok) {
         setApprovedAcme(true);
-        fetchEngagementDetail(activeCustomer.id);
+        await fetchPendingApprovals();
+        await fetchEngagementDetail(activeCustomer.id, false);
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("calmwork-state-change", {
+              detail: { engagementId: activeCustomer.id, type: "OUTCOME_CHANGE", action: "APPROVE" }
+            })
+          );
+          try {
+            const channel = new BroadcastChannel("calmwork_governance_bus");
+            channel.postMessage({
+              type: "APPROVAL_DECISION",
+              action: "APPROVE",
+              engagementId: activeCustomer.id
+            });
+            channel.close();
+          } catch (e) {
+            // BroadcastChannel fallback
+          }
+        }
       } else {
         const errorJson = await res.json().catch(() => ({}));
         console.warn("Approval blocked by backend RBAC:", errorJson.detail || "Forbidden");
-        // Only set approved if manager succeeded
         if (res.status !== 403) {
           setApprovedAcme(true);
         }
