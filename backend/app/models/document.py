@@ -29,6 +29,7 @@ class DocumentModel(Base):
     category = Column(Enum(DocumentCategory), default=DocumentCategory.OTHER, nullable=False)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.INDEXED, nullable=False, index=True)
     content = Column(Text, nullable=True)
+    file_url = Column(String(500), nullable=True)
     chunks_count = Column(Integer, default=0, nullable=False)
     uploaded_by = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

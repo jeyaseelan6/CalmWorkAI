@@ -16,7 +16,7 @@ from datetime import datetime
 
 from app.db.database import get_db
 from app.models import Engagement, Outcome, Approval, TimelineEvent
-from app.api.deps import supervisor_coordinator, support_agent
+from app.api.deps import supervisor_coordinator, support_agent, storage_service
 from app.api.schemas import UniversalSupervisorQueryPayload, SupportInvestigationRequest
 from app.auth import get_current_user
 
@@ -272,6 +272,15 @@ def investigate_support_incident(
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
 
+    uploaded_image_url = None
+    if payload.screenshot_base64:
+        fn = (payload.screenshot_metadata or {}).get("filename") if payload.screenshot_metadata else "screenshot.png"
+        uploaded_image_url = storage_service.upload_chat_image(
+            engagement_id=engagement_id,
+            image_data=payload.screenshot_base64,
+            filename=fn
+        )
+
     result = support_agent.investigate_incident(
         engagement_id=engagement_id,
         customer_name=eng.customer_name,
@@ -279,8 +288,16 @@ def investigate_support_incident(
         error_logs=payload.error_logs,
         screenshot_metadata=payload.screenshot_metadata,
         screenshot_base64=payload.screenshot_base64,
+        image_url=uploaded_image_url,
         session_id=payload.session_id
     )
+
+    timeline_meta: Dict[str, Any] = {
+        "incident_id": result.incident_id,
+        "severity": result.severity
+    }
+    if uploaded_image_url:
+        timeline_meta["image_url"] = uploaded_image_url
 
     db.add(TimelineEvent(
         id=f"evt-{uuid.uuid4().hex[:8]}",
@@ -290,6 +307,7 @@ def investigate_support_incident(
         description=f"SUPPORT Agent diagnosed issue: '{result.summary[:80]}...'",
         actor_type="SUPPORT_AGENT",
         actor_id="agent_support",
+        metadata_json=timeline_meta,
         created_at=datetime.utcnow()
     ))
     db.commit()

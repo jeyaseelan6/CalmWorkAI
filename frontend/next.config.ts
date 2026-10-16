@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: "standalone",
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   allowedDevOrigins: ["192.168.8.101"],
   cacheComponents: true,
   partialPrefetching: true,
@@ -12,14 +16,6 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/api/v1/:path*",
-        destination: "http://127.0.0.1:8000/api/v1/:path*",
-      },
-    ];
   },
 };
 

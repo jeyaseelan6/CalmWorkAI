@@ -23,6 +23,8 @@ calmwork_dev.db
 .env
 .env.local
 .env.production
+env.yaml
+backend/env.yaml
 
 # IDE & System
 .DS_Store

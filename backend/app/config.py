@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     PRIVACY_GUARDRAIL_ENABLED: bool = True
     USE_CLOUD_DLP_API: bool = os.getenv("USE_CLOUD_DLP_API", "false").lower() == "true"
     
+    # Cloudinary Cloud Storage Settings
+    CLOUDINARY_CLOUD_NAME: Optional[str] = os.getenv("CLOUDINARY_CLOUD_NAME")
+    CLOUDINARY_API_KEY: Optional[str] = os.getenv("CLOUDINARY_API_KEY")
+    CLOUDINARY_API_SECRET: Optional[str] = os.getenv("CLOUDINARY_API_SECRET")
+    CLOUDINARY_URL: Optional[str] = os.getenv("CLOUDINARY_URL")
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

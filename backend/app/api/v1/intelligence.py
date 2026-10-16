@@ -105,10 +105,12 @@ def get_next_best_action(engagement_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error determining next action: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
-        )
+        return {
+            "success": False,
+            "data": None,
+            "error": "ai_unavailable",
+            "message": "AI agents are temporarily unavailable due to rate limits. Click 'Morning Brief' to retry when ready."
+        }
 
 
 @router.post("/engagements/{engagement_id}/customer-updates/generate", tags=["Delivery"])

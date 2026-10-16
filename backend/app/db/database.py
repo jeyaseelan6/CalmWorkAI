@@ -55,6 +55,12 @@ def init_db():
                 except Exception:
                     pass  # column already exists
 
+            try:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_url VARCHAR(500)"))
+                conn.commit()
+            except Exception:
+                pass
+
             # Add foreign key and status query indexes idempotently
             indexes_to_create = [
                 ("ix_outcomes_engagement_id", "outcomes", "engagement_id"),

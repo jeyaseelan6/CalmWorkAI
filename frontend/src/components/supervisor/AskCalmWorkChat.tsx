@@ -41,6 +41,7 @@ export interface IncidentInvestigationResult {
   suggested_workaround?: string | null;
   runbook_recommendations: string[];
   visual_diagnostic_findings?: string | null;
+  image_url?: string | null;
   evidence_citations: string[];
   privacy_scrubbed: boolean;
   investigated_at: string;
@@ -730,9 +731,22 @@ export default function AskCalmWorkChat({
                       {/* Visual Findings if present */}
                       {m.supportResult.visual_diagnostic_findings && (
                         <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-1">
-                          <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                            <ImageIcon className="h-3 w-3 text-slate-600" />
-                            <span>Visual Telemetry Findings</span>
+                          <div className="font-semibold text-slate-800 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <ImageIcon className="h-3 w-3 text-slate-600" />
+                              <span>Visual Telemetry Findings</span>
+                            </div>
+                            {m.supportResult.image_url && (
+                              <a
+                                href={m.supportResult.image_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-teal-700 hover:text-teal-900 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>Cloudinary CDN</span>
+                                <ArrowRight className="h-2.5 w-2.5" />
+                              </a>
+                            )}
                           </div>
                           <p className="text-slate-600 font-mono text-[10px] leading-relaxed">
                             {m.supportResult.visual_diagnostic_findings}

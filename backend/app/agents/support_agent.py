@@ -51,6 +51,7 @@ class IncidentInvestigationResult(BaseModel):
     suggested_workaround: Optional[str] = None
     runbook_recommendations: List[str] = []
     visual_diagnostic_findings: Optional[str] = None
+    image_url: Optional[str] = None
     evidence_citations: List[str] = []
     privacy_scrubbed: bool = True
     investigated_at: str
@@ -111,6 +112,7 @@ class SupportAgent:
         error_logs: Optional[str] = None,
         screenshot_metadata: Optional[Dict[str, Any]] = None,
         screenshot_base64: Optional[str] = None,
+        image_url: Optional[str] = None,
         session_id: Optional[str] = None
     ) -> IncidentInvestigationResult:
         """
@@ -222,6 +224,7 @@ class SupportAgent:
                     "Verify connectivity against database and API endpoints."
                 ],
                 visual_diagnostic_findings=visual_note,
+                image_url=image_url,
                 evidence_citations=[f"Issue Report ({now_ist})"],
                 privacy_scrubbed=len(mapping.reference_to_original) > 0,
                 investigated_at=now_ist
@@ -243,6 +246,7 @@ class SupportAgent:
             suggested_workaround=workaround_clean or None,
             runbook_recommendations=parsed.get("runbook_recommendations", []),
             visual_diagnostic_findings=parsed.get("visual_diagnostic_findings"),
+            image_url=image_url,
             evidence_citations=parsed.get("evidence_citations", []),
             privacy_scrubbed=len(mapping.reference_to_original) > 0,
             investigated_at=now_ist

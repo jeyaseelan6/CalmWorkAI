@@ -29,12 +29,14 @@ def list_documents(engagement_id: str, db: Session = Depends(get_db)):
     docs = db.query(DocumentModel).filter(DocumentModel.engagement_id == engagement_id).order_by(DocumentModel.created_at.desc()).all()
     res = []
     for d in docs:
+        url_lower = (d.file_url or "").lower()
         t_lower = d.title.lower()
-        file_tuple = storage_service.get_document_file(engagement_id, d.id)
-        fname = file_tuple[2].lower() if file_tuple else t_lower
-        if fname.endswith(".pdf") or t_lower.endswith(".pdf"):
+        file_tuple = storage_service.get_document_file(engagement_id, d.id, file_url=d.file_url)
+        fname = file_tuple[2].lower() if file_tuple else ""
+
+        if fname.endswith(".pdf") or t_lower.endswith(".pdf") or ".pdf" in url_lower:
             ftype = "pdf"
-        elif any(fname.endswith(ext) or t_lower.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"]):
+        elif any(fname.endswith(ext) or t_lower.endswith(ext) or ext in url_lower for ext in [".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"]):
             ftype = "image"
         else:
             ftype = "text"
@@ -47,6 +49,7 @@ def list_documents(engagement_id: str, db: Session = Depends(get_db)):
             "status": d.status.value if hasattr(d.status, "value") else str(d.status),
             "chunks_count": d.chunks_count,
             "file_type": ftype,
+            "file_url": d.file_url,
             "uploaded_by": d.uploaded_by,
             "created_at": d.created_at.isoformat() if d.created_at else None
         })
@@ -79,7 +82,7 @@ def upload_document(
     actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
 
     doc_id = f"doc-{uuid.uuid4().hex[:8]}"
-    storage_service.upload_document(
+    storage_uri = storage_service.upload_document(
         engagement_id=engagement_id,
         document_id=doc_id,
         filename=f"{payload.title}.txt",
@@ -98,6 +101,7 @@ def upload_document(
         category=category_enum,
         status=DocumentStatus.INDEXED,
         content=payload.content,
+        file_url=storage_uri,
         chunks_count=result.get("chunks_created", 1),
         uploaded_by=actor_name,
         created_at=datetime.utcnow()
@@ -200,6 +204,7 @@ async def upload_document_file(
         category=category_enum,
         status=DocumentStatus.INDEXED,
         content=extracted_text,
+        file_url=storage_uri,
         chunks_count=chunks_count,
         uploaded_by=actor_name,
         created_at=datetime.utcnow()
@@ -228,6 +233,7 @@ async def upload_document_file(
             "status": doc.status.value if hasattr(doc.status, "value") else str(doc.status),
             "chunks_count": doc.chunks_count,
             "storage_uri": storage_uri,
+            "file_url": storage_uri,
             "created_at": doc.created_at.isoformat()
         },
         "message": f"Document '{doc_title}' uploaded and indexed into {chunks_count} vector chunks."
@@ -347,7 +353,8 @@ def get_document_detail(engagement_id: str, doc_id: str, db: Session = Depends(g
             "status": doc.status.value if hasattr(doc.status, "value") else str(doc.status),
             "chunks_count": doc.chunks_count,
             "file_type": file_type,
-            "has_binary_file": bool(file_tuple),
+            "file_url": doc.file_url,
+            "has_binary_file": bool(doc.file_url or file_tuple),
             "content": doc.content,
             "uploaded_by": doc.uploaded_by,
             "created_at": doc.created_at.isoformat() if doc.created_at else None
@@ -358,11 +365,17 @@ def get_document_detail(engagement_id: str, doc_id: str, db: Session = Depends(g
 @router.get("/engagements/{engagement_id}/documents/{doc_id}/file")
 def stream_document_file(engagement_id: str, doc_id: str, db: Session = Depends(get_db)):
     """Streams the raw PDF or image file for in-browser reading/viewing."""
+    from fastapi.responses import RedirectResponse
+
     doc = db.query(DocumentModel).filter(DocumentModel.id == doc_id, DocumentModel.engagement_id == engagement_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    file_tuple = storage_service.get_document_file(engagement_id, doc_id)
+    # If document has a Cloudinary CDN URL, redirect client directly to Cloudinary CDN
+    if doc.file_url and (doc.file_url.startswith("http://") or doc.file_url.startswith("https://")):
+        return RedirectResponse(url=doc.file_url, status_code=307)
+
+    file_tuple = storage_service.get_document_file(engagement_id, doc_id, file_url=doc.file_url)
     if file_tuple:
         content_bytes, mime_type, filename = file_tuple
         is_pdf = (

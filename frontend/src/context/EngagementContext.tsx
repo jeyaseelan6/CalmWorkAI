@@ -35,6 +35,8 @@ interface EngagementContextType {
   switchEngagement: (cust: CustomerEngagement) => void;
   activeEngagementData: any;
   nextActionData: any;
+  nextActionError: string | null;
+  backendError: string | null;
   loading: boolean;
   approvedAcme: boolean;
   fetchEngagementDetail: (id: string, wipeOldState?: boolean) => Promise<void>;
@@ -69,7 +71,9 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
   const [activeCustomer, setActiveCustomer] = useState<CustomerEngagement>(DEFAULT_CUSTOMERS[0]);
   const [activeEngagementData, setActiveEngagementData] = useState<any>(null);
   const [nextActionData, setNextActionData] = useState<any>(null);
+  const [nextActionError, setNextActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
   const [approvedAcme, setApprovedAcme] = useState<boolean>(false);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<string>("myday");
@@ -160,9 +164,11 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     if (wipeOldState) {
       setActiveEngagementData(null);
       setNextActionData(null);
+      setNextActionError(null);
       setApprovedAcme(false);
     }
     setLoading(true);
+    setBackendError(null);
     try {
       const res = await fetch(`${API_BASE}/engagements/${id}`);
       if (res.ok) {
@@ -179,10 +185,17 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         const nextJson = await nextRes.json();
         if (nextJson.success && nextJson.data) {
           setNextActionData(nextJson.data);
+          setNextActionError(null);
+        } else if (!nextJson.success && nextJson.message) {
+          setNextActionData(null);
+          setNextActionError(nextJson.message);
         }
+      } else {
+        setNextActionError("AI agents are temporarily unavailable. Click 'Morning Brief' to retry.");
       }
     } catch (e) {
       console.warn("Backend API offline or unreachable; using local engagement state fallback.");
+      setBackendError("Backend server is offline or unreachable. Please start the backend server and refresh.");
     } finally {
       setLoading(false);
     }
@@ -192,6 +205,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     setActiveCustomer(cust);
     setActiveEngagementData(null);
     setNextActionData(null);
+    setNextActionError(null);
     setApprovedAcme(false);
     setSelectedItemContext(null);
     setSupervisorInitialQuery(null);
@@ -293,6 +307,8 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         switchEngagement,
         activeEngagementData,
         nextActionData,
+        nextActionError,
+        backendError,
         loading,
         approvedAcme,
         fetchEngagementDetail,
