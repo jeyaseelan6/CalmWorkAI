@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 class SkillTriggerType:
     ON_DEMAND = "ON_DEMAND"
-    SCHEDULED = "SCHEDULED"
     CHAT_INTENT = "CHAT_INTENT"
 
 
@@ -20,21 +19,25 @@ class SkillManifest(BaseModel):
     version: str = "1.0.0"
     category: str = "Work Intelligence & Operational Planning"
     description: str = (
-        "Modular agentic skill that analyzes engagement state overnight, "
-        "coordinates PLAN (scope & milestones), KNOW (grounded specs), and MOVE (blockers & Next Best Action) "
-        "to synthesize an evidence-backed daily briefing with IST deadline targeting."
+        "Modular agentic skill that coordinates PLAN (scope & milestones), "
+        "KNOW (grounded specs), and MOVE (blockers & Next Best Action) "
+        "to synthesize an evidence-backed daily briefing on-demand with IST deadline targeting."
     )
     supported_triggers: List[str] = [
         SkillTriggerType.ON_DEMAND,
-        SkillTriggerType.SCHEDULED,
         SkillTriggerType.CHAT_INTENT
     ]
-    schedule_cron: str = "30 2 * * *"  # 02:30 UTC = 08:00 AM IST
+    execution_mode: str = "MANUAL_ON_DEMAND"
+    cost_control_policy: str = (
+        "Strictly on-demand manual trigger. Automatic background execution is disabled "
+        "to eliminate wasteful multi-tenant LLM token consumption across inactive engagements."
+    )
+    schedule_cron: Optional[str] = None
     schedule_timezone: str = "Asia/Kolkata"
-    schedule_description: str = "Runs automatically every day at 08:00 AM IST across all active customer engagements."
+    schedule_description: str = "Manual on-demand execution via engineer/manager trigger. Auto-runner disabled for cost control."
     participating_agents: List[str] = ["PLAN", "KNOW", "MOVE", "SUPERVISOR"]
     authoritative_roles: List[str] = ["FDE", "MANAGER"]
-    tags: List[str] = ["morning-brief", "daily-planning", "agentic-skill", "fde-velocity"]
+    tags: List[str] = ["morning-brief", "daily-planning", "agentic-skill", "fde-velocity", "cost-optimized"]
 
 
 morning_brief_manifest = SkillManifest()

@@ -72,6 +72,18 @@ class VectorStore:
         )
         return removed_count
 
+    def delete_engagement_chunks(self, engagement_id: str) -> int:
+        """
+        Removes all chunks and semantic vectors for an entire engagement upon deletion.
+        """
+        if engagement_id in self._chunks_by_engagement:
+            count = len(self._chunks_by_engagement[engagement_id])
+            del self._chunks_by_engagement[engagement_id]
+            logger.info(f"Purged {count} vector store chunks for deleted engagement {engagement_id}")
+            return count
+        return 0
+
+
     def rehydrate_engagement(self, engagement_id: str, db: Any = None) -> int:
         """
         Cold-start recovery: pulls all indexed DocumentModel records for engagement

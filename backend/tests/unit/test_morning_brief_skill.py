@@ -80,10 +80,10 @@ def test_morning_brief_manifest():
     manifest = morning_brief_manifest
     assert manifest.skill_id == "skill_morning_brief"
     assert manifest.name == "Morning Brief Skill"
-    assert "30 2 * * *" in manifest.schedule_cron  # 02:30 UTC = 08:00 IST
+    assert manifest.execution_mode == "MANUAL_ON_DEMAND"
     assert manifest.schedule_timezone == "Asia/Kolkata"
     assert "ON_DEMAND" in manifest.supported_triggers
-    assert "SCHEDULED" in manifest.supported_triggers
+    assert "CHAT_INTENT" in manifest.supported_triggers
     assert set(["PLAN", "KNOW", "MOVE", "SUPERVISOR"]).issubset(set(manifest.participating_agents))
 
 
@@ -145,10 +145,10 @@ def test_skills_api_endpoints(sample_engagement: Engagement):
     skills = res.json()["data"]
     assert any(s["skill_id"] == "skill_morning_brief" for s in skills)
 
-    # 2. Get manifest
     res_man = client.get("/api/v1/skills/morning-brief/manifest")
     assert res_man.status_code == 200
-    assert res_man.json()["data"]["schedule_timezone"] == "Asia/Kolkata"
+    assert res_man.json()["data"]["execution_mode"] == "MANUAL_ON_DEMAND"
+    assert "ON_DEMAND" in res_man.json()["data"]["supported_triggers"]
 
     # 3. Execute on-demand via API
     res_exec = client.post(

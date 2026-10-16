@@ -337,6 +337,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop Client Sidebar (hidden on mobile) */}
       <aside className="hidden md:flex w-56 border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0">
         <div>
+          {/* Brand Header: Displayed before My Day */}
+          <div className="pb-3 mb-2.5 px-1 border-b border-slate-100">
+            <Link href="/engagements" className="block group">
+              <h2 className="font-display font-bold text-sm text-slate-900 tracking-tight group-hover:text-slate-700 transition">
+                Calm Work AI
+              </h2>
+              <p className="text-[10px] text-slate-400 font-mono font-medium mt-0.5">
+                Work Intelligence
+              </p>
+            </Link>
+          </div>
+
           {/* Navigation Links wrapped in Suspense */}
           <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
             <NavLinks />

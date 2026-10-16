@@ -263,3 +263,98 @@ def test_deliver_agent_report_pdf_strictly_gated_by_manager_approval():
     finally:
         clear_mock_adk_responses()
 
+
+def test_manager_can_delete_engagement_and_cascades_all_related_data():
+    """
+    Manager permanently deletes customer engagement.
+    System must cascade and delete all related outcomes, approvals, documents, and timeline events.
+    """
+    from app.db.database import SessionLocal
+    from app.models import Outcome, Approval, DocumentModel, TimelineEvent, Engagement
+
+    mgr_token = create_access_token({"sub": "manager@calmwork.ai", "role": "MANAGER"})
+    mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
+
+    # 1. Create engagement with initial outcome
+    eng_res = client.post("/api/v1/engagements", json={
+        "customer_name": "Massive Dynamic",
+        "name": "Cortex Sensor Array",
+        "description": "Multi-spectrum sensor integration",
+        "initial_outcome_statement": "Deploy sensor array to staging by EOD.",
+        "success_criteria": ["Sensors online", "Diagnostics green"]
+    }, headers=mgr_headers)
+    assert eng_res.status_code == 200
+    eng_id = eng_res.json()["data"]["id"]
+
+    # 2. Add an approved task
+    client.post(f"/api/v1/engagements/{eng_id}/tasks", json={
+        "title": "Calibrate optical sensors",
+        "due_date": "17 Oct 2026, 18:00 IST",
+        "status": "TODO"
+    }, headers=mgr_headers)
+
+    # 3. Add a timeline event
+    client.post(f"/api/v1/engagements/{eng_id}/worknotes", json={
+        "content": "Optical sensors delivered to staging facility.",
+        "author": "David Miller",
+        "author_role": "MANAGER"
+    }, headers=mgr_headers)
+
+    # 4. Verify entities exist in database before deletion
+    db = SessionLocal()
+    try:
+        assert db.query(Engagement).filter(Engagement.id == eng_id).count() == 1
+        assert db.query(Outcome).filter(Outcome.engagement_id == eng_id).count() >= 1
+        assert db.query(TimelineEvent).filter(TimelineEvent.engagement_id == eng_id).count() >= 1
+    finally:
+        db.close()
+
+    # 5. Manager deletes engagement
+    del_res = client.delete(f"/api/v1/engagements/{eng_id}", headers=mgr_headers)
+    assert del_res.status_code == 200
+    del_data = del_res.json()
+    assert del_data["success"] is True
+    assert del_data["data"]["engagement_id"] == eng_id
+    assert "deleted_counts" in del_data["data"]
+
+    # 6. Verify engagement no longer exists in GET endpoint
+    get_res = client.get(f"/api/v1/engagements/{eng_id}", headers=mgr_headers)
+    assert get_res.status_code == 404
+
+    # 7. Verify all related entities are purged from database (no orphans)
+    db = SessionLocal()
+    try:
+        assert db.query(Engagement).filter(Engagement.id == eng_id).count() == 0
+        assert db.query(Outcome).filter(Outcome.engagement_id == eng_id).count() == 0
+        assert db.query(Approval).filter(Approval.engagement_id == eng_id).count() == 0
+        assert db.query(DocumentModel).filter(DocumentModel.engagement_id == eng_id).count() == 0
+        assert db.query(TimelineEvent).filter(TimelineEvent.engagement_id == eng_id).count() == 0
+    finally:
+        db.close()
+
+
+def test_fde_cannot_delete_engagement():
+    """FDEs are strictly forbidden from deleting customer engagements (Manager only)."""
+    mgr_token = create_access_token({"sub": "manager@calmwork.ai", "role": "MANAGER"})
+    fde_token = create_access_token({"sub": "fde@calmwork.ai", "role": "FDE"})
+    mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
+    fde_headers = {"Authorization": f"Bearer {fde_token}"}
+
+    # 1. Manager creates engagement
+    eng_res = client.post("/api/v1/engagements", json={
+        "customer_name": "Initech Corp",
+        "name": "TPS Automated Reporting"
+    }, headers=mgr_headers)
+    assert eng_res.status_code == 200
+    eng_id = eng_res.json()["data"]["id"]
+
+    # 2. FDE attempts to delete engagement -> 403 Forbidden
+    del_res = client.delete(f"/api/v1/engagements/{eng_id}", headers=fde_headers)
+    assert del_res.status_code == 403
+    assert "Access denied" in del_res.json()["detail"]
+
+    # 3. Clean up by manager
+    cleanup_res = client.delete(f"/api/v1/engagements/{eng_id}", headers=mgr_headers)
+    assert cleanup_res.status_code == 200
+
+

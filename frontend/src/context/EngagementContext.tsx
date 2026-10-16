@@ -48,6 +48,7 @@ interface EngagementContextType {
     initialOutcomeStatement?: string;
     successCriteria?: string[];
   }) => Promise<{ success: boolean; error?: string; data?: any }>;
+  deleteEngagement: (engagementId: string) => Promise<{ success: boolean; error?: string }>;
   pendingApprovals: any[];
   pendingApprovalsCount: number;
   fetchPendingApprovals: () => Promise<void>;
@@ -373,6 +374,45 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const deleteEngagement = async (engagementId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}`, {
+        method: "DELETE",
+        headers
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const remaining = customers.filter((c) => c.id !== engagementId);
+        setCustomers(remaining.length > 0 ? remaining : DEFAULT_CUSTOMERS);
+
+        if (activeCustomer.id === engagementId) {
+          const nextActive = remaining.length > 0 ? remaining[0] : DEFAULT_CUSTOMERS[0];
+          setActiveCustomer(nextActive);
+        }
+
+        await fetchEngagementsList();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId } }));
+        }
+        return { success: true };
+      } else {
+        return {
+          success: false,
+          error: data.detail || data.message || "Failed to delete engagement"
+        };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message || "Network error" };
+    }
+  };
+
   return (
     <EngagementContext.Provider
       value={{
@@ -389,6 +429,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         fetchEngagementDetail,
         fetchEngagementsList,
         createEngagement,
+        deleteEngagement,
         handleApproveChange,
         pendingApprovals,
         pendingApprovalsCount: pendingApprovals.length,

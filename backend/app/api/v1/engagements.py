@@ -10,7 +10,10 @@ from sqlalchemy import func
 from typing import List, Dict, Any, Optional
 import uuid
 import re
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from app.db.database import get_db
 from app.models import (
@@ -713,4 +716,69 @@ def delete_routine_task(
         "tasks": remaining_tasks,
         "message": f"Task '{task_title}' removed successfully from work plan."
     }
+
+
+@router.delete("/{engagement_id}")
+def delete_engagement(
+    engagement_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+):
+    """
+    Permanently delete a customer engagement and all related assets (Outcomes,
+    Approvals, Documents, Timeline events, Work tasks, and Vector Store semantic chunks).
+    Strictly restricted to users with the MANAGER role.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Engagement '{engagement_id}' not found."
+        )
+
+    customer_name = eng.customer_name
+    engagement_name = eng.name
+
+    # 1. Break cyclic references by clearing current_outcome_id first
+    eng.current_outcome_id = None
+    db.flush()
+
+    # 2. Delete all related Approvals
+    approvals_deleted = db.query(Approval).filter(Approval.engagement_id == engagement_id).delete(synchronize_session=False)
+
+    # 3. Delete all related Outcomes (which store work plans, tasks, success criteria)
+    outcomes_deleted = db.query(Outcome).filter(Outcome.engagement_id == engagement_id).delete(synchronize_session=False)
+
+    # 4. Delete all related Document metadata & contents
+    documents_deleted = db.query(DocumentModel).filter(DocumentModel.engagement_id == engagement_id).delete(synchronize_session=False)
+
+    # 5. Delete all related Timeline Events
+    events_deleted = db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).delete(synchronize_session=False)
+
+    # 6. Delete the Engagement record itself
+    db.delete(eng)
+    db.commit()
+
+    # 7. Purge Vector Store tenant memory for this engagement
+    try:
+        if hasattr(know_agent, "vector_store") and hasattr(know_agent.vector_store, "delete_engagement_chunks"):
+            know_agent.vector_store.delete_engagement_chunks(engagement_id)
+    except Exception as e:
+        logger.warning(f"Error purging vector store for deleted engagement {engagement_id}: {e}")
+
+    return {
+        "success": True,
+        "message": f"Engagement '{customer_name}' ({engagement_name}) and all related assets were permanently deleted.",
+        "data": {
+            "engagement_id": engagement_id,
+            "customer_name": customer_name,
+            "deleted_counts": {
+                "approvals": approvals_deleted,
+                "outcomes": outcomes_deleted,
+                "documents": documents_deleted,
+                "timeline_events": events_deleted
+            }
+        }
+    }
+
 

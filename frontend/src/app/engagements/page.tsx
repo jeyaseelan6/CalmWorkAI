@@ -15,9 +15,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   Search,
-  Sparkles
+  Sparkles,
+  Trash2
 } from "lucide-react";
 import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
+import DeleteEngagementModal from "@/components/engagement/DeleteEngagementModal";
 
 export default function EngagementsIndexPage() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export default function EngagementsIndexPage() {
   const { isManager } = useAuth();
   const [search, setSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [engagementToDelete, setEngagementToDelete] = useState<typeof customers[0] | null>(null);
 
   const filtered = customers.filter((c) => {
     if (!search.trim()) return true;
@@ -132,19 +135,36 @@ export default function EngagementsIndexPage() {
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
+                  {/* Left side: Destructive / administrative actions (Manager Only) and active status */}
+                  <div className="flex items-center gap-2">
+                    {isManager && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEngagementToDelete(cust);
+                        }}
+                        className="px-2.5 py-1.5 min-h-[36px] border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                        title={`Permanently delete ${cust.customerName} engagement (Manager only)`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                        <span>Delete</span>
+                      </button>
+                    )}
+
                     {isSelected && (
-                      <span className="px-2 py-0.5 bg-slate-100 text-slate-900 font-bold rounded">
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-900 font-bold rounded text-[11px] font-mono">
                         Active Workspace
                       </span>
                     )}
                   </div>
 
+                  {/* Right side: Primary navigation action */}
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => handleSelectEngagement(cust, "myday")}
-                      className="px-3 py-1.5 min-h-[36px] bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold flex items-center gap-1 transition shadow-2xs cursor-pointer"
+                      className="px-3.5 py-1.5 min-h-[36px] bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold flex items-center gap-1 transition shadow-2xs cursor-pointer"
                     >
                       <span>Open Workspace</span>
                       <ArrowRight className="h-3 w-3" />
@@ -169,6 +189,17 @@ export default function EngagementsIndexPage() {
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
         />
+
+        {/* Manager Delete Confirmation Modal (Manager Only) */}
+        {engagementToDelete && (
+          <DeleteEngagementModal
+            isOpen={!!engagementToDelete}
+            onClose={() => setEngagementToDelete(null)}
+            engagementId={engagementToDelete.id}
+            customerName={engagementToDelete.customerName}
+            engagementName={engagementToDelete.engagementName}
+          />
+        )}
       </div>
     </AppShell>
   );

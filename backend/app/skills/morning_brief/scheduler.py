@@ -75,8 +75,15 @@ async def _morning_brief_scheduler_loop():
         await asyncio.sleep(10)
 
 
-def start_morning_brief_scheduler():
-    """Starts the 08:00 AM IST scheduler background task."""
+def start_morning_brief_scheduler(force: bool = False):
+    """
+    Automated background runner is disabled by default for LLM cost optimization.
+    Morning brief is executed manually on-demand by engineers and managers.
+    """
+    if not force:
+        logger.info("Morning Brief auto-runner is disabled for LLM cost optimization. Skill executes on-demand.")
+        return
+
     global _scheduler_task, _is_running
     if _scheduler_task is not None and not _scheduler_task.done():
         logger.warning("Morning Brief Skill scheduler is already running.")
