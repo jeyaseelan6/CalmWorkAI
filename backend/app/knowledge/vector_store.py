@@ -3,7 +3,7 @@ Tenant-Isolated Vector Store for KNOW Agent.
 Provides semantic similarity search & grounded context retrieval partitioned strictly by engagement_id.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import math
 import re
 import logging
