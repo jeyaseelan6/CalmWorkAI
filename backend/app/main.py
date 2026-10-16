@@ -27,26 +27,28 @@ async def lifespan(app: FastAPI):
     Application Lifespan Context Manager.
     Handles startup database initialization and cold-start vector store rehydration.
     """
-    logger.info("Initializing CalmWork database schema & seed users...")
+    logger.info("Initializing CalmWork database schema...")
     init_db()
 
-    # Seed default sample documentation for development & trial
-    know_agent.ingest_document(
-        engagement_id="eng-acme-001",
-        title="Acme Corp Enterprise Security & SSO Mandate",
-        raw_text=(
-            "Acme Corp enterprise security team requires all customer onboarding microservices "
-            "to authenticate via Enterprise Single Sign-On (SSO) using SAML 2.0 / OAuth2 OIDC before production cutover."
+    # Optional seeding only when explicitly requested via SEED_DEFAULT_DATA=true
+    if settings.SEED_DEFAULT_DATA:
+        logger.info("SEED_DEFAULT_DATA is enabled; feeding sample development documents...")
+        know_agent.ingest_document(
+            engagement_id="eng-acme-001",
+            title="Acme Corp Enterprise Security & SSO Mandate",
+            raw_text=(
+                "Acme Corp enterprise security team requires all customer onboarding microservices "
+                "to authenticate via Enterprise Single Sign-On (SSO) using SAML 2.0 / OAuth2 OIDC before production cutover."
+            )
         )
-    )
-    know_agent.ingest_document(
-        engagement_id="eng-globex-002",
-        title="Globex Legacy Data Migration CDC Specs",
-        raw_text=(
-            "Globex Corp legacy data migration pipeline utilizes Debezium Change Data Capture (CDC) stream "
-            "replicating 50M records from on-prem PostgreSQL to GCP Cloud SQL with zero downtime and a maximum 15 min cutover window."
+        know_agent.ingest_document(
+            engagement_id="eng-globex-002",
+            title="Globex Legacy Data Migration CDC Specs",
+            raw_text=(
+                "Globex Corp legacy data migration pipeline utilizes Debezium Change Data Capture (CDC) stream "
+                "replicating 50M records from on-prem PostgreSQL to GCP Cloud SQL with zero downtime and a maximum 15 min cutover window."
+            )
         )
-    )
 
     # Cold-Start Persistence: Rehydrate in-memory vector store from PostgreSQL DocumentModel table
     try:

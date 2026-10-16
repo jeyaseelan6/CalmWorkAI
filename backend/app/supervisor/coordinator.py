@@ -12,7 +12,7 @@ import re
 import uuid
 from datetime import datetime, timezone, timedelta
 
-IST_TZ = timezone(timedelta(hours=5, minutes=30))
+from app.agents.invariants import IST_TZ, get_current_ist_str, UNIVERSAL_AGENT_INVARIANTS
 
 from app.agents import (
     PlanAgent, ChangeImpactAnalysis,
@@ -333,14 +333,8 @@ class SupervisorCoordinator:
         pending_approvals_desc = "; ".join(pending_desc_lines) if pending_desc_lines else ("None" if pending_approvals == 0 else f"{pending_approvals} pending approval(s)")
 
         # 3. Intent Detection: AI Classification with Semantic Pattern Fallback
-        now_ist = datetime.now(IST_TZ)
-        now_ist_str = now_ist.strftime("%d %b %Y, %H:%M IST")
-        time_rule = (
-            f"MANDATORY TIMEZONE RULE:\n"
-            f"- Current Platform Time: {now_ist_str}\n"
-            f"- All timestamps, event hours, milestones, and deadlines across your response MUST strictly use Indian Standard Time (IST) 24-hour clock only (e.g. '{now_ist_str}' or '15:30 IST').\n"
-            f"- NEVER output or mention UTC, GMT, or 12-hour AM/PM formats under any circumstances."
-        )
+        now_ist_str = get_current_ist_str()
+        time_rule = f"{UNIVERSAL_AGENT_INVARIANTS}\n\nCURRENT PLATFORM TIME: {now_ist_str}"
 
         intent = None
         if groq_service.is_configured() or is_live_inference_enabled():

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
         "DATABASE_URL", 
         "postgresql://postgres:postgres@localhost:5432/calmwork_db"
     )
+    SEED_DEFAULT_DATA: bool = os.getenv("SEED_DEFAULT_DATA", "false").lower() == "true"
     
     # Google Cloud & AI Settings (Primary Competition Platform)
     GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "calmwork-ai")

@@ -75,7 +75,9 @@ class GroundedAnswer(BaseModel):
         return self.evidence_sufficient
 
 
-KNOW_INSTRUCTION = (
+from app.agents.invariants import build_agent_instruction
+
+KNOW_INSTRUCTION = build_agent_instruction(
     "You are the CalmWork KNOW Agent. You synthesize concise, authoritative, factual answers "
     "based STRICTLY on verified engagement evidence.\n"
     "EVIDENCE HIERARCHY:\n"
@@ -83,7 +85,6 @@ KNOW_INSTRUCTION = (
     "2. Secondary: Use Verified Engagement Operational Context for worknotes, customer inputs, decisions, observations, outcomes, and work plan tasks.\n"
     "RULES:\n"
     "- Do NOT hallucinate or assume details not present in the evidence.\n"
-    "- Keep all dates and hours strictly in Indian Standard Time (IST) 24-hour clock notation (e.g. '14 Oct 2026, 16:30 IST').\n"
     "- Attribute facts to their verified sources.\n"
     "- If referring to timeline events, cite ONLY the single specific pertinent timeline record that contains the fact instead of listing or enumerating all timelines.\n"
     "- Do NOT append trailing 'Source:' or 'Sources:' lines or citations at the end of the answer, as sources are automatically structured by the platform.\n"

@@ -81,27 +81,28 @@ def init_db():
                 except Exception as ie:
                     logger.debug(f"Index creation note ({idx_name}): {ie}")
 
-            # Seed demo users if not present
-            try:
-                from app.models.user import UserModel
-                from app.auth.security import DEMO_USERS
-                session = SessionLocal()
-                for email, udata in DEMO_USERS.items():
-                    existing = session.query(UserModel).filter(UserModel.email == email).first()
-                    if not existing:
-                        new_user = UserModel(
-                            id=udata["id"],
-                            email=udata["email"],
-                            password_hash=udata["password_hash"],
-                            name=udata["name"],
-                            role=udata["role"],
-                            title=udata.get("title", "")
-                        )
-                        session.add(new_user)
-                session.commit()
-                session.close()
-            except Exception as ue:
-                logger.debug(f"User seeding note: {ue}")
+            # Seed demo users only if explicitly enabled
+            if getattr(settings, "SEED_DEFAULT_DATA", False):
+                try:
+                    from app.models.user import UserModel
+                    from app.auth.security import DEMO_USERS
+                    session = SessionLocal()
+                    for email, udata in DEMO_USERS.items():
+                        existing = session.query(UserModel).filter(UserModel.email == email).first()
+                        if not existing:
+                            new_user = UserModel(
+                                id=udata["id"],
+                                email=udata["email"],
+                                password_hash=udata["password_hash"],
+                                name=udata["name"],
+                                role=udata["role"],
+                                title=udata.get("title", "")
+                            )
+                            session.add(new_user)
+                    session.commit()
+                    session.close()
+                except Exception as ue:
+                    logger.debug(f"User seeding note: {ue}")
     except Exception as e:
         logger.debug(f"Migration check completed: {e}")
 

@@ -240,6 +240,10 @@ def execute_adk_runner(
     if settings.GROQ_API_KEY:
         try:
             instruction = system_instruction or getattr(getattr(runner, "agent", None), "instruction", None)
+            if instruction:
+                from app.agents.invariants import build_agent_instruction, UNIVERSAL_AGENT_INVARIANTS
+                if "GLOBAL PLATFORM INVARIANTS" not in instruction:
+                    instruction = build_agent_instruction(instruction)
             logger.info(f"Executing agent inference via Groq provider (model={settings.GROQ_MODEL or 'qwen/qwen3.8-27b'}, json_mode={json_mode})")
             groq_response = groq_service.generate_chat_completion(
                 prompt=message_text,
