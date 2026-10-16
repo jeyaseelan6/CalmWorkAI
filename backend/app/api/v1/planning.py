@@ -264,6 +264,30 @@ def approve_work_plan(
 
     new_statement = proposed_objective if (user_role == "MANAGER" and proposed_objective) else current_statement
 
+    # Task preservation: Plan Agent's tasks are added to the task list on approval without replacing existing tasks
+    existing_wp = current_outcome.work_plan if (current_outcome and current_outcome.work_plan) else {}
+    existing_tasks = list(existing_wp.get("tasks", [])) if isinstance(existing_wp, dict) else []
+    incoming_tasks = plan_dict.get("tasks", []) or plan_dict.get("work_items", [])
+
+    existing_ids = {t.get("id") for t in existing_tasks if isinstance(t, dict)}
+    existing_titles = {t.get("title", "").strip().lower() for t in existing_tasks if isinstance(t, dict)}
+
+    merged_tasks = list(existing_tasks)
+    for inc in incoming_tasks:
+        if isinstance(inc, dict):
+            inc_id = inc.get("id")
+            inc_title = inc.get("title", "").strip().lower()
+            if inc_id not in existing_ids and inc_title not in existing_titles:
+                merged_inc = dict(inc)
+                merged_inc["approval_status"] = "APPROVED"
+                merged_tasks.append(merged_inc)
+                if inc_id:
+                    existing_ids.add(inc_id)
+                if inc_title:
+                    existing_titles.add(inc_title)
+
+    plan_dict["tasks"] = merged_tasks
+
     try:
         if is_consequential and user_role == "MANAGER":
             new_version_outcome = outcome_service.propose_new_outcome_version(

@@ -653,3 +653,64 @@ def create_routine_task(
         "tasks": tasks,
         "message": msg
     }
+
+
+@router.delete("/{engagement_id}/tasks/{task_id}")
+def delete_routine_task(
+    engagement_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["FDE", "MANAGER"]))
+):
+    """
+    Delete / remove a task from the active work plan.
+    Both FDE and Manager have the authority to decide to remove or keep tasks.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    if not current_outcome:
+        raise HTTPException(status_code=404, detail="Active outcome not found")
+
+    from sqlalchemy.orm.attributes import flag_modified
+    wp = dict(current_outcome.work_plan or {})
+    tasks = list(wp.get("tasks", []))
+    target_task = None
+    remaining_tasks = []
+
+    for t in tasks:
+        if isinstance(t, dict) and (t.get("id") == task_id or t.get("linked_goal_id") == task_id):
+            target_task = t
+        else:
+            remaining_tasks.append(t)
+
+    wp["tasks"] = remaining_tasks
+    current_outcome.work_plan = wp
+    flag_modified(current_outcome, "work_plan")
+    eng.updated_at = datetime.utcnow()
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+    actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
+    task_title = target_task.get("title", task_id) if target_task else task_id
+
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="TASK_REMOVED",
+        title=f"Task Removed: {task_title}",
+        description=f"{user_role} ({actor_name}) removed task '{task_title}' from the work plan.",
+        actor_type=user_role,
+        actor_id=actor_id,
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {"task_id": task_id, "title": task_title},
+        "tasks": remaining_tasks,
+        "message": f"Task '{task_title}' removed successfully from work plan."
+    }
+

@@ -20,7 +20,8 @@ import {
   Check,
   Edit2,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from "lucide-react";
 import Link from "next/link";
 import { MorningBriefData, WhatChangedItem } from "@/components/engagement/DailyWorkBriefing";
@@ -344,12 +345,10 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
   const [localTasks, setLocalTasks] = useState<any[]>([]);
 
   useEffect(() => {
-    if (proposedPlan?.work_items && proposedPlan.work_items.length > 0) {
-      setLocalTasks(proposedPlan.work_items);
-    } else if (baselineTasks.length > 0 && localTasks.length === 0) {
+    if (baselineTasks.length > 0) {
       setLocalTasks(baselineTasks);
     }
-  }, [proposedPlan?.work_items, baselineTasks, localTasks.length]);
+  }, [baselineTasks]);
 
   const effectiveTasks = localTasks.length > 0 ? localTasks : (workItems.length > 0 ? workItems : baselineTasks);
 
@@ -455,6 +454,31 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       setAlertNotification(`Failed to adopt Plan Agent tasks: ${err.message || "Network error."}`);
     } finally {
       setAdoptingTasks(false);
+    }
+  };
+
+  // Remove task from work plan (FDE or Manager choice)
+  const handleDeleteTask = async (task: any) => {
+    if (!task?.id) return;
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/tasks/${task.id}`, {
+        method: "DELETE",
+        headers
+      });
+
+      if (res.ok) {
+        setLocalTasks((prev) => prev.filter((t) => t.id !== task.id));
+        setAlertNotification(`Task '${task.title}' removed from work plan.`);
+        await fetchEngagementDetail(activeCustomer.id);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setAlertNotification(`Failed to remove task: ${errJson.detail || "Server error"}`);
+      }
+    } catch (err: any) {
+      setAlertNotification(`Failed to remove task: ${err.message || "Network error"}`);
     }
   };
 
@@ -1133,6 +1157,15 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                               : inProgress
                               ? "In Progress"
                               : "To Do"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTask(item)}
+                            className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition cursor-pointer shrink-0"
+                            title="Remove task (FDE or Manager can decide to remove or keep)"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>

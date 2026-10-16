@@ -126,6 +126,28 @@ def respond_to_approval(
             reason=f"Manager approved scope expansion for {eng.customer_name}."
         )
 
+        # Carry forward existing tasks and add the approved outcome expansion task into the work plan
+        if current_outcome and current_outcome.work_plan:
+            from sqlalchemy.orm.attributes import flag_modified
+            wp = dict(current_outcome.work_plan)
+            existing_tasks = list(wp.get("tasks", []))
+            existing_titles = {t.get("title", "").strip().lower() for t in existing_tasks if isinstance(t, dict)}
+            if addition_title.strip().lower() not in existing_titles:
+                existing_tasks.append({
+                    "id": f"task-{new_crit_id}",
+                    "milestone_id": wp.get("milestones", [{}])[0].get("id", "m-1") if wp.get("milestones") else "m-1",
+                    "title": addition_title,
+                    "description": f"Outcome expansion criterion approved by Manager {manager_name} (Outcome v{new_v2.version}).",
+                    "status": "TODO",
+                    "approval_status": "APPROVED",
+                    "sequence_order": len(existing_tasks) + 1,
+                    "due_date": None,
+                    "linked_goal_id": new_crit_id
+                })
+            wp["tasks"] = existing_tasks
+            new_v2.work_plan = wp
+            flag_modified(new_v2, "work_plan")
+
         updated_eng = outcome_service.approve_outcome_version(
             engagement_id=engagement_id,
             outcome_id=new_v2.id,
