@@ -53,10 +53,10 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
   return (
     <nav
       aria-label="Workspace Switcher Rail"
-      className="hidden md:flex w-16 bg-slate-950 border-r border-slate-900 flex-col items-center justify-between py-3 shrink-0 z-30 select-none shadow-sm"
+      className="hidden md:flex w-16 h-full max-h-screen bg-slate-950 border-r border-slate-900 flex-col items-center justify-between py-3 shrink-0 z-30 select-none shadow-sm overflow-hidden"
     >
-      {/* Top Stack: Brand + Engagements */}
-      <div className="flex flex-col items-center gap-2.5 w-full">
+      {/* Top Stack: Brand Header (Fixed) */}
+      <div className="flex flex-col items-center gap-2 w-full shrink-0">
         {/* CalmWork Logo Icon */}
         <Link
           href="/engagements"
@@ -73,97 +73,97 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
         </Link>
 
         {/* Subtle Separator */}
-        <div className="w-8 h-px bg-slate-800/80 my-0.5" />
-
-        {/* Customer Engagements Stack */}
-        <div className="flex flex-col items-center gap-2.5 w-full">
-          {customers.map((cust, idx) => {
-            const isActive = cust.id === activeCustomer?.id;
-            const isHealthy = cust.status === "HEALTHY";
-            const initials = getClientInitials(cust.customerName);
-            const gradient =
-              CLIENT_GRADIENTS[cust.id] ||
-              DEFAULT_GRADIENTS[idx % DEFAULT_GRADIENTS.length];
-
-            return (
-              <div key={cust.id} className="relative group flex items-center justify-center w-full">
-                {/* Active Left Indicator Bar (Discord style) */}
-                <span
-                  className={`absolute left-0 w-1 bg-white rounded-r-md transition-all duration-200 ${
-                    isActive
-                      ? "h-8 opacity-100"
-                      : "h-2 opacity-0 group-hover:opacity-70 group-hover:h-5"
-                  }`}
-                />
-
-                {/* Squircle Avatar Button */}
-                <button
-                  type="button"
-                  onClick={() => handleSwitch(cust)}
-                  aria-label={`Switch to ${cust.customerName}`}
-                  className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${gradient} text-white font-bold text-xs flex items-center justify-center shadow-sm relative transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/50 ${
-                    isActive
-                      ? "rounded-xl ring-2 ring-white ring-offset-2 ring-offset-slate-950 scale-102"
-                      : "opacity-80 hover:opacity-100 hover:rounded-xl hover:scale-105"
-                  }`}
-                >
-                  <span className="tracking-tight">{initials}</span>
-
-                  {/* Health Status Dot Badge */}
-                  <span
-                    className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-950 ${
-                      isHealthy
-                        ? "bg-emerald-400"
-                        : "bg-amber-400 animate-pulse"
-                    }`}
-                    title={isHealthy ? "Healthy" : "Needs Review"}
-                  />
-                </button>
-
-                {/* Hover Flyout Tooltip */}
-                <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-900 text-white rounded-lg shadow-2xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 flex flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-white">{cust.customerName}</span>
-                    <span
-                      className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                        isHealthy
-                          ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
-                          : "bg-amber-950 text-amber-300 border border-amber-800"
-                      }`}
-                    >
-                      {isHealthy ? "Healthy" : "Needs Review"}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
-                    {cust.engagementName}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* "+ New Engagement" Button (Manager role) */}
-          {isManager && onOpenCreateModal && (
-            <div className="relative group flex items-center justify-center w-full mt-1">
-              <button
-                type="button"
-                onClick={onOpenCreateModal}
-                title="Create New Engagement"
-                className="w-10 h-10 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-dashed border-slate-700/80 hover:border-slate-500 transition-all duration-200 cursor-pointer hover:rounded-xl focus:outline-none"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-              {/* Tooltip */}
-              <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md shadow-xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-                New Engagement
-              </div>
-            </div>
-          )}
-        </div>
+        <div className="w-8 h-px bg-slate-800/80 my-1" />
       </div>
 
-      {/* Bottom Stack: Portfolio Overview Shortcut */}
-      <div className="flex flex-col items-center gap-2 w-full pt-2 border-t border-slate-900">
+      {/* Customer Engagements Stack (Scrollable with hidden scrollbar) */}
+      <div className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar py-1 flex flex-col items-center gap-2.5 min-h-0">
+        {customers.map((cust, idx) => {
+          const isActive = cust.id === activeCustomer?.id;
+          const isHealthy = cust.status === "HEALTHY";
+          const initials = getClientInitials(cust.customerName);
+          const gradient =
+            CLIENT_GRADIENTS[cust.id] ||
+            DEFAULT_GRADIENTS[idx % DEFAULT_GRADIENTS.length];
+
+          return (
+            <div key={cust.id} className="relative group flex items-center justify-center w-full shrink-0">
+              {/* Active Left Indicator Bar (Discord style) */}
+              <span
+                className={`absolute left-0 w-1 bg-white rounded-r-md transition-all duration-200 ${
+                  isActive
+                    ? "h-8 opacity-100"
+                    : "h-2 opacity-0 group-hover:opacity-70 group-hover:h-5"
+                }`}
+              />
+
+              {/* Squircle Avatar Button */}
+              <button
+                type="button"
+                onClick={() => handleSwitch(cust)}
+                aria-label={`Switch to ${cust.customerName}`}
+                className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${gradient} text-white font-bold text-xs flex items-center justify-center shadow-sm relative transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/50 ${
+                  isActive
+                    ? "rounded-xl ring-2 ring-white ring-offset-2 ring-offset-slate-950 scale-102"
+                    : "opacity-80 hover:opacity-100 hover:rounded-xl hover:scale-105"
+                }`}
+              >
+                <span className="tracking-tight">{initials}</span>
+
+                {/* Health Status Dot Badge */}
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-950 ${
+                    isHealthy
+                      ? "bg-emerald-400"
+                      : "bg-amber-400 animate-pulse"
+                  }`}
+                  title={isHealthy ? "Healthy" : "Needs Review"}
+                />
+              </button>
+
+              {/* Hover Flyout Tooltip */}
+              <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-900 text-white rounded-lg shadow-2xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs text-white">{cust.customerName}</span>
+                  <span
+                    className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                      isHealthy
+                        ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                        : "bg-amber-950 text-amber-300 border border-amber-800"
+                    }`}
+                  >
+                    {isHealthy ? "Healthy" : "Needs Review"}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
+                  {cust.engagementName}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* "+ New Engagement" Button (Manager role) */}
+        {isManager && onOpenCreateModal && (
+          <div className="relative group flex items-center justify-center w-full mt-1 shrink-0 pb-1">
+            <button
+              type="button"
+              onClick={onOpenCreateModal}
+              title="Create New Engagement"
+              className="w-10 h-10 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-dashed border-slate-700/80 hover:border-slate-500 transition-all duration-200 cursor-pointer hover:rounded-xl focus:outline-none"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            {/* Tooltip */}
+            <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md shadow-xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              New Engagement
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Stack: Portfolio Overview Shortcut (Fixed) */}
+      <div className="flex flex-col items-center gap-2 w-full pt-2 border-t border-slate-900 shrink-0">
         <Link
           href="/engagements"
           title="All Engagements Portfolio"

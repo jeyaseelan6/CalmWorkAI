@@ -9,11 +9,13 @@ import CustomerUpdatePanel from "@/components/delivery/CustomerUpdatePanel";
 import WorkPlanSection from "@/components/engagement/WorkPlanSection";
 import TimelinePanel from "@/components/timeline/TimelinePanel";
 import { useEngagement } from "@/context/EngagementContext";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 function EngagementDetailContent() {
   const routeParams = useParams();
+  const searchParams = useSearchParams();
   const engagementId = (routeParams?.id as string) || "eng-acme-001";
+  const tabParam = searchParams?.get("tab");
 
   const {
     customers,
@@ -35,23 +37,12 @@ function EngagementDetailContent() {
       }
     }
 
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get("tab");
-      if (tabParam && ["myday", "plan", "knowledge", "changes", "updates", "timeline"].includes(tabParam)) {
-        setActiveTab(tabParam as "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline");
-      }
+    if (tabParam && ["myday", "plan", "knowledge", "changes", "updates", "timeline"].includes(tabParam)) {
+      setActiveTab(tabParam as "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline");
+    } else if (!tabParam) {
+      setActiveTab("myday");
     }
-  }, [engagementId, customers, activeCustomer.id, setActiveCustomer, setActiveTab]);
-
-  const handleTabChange = (tab: "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline") => {
-    setActiveTab(tab);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", tab);
-      window.history.replaceState({}, "", url.toString());
-    }
-  };
+  }, [engagementId, tabParam, customers, activeCustomer.id, setActiveCustomer, setActiveTab]);
 
   const isAcme = engagementId === "eng-acme-001";
 
@@ -102,70 +93,6 @@ function EngagementDetailContent() {
               </span>
             </div>
           </div>
-
-          {/* Simple, Consistent Tabs Navigation (Swipeable horizontally on mobile) */}
-          <nav className="flex items-center gap-1.5 border-t border-slate-100 pt-2.5 overflow-x-auto text-xs whitespace-nowrap pb-1">
-            <button
-              onClick={() => handleTabChange("myday")}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                activeTab === "myday"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              My Day
-            </button>
-            <button
-              onClick={() => handleTabChange("plan")}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                activeTab === "plan"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Plan &amp; Tasks
-            </button>
-            <button
-              onClick={() => handleTabChange("knowledge")}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                activeTab === "knowledge"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Knowledge
-            </button>
-            <button
-              onClick={() => handleTabChange("changes")}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                activeTab === "changes"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Changes &amp; Risks
-            </button>
-            <button
-              onClick={() => handleTabChange("updates")}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                activeTab === "updates"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Customer Updates
-            </button>
-            <button
-              onClick={() => handleTabChange("timeline")}
-              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
-                activeTab === "timeline"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Timeline
-            </button>
-          </nav>
         </div>
 
         {/* 1. MY DAY TAB: Focus Hero Action, Ordered Tasks, Velocity & MOVE Agent intelligence */}

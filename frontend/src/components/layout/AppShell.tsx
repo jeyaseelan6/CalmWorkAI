@@ -24,7 +24,9 @@ import {
   Send,
   Plus,
   Menu,
-  X
+  X,
+  ListTodo,
+  FileText
 } from "lucide-react";
 import RecordWorknoteDrawer from "@/components/layout/RecordWorknoteDrawer";
 import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
@@ -37,22 +39,17 @@ export interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
+  tab?: string;
 }
 
 function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
   const { role } = useAuth();
-  const { activeCustomer, pendingApprovalsCount, activeTab } = useEngagement();
+  const { activeCustomer, pendingApprovalsCount, activeTab, setActiveTab } = useEngagement();
   const pathname = usePathname();
 
   const activeId = activeCustomer?.id || "eng-acme-001";
 
   const currentNav: NavItem[] = [
-    { 
-      id: "myday", 
-      label: "My Day", 
-      href: `/engagements/${activeId}?tab=myday`, 
-      icon: CheckSquare 
-    },
     { 
       id: "engagements", 
       label: "My Engagements", 
@@ -60,17 +57,52 @@ function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
       icon: Building2 
     },
     { 
-      id: "supervisor", 
-      label: "Ask CalmWork", 
-      href: "/supervisor", 
-      icon: Sparkles 
+      id: "myday", 
+      label: "My day", 
+      href: `/engagements/${activeId}?tab=myday`, 
+      icon: CheckSquare,
+      tab: "myday"
+    },
+    { 
+      id: "plan", 
+      label: "Plan & Tasks", 
+      href: `/engagements/${activeId}?tab=plan`, 
+      icon: ListTodo,
+      tab: "plan"
+    },
+    { 
+      id: "knowledge", 
+      label: "Knowledge", 
+      href: `/engagements/${activeId}?tab=knowledge`, 
+      icon: BookOpen,
+      tab: "knowledge"
+    },
+    { 
+      id: "notes", 
+      label: "Work Notes", 
+      href: `/engagements/${activeId}?tab=timeline`, 
+      icon: FileText,
+      tab: "timeline"
+    },
+    { 
+      id: "deliver", 
+      label: "Deliver", 
+      href: `/engagements/${activeId}?tab=updates`, 
+      icon: Send,
+      tab: "updates"
     },
     { 
       id: "approvals", 
-      label: "Approvals", 
+      label: "Waiting Approvals", 
       href: "/approvals", 
       icon: ShieldCheck, 
       badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined 
+    },
+    { 
+      id: "supervisor", 
+      label: "Ask Calm Work AI", 
+      href: "/supervisor", 
+      icon: Sparkles 
     },
   ];
 
@@ -79,33 +111,48 @@ function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
       {currentNav.map((item: NavItem) => {
         const Icon = item.icon;
         let isActive = false;
-        if (item.id === "myday") {
-          isActive = (pathname?.startsWith(`/engagements/${activeId}`) && activeTab === "myday") || pathname === "/";
-        } else if (item.id === "engagements") {
-          isActive = pathname === "/engagements" || (pathname?.startsWith("/engagements/") && activeTab !== "myday");
-        } else if (item.id === "supervisor") {
-          isActive = pathname?.startsWith("/supervisor") || false;
+        if (item.id === "engagements") {
+          isActive = pathname === "/engagements" || pathname === "/";
+        } else if (item.id === "myday") {
+          isActive = pathname?.startsWith("/engagements/") && (activeTab === "myday" || !activeTab);
+        } else if (item.id === "plan") {
+          isActive = pathname?.startsWith("/engagements/") && activeTab === "plan";
+        } else if (item.id === "knowledge") {
+          isActive = pathname?.startsWith("/engagements/") && activeTab === "knowledge";
+        } else if (item.id === "notes") {
+          isActive = pathname?.startsWith("/engagements/") && activeTab === "timeline";
+        } else if (item.id === "deliver") {
+          isActive = pathname?.startsWith("/engagements/") && activeTab === "updates";
         } else if (item.id === "approvals") {
           isActive = pathname?.startsWith("/approvals") || false;
+        } else if (item.id === "supervisor") {
+          isActive = pathname?.startsWith("/supervisor") || false;
         }
 
         return (
           <Link
             key={item.id}
             href={item.href}
-            onClick={onItemClick}
-            className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-lg text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 ${
+            onClick={() => {
+              if (item.tab) {
+                setActiveTab(item.tab);
+              }
+              if (onItemClick) {
+                onItemClick();
+              }
+            }}
+            className={`w-full flex items-center justify-between px-3 py-2 min-h-[38px] rounded-lg text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 ${
               isActive
                 ? "bg-slate-900 text-white font-semibold shadow-2xs"
                 : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 font-medium"
             }`}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 truncate">
               <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-slate-500"}`} />
-              <span>{item.label}</span>
+              <span className="truncate">{item.label}</span>
             </div>
             {item.badge ? (
-              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold shrink-0 ${
                 isActive ? "bg-amber-400 text-slate-950" : "bg-amber-100 text-amber-900"
               }`}>
                 {item.badge}
@@ -335,10 +382,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <WorkspaceRail onOpenCreateModal={() => setShowCreateModal(true)} />
 
       {/* Desktop Client Sidebar (hidden on mobile) */}
-      <aside className="hidden md:flex w-56 border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0">
+      <aside className="hidden md:flex w-60 h-screen max-h-screen border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0 overflow-y-auto no-scrollbar">
         <div>
           {/* Brand Header: Displayed before My Day */}
-          <div className="pb-3 mb-2.5 px-1 border-b border-slate-100">
+          <div className="pb-3 mb-2 px-1 border-b border-slate-100">
             <Link href="/engagements" className="block group">
               <h2 className="font-display font-bold text-sm text-slate-900 tracking-tight group-hover:text-slate-700 transition">
                 Calm Work AI
@@ -348,6 +395,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </Link>
           </div>
+
+          {/* Active Engagement Context Indicator */}
+          {activeCustomer && (
+            <div className="mb-2.5 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                <span className="font-mono text-[9px] uppercase tracking-wider">Active Client</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${activeCustomer.status === "HEALTHY" ? "bg-emerald-500" : "bg-amber-500"}`} />
+              </div>
+              <p className="text-xs font-semibold text-slate-900 truncate mt-0.5" title={activeCustomer.customerName}>
+                {activeCustomer.customerName}
+              </p>
+              <p className="text-[10px] text-slate-500 truncate" title={activeCustomer.engagementName}>
+                {activeCustomer.engagementName}
+              </p>
+            </div>
+          )}
 
           {/* Navigation Links wrapped in Suspense */}
           <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
