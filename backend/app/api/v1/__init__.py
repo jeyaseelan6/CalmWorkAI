@@ -13,6 +13,7 @@ from app.api.v1.documents import router as documents_router
 from app.api.v1.planning import router as planning_router
 from app.api.v1.supervisor import router as supervisor_router
 from app.api.v1.intelligence import router as intelligence_router
+from app.api.v1.skills import router as skills_router
 
 api_router = APIRouter(prefix=settings.API_V1_STR)
 
@@ -23,5 +24,7 @@ api_router.include_router(documents_router)
 api_router.include_router(planning_router)
 api_router.include_router(supervisor_router)
 api_router.include_router(intelligence_router)
+api_router.include_router(skills_router)
 
 __all__ = ["api_router"]
+

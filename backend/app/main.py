@@ -50,10 +50,20 @@ async def lifespan(app: FastAPI):
             )
         )
 
-    # Note: Vector store utilizes lazy per-engagement rehydration on query demand
+    # Start Morning Brief 08:00 AM IST Automated Scheduler
+    try:
+        from app.skills.morning_brief import start_morning_brief_scheduler, stop_morning_brief_scheduler
+        start_morning_brief_scheduler()
+    except Exception as sched_err:
+        logger.warning(f"Could not start Morning Brief scheduler: {sched_err}")
 
     logger.info("CalmWork backend startup complete.")
     yield
+    try:
+        from app.skills.morning_brief import stop_morning_brief_scheduler
+        stop_morning_brief_scheduler()
+    except Exception:
+        pass
     logger.info("CalmWork backend shutting down.")
 
 

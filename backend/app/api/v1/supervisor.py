@@ -98,6 +98,34 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
     }
 
 
+from app.skills.morning_brief import morning_brief_skill
+
+
+@router.get("/engagements/{engagement_id}/supervisor/brief/latest")
+def get_latest_daily_work_brief(
+    engagement_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves the most recent persisted Morning Brief for an engagement.
+    Enables zero-latency morning dashboard rendering without waiting for new LLM inference.
+    """
+    latest = morning_brief_skill.get_latest_brief(engagement_id=engagement_id, db=db)
+    if not latest:
+        return {
+            "success": True,
+            "data": None,
+            "has_brief": False,
+            "message": "No previously generated morning brief found for this engagement."
+        }
+    return {
+        "success": True,
+        "data": latest,
+        "has_brief": True,
+        "message": "Latest morning brief retrieved successfully."
+    }
+
+
 @router.post("/engagements/{engagement_id}/supervisor/brief")
 def get_daily_work_brief(
     engagement_id: str,
@@ -105,50 +133,26 @@ def get_daily_work_brief(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
-    Proactive Intelligence Mode: Generates a sequential Morning Brief (PLAN -> KNOW -> MOVE -> Supervisor Plan).
-    Persists provenance in shared timeline without invoking DELIVER.
+    Proactive Intelligence Mode: Generates a sequential Morning Brief via Morning Brief Skill.
+    Persists provenance and complete briefing artifact in shared timeline.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
 
-    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
-    statement = current_outcome.statement if current_outcome else ""
-    version = current_outcome.version if current_outcome else 1
-    criteria = current_outcome.success_criteria if current_outcome else []
-    approvals = db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all()
-    timeline = db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).order_by(TimelineEvent.created_at.desc()).all()
-
-    brief = supervisor_coordinator.generate_daily_work_brief(
+    user_name = current_user.get("name", "Engineer")
+    brief = morning_brief_skill.execute_and_persist(
         engagement_id=engagement_id,
-        customer_name=eng.customer_name,
-        status=eng.status,
-        outcome_statement=statement,
-        version=version,
-        pending_approvals=len(approvals),
-        current_work_cycle=eng.current_work_cycle,
-        timeline_events=timeline,
-        success_criteria=criteria,
-        approved_work_plan=current_outcome.work_plan if current_outcome else None
+        db=db,
+        trigger_source=f"ON_DEMAND ({user_name})"
     )
-
-    db.add(TimelineEvent(
-        id=f"evt-{uuid.uuid4().hex[:8]}",
-        engagement_id=engagement_id,
-        event_type="MORNING_BRIEF_GENERATED",
-        title=f"Morning Brief Generated (v{version})",
-        description=f"Supervisor synthesized sequential Morning Brief (PLAN → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
-        actor_type="SUPERVISOR",
-        actor_id="supervisor_coordinator",
-        created_at=datetime.utcnow()
-    ))
-    db.commit()
 
     return {
         "success": True,
         "data": brief.model_dump(),
-        "message": "Sequential Morning Brief generated and provenance persisted in shared memory."
+        "message": "Sequential Morning Brief generated via Morning Brief Skill and persisted."
     }
+
 
 
 @router.post("/engagements/{engagement_id}/supervisor/brief/stream")

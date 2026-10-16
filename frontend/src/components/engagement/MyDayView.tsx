@@ -110,14 +110,32 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
   } | null>(null);
   const [hasFreshEvidence, setHasFreshEvidence] = useState(false);
 
-  // Clear brief and local tasks when active customer changes so it never auto-runs
+  // Fetch latest pre-computed morning brief on customer change (e.g. from 8:00 AM IST scheduled run)
   useEffect(() => {
     setBrief(null);
     setLastRefreshed("");
     setStreamEvent(null);
     setLocalTasks([]);
     setHasFreshEvidence(false);
-  }, [activeCustomer?.id]);
+
+    if (activeCustomer?.id) {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/latest`, { headers })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.success && data?.has_brief && data?.data) {
+            setBrief(data.data);
+            if (data.generated_at) {
+              setLastRefreshed(formatISTDateTime(data.generated_at));
+            }
+          }
+        })
+        .catch((e) => {
+          console.debug("No pre-computed morning brief available:", e);
+        });
+    }
+  }, [activeCustomer?.id, token]);
 
   // Listen for state changes (worknotes, plan approvals, task changes) to signal fresh evidence
   useEffect(() => {

@@ -193,18 +193,33 @@ def approve_work_plan(
     actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
 
-    # Idempotency check: if current outcome already has the identical plan
-    if current_outcome and current_outcome.work_plan == plan_dict:
-        return {
-            "success": True,
-            "data": {
-                "engagement_id": engagement_id,
-                "version": current_outcome.version,
-                "outcome_id": current_outcome.id,
-                "work_plan": current_outcome.work_plan
-            },
-            "message": "Work plan is already approved and active (idempotent request)."
-        }
+    # Idempotency check: if current outcome already has the identical plan or identical objective/milestones
+    if current_outcome and current_outcome.work_plan:
+        wp_obj = (current_outcome.work_plan.get("engagement_objective") or "").strip()
+        incoming_obj = (plan_dict.get("engagement_objective") or "").strip()
+        wp_ms = current_outcome.work_plan.get("milestones", [])
+        incoming_ms = plan_dict.get("milestones", [])
+        is_identical = (
+            current_outcome.work_plan == plan_dict
+            or (
+                wp_obj
+                and wp_obj == incoming_obj
+                and wp_ms == incoming_ms
+                and not plan_dict.get("is_consequential_change")
+                and not plan_dict.get("scope_expansion")
+            )
+        )
+        if is_identical:
+            return {
+                "success": True,
+                "data": {
+                    "engagement_id": engagement_id,
+                    "version": current_outcome.version,
+                    "outcome_id": current_outcome.id,
+                    "work_plan": current_outcome.work_plan
+                },
+                "message": "Work plan is already approved and active (idempotent request)."
+            }
 
     has_existing_plan = bool(current_outcome and current_outcome.work_plan is not None)
     current_statement = (current_outcome.statement if current_outcome else eng.name).strip()
