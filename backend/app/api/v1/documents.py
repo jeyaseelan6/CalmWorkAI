@@ -422,3 +422,81 @@ def stream_document_file(engagement_id: str, doc_id: str, db: Session = Depends(
             "Content-Disposition": f'inline; filename="{doc.title}.txt"'
         }
     )
+
+
+@router.delete("/engagements/{engagement_id}/documents/{document_id}")
+def delete_document(
+    engagement_id: str,
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER"]))
+):
+    """
+    Manager-only endpoint: Permanently deletes a knowledge document.
+    1. Removes binary file from Google Cloud Storage (GCS).
+    2. Evicts semantic vector chunks from KNOW Agent in-memory index.
+    3. Deletes DocumentModel from Cloud SQL / PostgreSQL.
+    4. Records an audit TimelineEvent for governance provenance.
+    """
+    doc = db.query(DocumentModel).filter(
+        DocumentModel.id == document_id,
+        DocumentModel.engagement_id == engagement_id
+    ).first()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in engagement '{engagement_id}'."
+        )
+
+    doc_title = doc.title
+    file_url = doc.file_url
+
+    # 1. Permanently remove from Google Cloud Storage
+    try:
+        storage_service.delete_document_file(
+            engagement_id=engagement_id,
+            document_id=document_id,
+            file_url=file_url
+        )
+    except Exception as e:
+        logger.warning(f"Storage service deletion warning for {document_id}: {e}")
+
+    # 2. Invalidate VectorStore memory for KNOW Agent
+    try:
+        know_agent.vector_store.delete_document_chunks(
+            engagement_id=engagement_id,
+            document_id=document_id,
+            title=doc_title
+        )
+    except Exception as e:
+        logger.warning(f"Vector store chunk removal warning for {document_id}: {e}")
+
+    # 3. Delete Document record from database
+    db.delete(doc)
+
+    # 4. Audit Trail in Timeline
+    mgr_name = current_user.get("name", "Manager")
+    mgr_id = current_user.get("id", "usr-mgr")
+    timeline_evt = TimelineEvent(
+        id=f"evt-del-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="DOCUMENT_DELETED",
+        title="Knowledge Resource Removed",
+        description=f"Document '{doc_title}' permanently removed from GCS and Knowledge Base by Engineering Manager {mgr_name}.",
+        actor_type="MANAGER",
+        actor_id=mgr_id,
+        created_at=datetime.utcnow()
+    )
+    db.add(timeline_evt)
+    db.commit()
+
+    logger.info(f"Document '{doc_title}' ({document_id}) deleted by Manager {mgr_name}")
+    return {
+        "success": True,
+        "message": f"Document '{doc_title}' successfully removed from Google Cloud Storage and Knowledge Base.",
+        "data": {
+            "document_id": document_id,
+            "title": doc_title,
+            "deleted_by": mgr_name
+        }
+    }

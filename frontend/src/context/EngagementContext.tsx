@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 export interface CustomerEngagement {
   id: string;
@@ -160,7 +160,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     fetchEngagementsList();
   }, []);
 
-  const fetchEngagementDetail = async (id: string, wipeOldState: boolean = true) => {
+  const fetchEngagementDetail = useCallback(async (id: string, wipeOldState: boolean = true) => {
     if (wipeOldState) {
       setActiveEngagementData(null);
       setNextActionData(null);
@@ -179,6 +179,10 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
             setApprovedAcme(true);
           }
         }
+      } else {
+        const errJson = await res.json().catch(() => null);
+        setBackendError(errJson?.message || "The server is unavailable right now.");
+        return;
       }
       const nextRes = await fetch(`${API_BASE}/engagements/${id}/next-action`);
       if (nextRes.ok) {
@@ -195,11 +199,11 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
       }
     } catch (e) {
       console.warn("Backend API offline or unreachable; using local engagement state fallback.");
-      setBackendError("Backend server is offline or unreachable. Please start the backend server and refresh.");
+      setBackendError("The server is unavailable right now.");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const switchEngagement = (cust: CustomerEngagement) => {
     setActiveCustomer(cust);

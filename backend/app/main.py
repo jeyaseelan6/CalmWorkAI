@@ -50,12 +50,7 @@ async def lifespan(app: FastAPI):
             )
         )
 
-    # Cold-Start Persistence: Rehydrate in-memory vector store from PostgreSQL DocumentModel table
-    try:
-        rehydrated_count = know_agent.vector_store.rehydrate_all()
-        logger.info(f"Cold-start vector store rehydration complete: {rehydrated_count} chunks indexed from database.")
-    except Exception as e:
-        logger.warning(f"Vector store startup rehydration note: {e}")
+    # Note: Vector store utilizes lazy per-engagement rehydration on query demand
 
     logger.info("CalmWork backend startup complete.")
     yield

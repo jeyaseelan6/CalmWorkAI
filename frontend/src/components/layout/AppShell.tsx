@@ -304,7 +304,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
                 <Link 
-                  href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`}
+                  href="/engagements"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="flex items-center gap-2.5"
                 >
@@ -371,7 +371,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex w-60 border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0">
         <div>
           {/* Logo & Application Header */}
-          <Link href={`/engagements/${activeCustomer?.id || "eng-acme-001"}`} className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
+          <Link href="/engagements" className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
             <div className="h-7 w-7 rounded bg-slate-900 text-white flex items-center justify-center font-display font-bold text-sm shadow-2xs">
               C
             </div>

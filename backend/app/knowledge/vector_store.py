@@ -45,6 +45,33 @@ class VectorStore:
         logger.info(f"Added {len(new_chunks)} chunks to vector store for engagement {engagement_id}")
         return len(self._chunks_by_engagement[engagement_id])
 
+    def delete_document_chunks(
+        self,
+        engagement_id: str,
+        document_id: Optional[str] = None,
+        title: Optional[str] = None
+    ) -> int:
+        """
+        Removes all chunks belonging to a deleted document from the tenant in-memory vector index.
+        """
+        if engagement_id not in self._chunks_by_engagement:
+            return 0
+
+        initial_len = len(self._chunks_by_engagement[engagement_id])
+        self._chunks_by_engagement[engagement_id] = [
+            c for c in self._chunks_by_engagement[engagement_id]
+            if not (
+                (document_id and getattr(c, "document_id", None) == document_id) or
+                (title and getattr(c, "title", None) == title)
+            )
+        ]
+        removed_count = initial_len - len(self._chunks_by_engagement[engagement_id])
+        logger.info(
+            f"Removed {removed_count} chunks from vector store for engagement {engagement_id} "
+            f"(doc_id={document_id}, title={title})"
+        )
+        return removed_count
+
     def rehydrate_engagement(self, engagement_id: str, db: Any = None) -> int:
         """
         Cold-start recovery: pulls all indexed DocumentModel records for engagement

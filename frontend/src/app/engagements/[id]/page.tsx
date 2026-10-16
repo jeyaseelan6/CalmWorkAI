@@ -28,14 +28,11 @@ function EngagementDetailContent() {
 
   // Sync route parameter and query tab with active engagement context
   React.useEffect(() => {
-    if (engagementId) {
-      if (activeCustomer.id !== engagementId) {
-        const matching = customers.find((c) => c.id === engagementId);
-        if (matching) {
-          setActiveCustomer(matching);
-        }
+    if (engagementId && activeCustomer.id !== engagementId) {
+      const matching = customers.find((c) => c.id === engagementId);
+      if (matching) {
+        setActiveCustomer(matching);
       }
-      fetchEngagementDetail(engagementId);
     }
 
     if (typeof window !== "undefined") {
@@ -45,7 +42,7 @@ function EngagementDetailContent() {
         setActiveTab(tabParam as "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline");
       }
     }
-  }, [engagementId, customers, activeCustomer.id, fetchEngagementDetail, setActiveCustomer, setActiveTab]);
+  }, [engagementId, customers, activeCustomer.id, setActiveCustomer, setActiveTab]);
 
   const handleTabChange = (tab: "myday" | "plan" | "knowledge" | "changes" | "updates" | "timeline") => {
     setActiveTab(tab);

@@ -834,9 +834,9 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
               <AlertTriangle className="h-8 w-8 text-rose-500" />
             </div>
             <div className="space-y-1.5 max-w-md">
-              <h3 className="text-lg font-display font-bold text-slate-900">Backend Server Unavailable</h3>
+              <h3 className="text-lg font-display font-bold text-slate-900">The server is unavailable right now.</h3>
               <p className="text-sm text-slate-500 leading-relaxed">
-                {backendError}
+                Please check your network or ensure the backend service is running, then retry.
               </p>
             </div>
             <button

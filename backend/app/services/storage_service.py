@@ -11,6 +11,7 @@ import base64
 import logging
 import mimetypes
 import urllib.request
+import shutil
 from typing import Optional, Tuple, Dict, Any
 from app.config import settings
 
@@ -271,3 +272,62 @@ class StorageService:
                 logger.warning(f"Could not download file from URL ({file_url}): {e}")
 
         return None
+
+    def delete_document_file(
+        self,
+        engagement_id: str,
+        document_id: str,
+        file_url: Optional[str] = None
+    ) -> bool:
+        """
+        Permanently deletes document binary file and related blobs from Google Cloud Storage,
+        and cleans up any local upload cache directories if present.
+        """
+        deleted_any = False
+        clean_eng_id = re.sub(r"[^a-zA-Z0-9_\-]+", "_", engagement_id)
+        clean_doc_id = re.sub(r"[^a-zA-Z0-9_\-]+", "_", document_id)
+
+        # 1. Delete from Google Cloud Storage
+        if self.use_gcs and self.bucket_name:
+            client = self._get_gcs_client()
+            if client:
+                try:
+                    bucket = client.bucket(self.bucket_name)
+                    # A. Delete by exact blob path if file_url provided
+                    if file_url and f"storage.googleapis.com/{self.bucket_name}/" in file_url:
+                        blob_path = file_url.split(f"storage.googleapis.com/{self.bucket_name}/")[-1]
+                        blob = bucket.blob(blob_path)
+                        if blob.exists():
+                            blob.delete()
+                            logger.info(f"Deleted GCS blob: {blob_path}")
+                            deleted_any = True
+                    elif file_url and file_url.startswith("gs://"):
+                        blob_path = file_url.replace(f"gs://{self.bucket_name}/", "")
+                        blob = bucket.blob(blob_path)
+                        if blob.exists():
+                            blob.delete()
+                            logger.info(f"Deleted GCS blob: {blob_path}")
+                            deleted_any = True
+
+                    # B. Also delete any blobs matching prefix engagements/{clean_eng_id}/{clean_doc_id}/
+                    prefix = f"engagements/{clean_eng_id}/{clean_doc_id}/"
+                    blobs = list(bucket.list_blobs(prefix=prefix))
+                    for b in blobs:
+                        b.delete()
+                        logger.info(f"Deleted GCS blob under prefix {prefix}: {b.name}")
+                        deleted_any = True
+                except Exception as e:
+                    logger.warning(f"Error deleting blob from GCS: {e}")
+
+        # 2. Clean up local uploads cache directory if it exists
+        try:
+            upload_dir = getattr(self, "upload_dir", "uploads")
+            local_doc_dir = os.path.join(upload_dir, engagement_id, document_id)
+            if os.path.exists(local_doc_dir):
+                shutil.rmtree(local_doc_dir, ignore_errors=True)
+                logger.info(f"Cleaned up local upload directory: {local_doc_dir}")
+                deleted_any = True
+        except Exception as e:
+            logger.debug(f"Local upload directory cleanup note: {e}")
+
+        return deleted_any

@@ -39,7 +39,25 @@ async function proxy(
       headers: resHeaders,
     });
   } catch (error: any) {
-    console.error("API proxy error:", error);
+    const isConnRefused =
+      error?.cause?.code === "ECONNREFUSED" ||
+      error?.code === "ECONNREFUSED" ||
+      error?.message?.includes("ECONNREFUSED") ||
+      error?.cause?.syscall === "connect";
+
+    if (isConnRefused) {
+      console.warn(`[API Proxy] Backend server is unreachable at ${BACKEND_URL} (offline).`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "server_unavailable",
+          message: "The server is unavailable right now.",
+        },
+        { status: 503 }
+      );
+    }
+
+    console.error("API proxy error:", error?.message || error);
     return NextResponse.json(
       {
         success: false,
