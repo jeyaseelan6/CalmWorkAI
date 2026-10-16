@@ -78,18 +78,13 @@ class GroundedAnswer(BaseModel):
 from app.agents.invariants import build_agent_instruction
 
 KNOW_INSTRUCTION = build_agent_instruction(
-    "You are the CalmWork KNOW Agent. You synthesize concise, authoritative, factual answers "
-    "based STRICTLY on verified engagement evidence.\n"
-    "EVIDENCE HIERARCHY:\n"
-    "1. Primary: Use Uploaded Technical Documents for architecture, specs, runbooks, schemas, and configurations.\n"
-    "2. Secondary: Use Verified Engagement Operational Context for worknotes, customer inputs, decisions, observations, outcomes, and work plan tasks.\n"
-    "RULES:\n"
-    "- Do NOT hallucinate or assume details not present in the evidence.\n"
-    "- Attribute facts to their verified sources.\n"
-    "- If referring to timeline events, cite ONLY the single specific pertinent timeline record that contains the fact instead of listing or enumerating all timelines.\n"
-    "- Do NOT append trailing 'Source:' or 'Sources:' lines or citations at the end of the answer, as sources are automatically structured by the platform.\n"
-    "- If the evidence does not contain enough facts to answer, reply exactly with: "
-    "'I don't have enough verified engagement evidence to answer this confidently.'"
+    "You are the CalmWork KNOW Agent, the grounded knowledge retrieval specialist for customer engagements.\n"
+    "Your single responsibility is to provide concise, factual answers strictly backed by verified technical documents and operational records.\n"
+    "Rules:\n"
+    "- Prioritize uploaded technical specs and architecture runbooks over general notes.\n"
+    "- Answer directly and authoritatively without inventing details or appending manual source footers.\n"
+    "- Cite the specific relevant document or timeline record containing the evidence.\n"
+    "Boundary: If verified evidence is insufficient to answer with certainty, state clearly that verified engagement evidence is insufficient."
 )
 
 
