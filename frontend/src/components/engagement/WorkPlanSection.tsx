@@ -1,78 +1,54 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
   Sparkles,
   CheckCircle2,
-  AlertCircle,
+  Circle,
   Clock,
-  ArrowRight,
   ShieldCheck,
-  Layers,
-  Calendar,
   Check,
-  ChevronRight,
-  ChevronDown,
-  Edit3,
-  RotateCcw,
-  FileText,
-  HelpCircle,
   AlertTriangle,
-  Send,
+  Plus,
+  Trash2,
   Lock,
   ListTodo,
-  Milestone as MilestoneIcon,
-  Zap,
-  Info,
-  Target,
+  Calendar,
+  X,
+  ArrowRight,
+  Filter,
   CheckSquare
 } from "lucide-react";
 import AgentProgressStream, { AgentStreamEvent } from "./AgentProgressStream";
-
 import { API_BASE } from "@/utils/api";
+import { formatISTDateTime } from "@/utils/date";
 
-interface WorkTask {
+export interface WorkTask {
   id: string;
-  milestone_id: string;
+  milestone_id?: string;
   title: string;
-  description: string;
-  dependencies: string[];
+  description?: string;
+  why_it_matters?: string;
+  dependencies?: string[];
   owner?: string | null;
-  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED";
+  status: "TODO" | "IN_PROGRESS" | "COMPLETED" | "PLANNED";
+  approval_status?: "APPROVED" | "PENDING_APPROVAL";
+  due_date?: string;
+  sequence_order?: number;
+  linked_goal_id?: string;
 }
 
-interface WorkMilestone {
-  id: string;
-  title: string;
-  sequence_order: number;
-  deliverables: string[];
-  dependencies: string[];
-  customer_decisions_required: string[];
-}
-
-interface FactAssumptionGap {
-  confirmed_facts: string[];
-  inferred_assumptions: string[];
-  unresolved_questions_or_gaps: string[];
-}
-
-interface WorkPlanData {
+export interface WorkPlanData {
   proposal_id?: string;
   engagement_id?: string;
   customer_name?: string;
-  engagement_objective: string;
-  outcomes: string[];
-  definition_of_done: Array<{ id: string; title: string; completed: boolean } | string>;
-  milestones: WorkMilestone[];
-  tasks: WorkTask[];
-  risks: string[];
-  facts_and_assumptions: FactAssumptionGap;
-  next_actions: string[];
-  timeline_summary: string;
-  is_provisional?: boolean;
-  clarifying_questions?: string[];
-  status?: string;
+  engagement_objective?: string;
+  outcomes?: string[];
+  definition_of_done?: Array<{ id: string; title: string; completed: boolean } | string>;
+  milestones?: any[];
+  tasks?: WorkTask[];
+  version?: number;
   generated_at?: string;
 }
 
@@ -81,11 +57,44 @@ interface WorkPlanSectionProps {
   customerName: string;
   initialWorkPlan?: WorkPlanData | null;
   outcomeVersion?: number;
-  onPlanApproved?: (approvedPlan: WorkPlanData, newVersion: number) => void;
+  onPlanApproved?: () => void;
 }
 
-const SAMPLE_PROMPT =
-  "Our customer wants to migrate their legacy application to Google Cloud within 12 weeks. We need to assess the existing architecture, identify security and compliance requirements, migrate critical workflows, validate the new environment, and prepare the customer's team for handover. Their security team must approve the architecture before production deployment.";
+function computePresetDue(offsetDays: number, hour: number, minute: number = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayPadded = String(d.getDate()).padStart(2, "0");
+  const monthName = months[d.getMonth()];
+  const year = d.getFullYear();
+  const hourPadded = String(hour).padStart(2, "0");
+  const minPadded = String(minute).padStart(2, "0");
+  return `${dayPadded} ${monthName} ${year}, ${hourPadded}:${minPadded} IST`;
+}
+
+function formatCustomISTDueDate(dateStr: string, timeStr: string = "17:00"): string {
+  if (!dateStr) return "";
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hour, min] = (timeStr || "17:00").split(":").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayPadded = String(day).padStart(2, "0");
+  const monthName = months[month - 1] || "Oct";
+  const hourPadded = String(hour || 17).padStart(2, "0");
+  const minPadded = String(min || 0).padStart(2, "0");
+  return `${dayPadded} ${monthName} ${year}, ${hourPadded}:${minPadded} IST`;
+}
+
+const getTodayDateStr = (): string => {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+};
+
+const DUE_PRESETS = [
+  { label: "Today EOD", offsetDays: 0, hour: 18, minute: 0 },
+  { label: "Tomorrow Midday", offsetDays: 1, hour: 14, minute: 0 },
+  { label: "Tomorrow EOD", offsetDays: 1, hour: 18, minute: 0 },
+  { label: "+2 Days", offsetDays: 2, hour: 17, minute: 0 },
+  { label: "+1 Week", offsetDays: 7, hour: 17, minute: 0 }
+];
 
 export default function WorkPlanSection({
   engagementId,
@@ -94,113 +103,284 @@ export default function WorkPlanSection({
   outcomeVersion = 1,
   onPlanApproved
 }: WorkPlanSectionProps) {
-  const { isManager, isFDE, token } = useAuth();
+  const { isManager, role, token } = useAuth();
 
-  // Active authoritative plan vs Draft proposal
-  const [activePlan, setActivePlan] = useState<WorkPlanData | null>(initialWorkPlan);
-  const [draftProposal, setDraftProposal] = useState<WorkPlanData | null>(null);
-
-  // UI state
-  const [showInputForm, setShowInputForm] = useState<boolean>(!initialWorkPlan);
-  const [naturalLanguageInput, setNaturalLanguageInput] = useState<string>("");
-  const [isProposing, setIsProposing] = useState<boolean>(false);
-  const [streamEvent, setStreamEvent] = useState<AgentStreamEvent | null>(null);
-  const [streamHistory, setStreamHistory] = useState<AgentStreamEvent[]>([]);
-  const [isApproving, setIsApproving] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [isEditingProposal, setIsEditingProposal] = useState<boolean>(false);
-  const [editedObjective, setEditedObjective] = useState<string>("");
-  const [expandedMilestones, setExpandedMilestones] = useState<Record<string, boolean>>({
-    "ms-1": true,
-    "ms-2": true,
-    "ms-3": true
-  });
+  // Task list state
+  const [tasks, setTasks] = useState<WorkTask[]>([]);
   const [version, setVersion] = useState<number>(outcomeVersion);
+  const [objective, setObjective] = useState<string>("");
+  const [filter, setFilter] = useState<"ALL" | "TODO" | "IN_PROGRESS" | "COMPLETED" | "PENDING">("ALL");
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
-  // Reassessment UI state
-  const [showReassessModal, setShowReassessModal] = useState<boolean>(false);
-  const [reassessEvidence, setReassessEvidence] = useState<string>("");
-  const [isReassessing, setIsReassessing] = useState<boolean>(false);
-  const [reassessmentResult, setReassessmentResult] = useState<any>(null);
+  // Modal states
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
 
-  // Sync when initialWorkPlan or outcomeVersion changes
-  useEffect(() => {
-    setActivePlan(initialWorkPlan || null);
-    setShowInputForm(!initialWorkPlan);
-    setVersion(outcomeVersion);
-    setDraftProposal(null);
-    setStreamEvent(null);
-    setStreamHistory([]);
-    setErrorMsg(null);
-    setSuccessMsg(null);
-  }, [initialWorkPlan, outcomeVersion, engagementId]);
+  // Plan Agent Generation State
+  const [planPrompt, setPlanPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [streamEvent, setStreamEvent] = useState<AgentStreamEvent | null>(null);
+  const [generatedTasks, setGeneratedTasks] = useState<WorkTask[]>([]);
 
-  // Initial fetch of plan if not provided
-  useEffect(() => {
-    if (!initialWorkPlan && engagementId) {
-      fetchPlan();
-    }
-  }, [engagementId, initialWorkPlan]);
+  // Manual Add Task Form State
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskWhy, setNewTaskWhy] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState(computePresetDue(0, 18, 0));
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
 
-  const fetchPlan = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data?.has_plan && json.data.plan) {
-          setActivePlan(json.data.plan);
-          setVersion(json.data.version || 1);
-          setShowInputForm(false);
-        } else {
-          setActivePlan(null);
-          setShowInputForm(true);
-        }
-      }
-    } catch (e) {
-      console.warn("Could not fetch work plan from backend:", e);
-      setActivePlan(null);
-      setShowInputForm(true);
-    }
+  // Custom Due Date Form State
+  const [customDate, setCustomDate] = useState(getTodayDateStr());
+  const [customTime, setCustomTime] = useState("17:00");
+
+  const notify = (message: string, type: "success" | "error" | "info" = "info") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
   };
 
-  const handleProposePlan = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!naturalLanguageInput.trim()) {
-      setErrorMsg("Please enter a description of the work before submitting.");
+  // Sync initialWorkPlan into flat tasks list
+  useEffect(() => {
+    if (initialWorkPlan) {
+      setObjective(initialWorkPlan.engagement_objective || "");
+      if (initialWorkPlan.version) setVersion(initialWorkPlan.version);
+
+      let extracted: WorkTask[] = [];
+      if (Array.isArray(initialWorkPlan.tasks) && initialWorkPlan.tasks.length > 0) {
+        extracted = initialWorkPlan.tasks.map((t: any, idx: number) => ({
+          id: t.id || `task-${idx + 1}`,
+          milestone_id: t.milestone_id || "m-1",
+          title: t.title || `Task ${idx + 1}`,
+          description: t.description || t.why_it_matters || "",
+          why_it_matters: t.why_it_matters || t.description || "",
+          status: t.status === "COMPLETED" ? "COMPLETED" : t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "TODO",
+          approval_status: t.approval_status || "APPROVED",
+          due_date: t.due_date || computePresetDue(idx, 17, 0),
+          sequence_order: t.sequence_order || idx + 1
+        }));
+      } else if (Array.isArray(initialWorkPlan.milestones)) {
+        initialWorkPlan.milestones.forEach((m: any, mIdx: number) => {
+          if (Array.isArray(m.deliverables)) {
+            m.deliverables.forEach((del: string, dIdx: number) => {
+              extracted.push({
+                id: `task-ms-${mIdx + 1}-${dIdx + 1}`,
+                milestone_id: m.id || `m-${mIdx + 1}`,
+                title: del,
+                why_it_matters: `Milestone: ${m.title || `Phase ${mIdx + 1}`}`,
+                status: "TODO",
+                approval_status: "APPROVED",
+                due_date: computePresetDue(extracted.length, 17, 0),
+                sequence_order: extracted.length + 1
+              });
+            });
+          }
+        });
+      }
+      setTasks(extracted);
+    } else if (engagementId) {
+      // Fetch plan from backend
+      fetch(`${API_BASE}/engagements/${engagementId}/plan`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.success && data?.data) {
+            setObjective(data.data.statement || data.data.work_plan?.engagement_objective || "");
+            if (data.data.version) setVersion(data.data.version);
+            const wpTasks = data.data.work_plan?.tasks || [];
+            setTasks(
+              wpTasks.map((t: any, idx: number) => ({
+                id: t.id || `task-${idx + 1}`,
+                title: t.title,
+                description: t.description || t.why_it_matters,
+                status: t.status || "TODO",
+                approval_status: t.approval_status || "APPROVED",
+                due_date: t.due_date || computePresetDue(idx, 17, 0),
+                sequence_order: t.sequence_order || idx + 1
+              }))
+            );
+          }
+        })
+        .catch(() => {});
+    }
+  }, [engagementId, initialWorkPlan, outcomeVersion]);
+
+  // Derived Task Counts
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t) => t.status === "COMPLETED").length;
+  const inProgressTasks = tasks.filter((t) => t.status === "IN_PROGRESS").length;
+  const pendingApprovalTasks = tasks.filter((t) => t.approval_status === "PENDING_APPROVAL").length;
+
+  const filteredTasks = useMemo(() => {
+    switch (filter) {
+      case "TODO":
+        return tasks.filter((t) => t.status === "TODO");
+      case "IN_PROGRESS":
+        return tasks.filter((t) => t.status === "IN_PROGRESS");
+      case "COMPLETED":
+        return tasks.filter((t) => t.status === "COMPLETED");
+      case "PENDING":
+        return tasks.filter((t) => t.approval_status === "PENDING_APPROVAL");
+      default:
+        return tasks;
+    }
+  }, [tasks, filter]);
+
+  // Status toggle handler
+  const handleToggleTaskStatus = async (task: WorkTask) => {
+    if (task.approval_status === "PENDING_APPROVAL") {
+      notify("Task is awaiting Manager approval before it can be started.", "error");
       return;
     }
 
-    setIsProposing(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    setStreamEvent(null);
-    setStreamHistory([]);
+    const nextStatus = task.status === "COMPLETED" ? "TODO" : task.status === "IN_PROGRESS" ? "COMPLETED" : "IN_PROGRESS";
+
+    // Optimistic UI update
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
 
     try {
-      const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || "demo-manager-token";
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (!res.ok) throw new Error("Failed to update status on server");
+      notify(`Task updated: ${task.title} ➔ ${nextStatus}`, "success");
+      if (onPlanApproved) onPlanApproved();
+    } catch {
+      // Revert optimistic update
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: task.status } : t)));
+      notify("Could not update task status.", "error");
+    }
+  };
+
+  // Manager Approve Task
+  const handleApproveTask = async (task: WorkTask) => {
+    if (!isManager && role !== "MANAGER") {
+      notify("Only Engineering Managers can approve tasks.", "error");
+      return;
+    }
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ approval_status: "APPROVED" })
+      });
+
+      if (res.ok) {
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, approval_status: "APPROVED" } : t)));
+        notify(`Task approved: '${task.title}' is now authorized work!`, "success");
+        if (onPlanApproved) onPlanApproved();
+      } else {
+        throw new Error("Approval rejected by server");
       }
+    } catch (e: any) {
+      notify(e.message || "Failed to approve task.", "error");
+    }
+  };
+
+  // Delete Task
+  const handleDeleteTask = async (taskId: string, title: string) => {
+    if (!confirm(`Are you sure you want to remove task: "${title}"?`)) return;
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/tasks/${taskId}`, {
+        method: "DELETE",
+        headers
+      });
+
+      if (res.ok) {
+        setTasks((prev) => prev.filter((t) => t.id !== taskId));
+        notify(`Task removed: "${title}"`, "info");
+        if (onPlanApproved) onPlanApproved();
+      } else {
+        throw new Error("Server rejected deletion");
+      }
+    } catch {
+      notify("Failed to delete task.", "error");
+    }
+  };
+
+  // Manual Add Task Submit
+  const handleCreateManualTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+
+    setIsSubmittingTask(true);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/tasks`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: newTaskTitle.trim(),
+          description: newTaskWhy.trim() || `Operational work task for ${customerName}`,
+          due_date: newTaskDueDate,
+          status: "TODO"
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const created: WorkTask = json.data;
+        setTasks((prev) => [...prev, created]);
+        setShowAddTaskModal(false);
+        setNewTaskTitle("");
+        setNewTaskWhy("");
+        notify(
+          isManager || role === "MANAGER"
+            ? `Task created & approved: "${created.title}"`
+            : `Task created & submitted for Manager approval: "${created.title}"`,
+          "success"
+        );
+        if (onPlanApproved) onPlanApproved();
+      } else {
+        throw new Error("Server rejected new task");
+      }
+    } catch {
+      notify("Failed to create task.", "error");
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  };
+
+  // Plan Agent Generation Trigger
+  const handleGeneratePlanTasks = async () => {
+    if (!planPrompt.trim()) return;
+    setIsGenerating(true);
+    setStreamEvent({
+      agent: "PLAN",
+      stage: "INIT",
+      message: "Plan Agent analyzing requirements, architecture specs, and sequencing tasks...",
+      step: 1,
+      total_steps: 4
+    });
+    setGeneratedTasks([]);
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan/propose/stream`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          natural_language_description: naturalLanguageInput.trim(),
-          session_id: engagementId
+          natural_language_description: planPrompt.trim(),
+          session_id: `plan-gen-${Date.now()}`
         })
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.detail || "AI service is currently unavailable. Please verify your AI service configuration or try again shortly.");
-      }
-
-      if (!res.body) {
-        throw new Error("Streaming is not supported by your browser environment.");
-      }
+      if (!res.ok || !res.body) throw new Error("Streaming unavailable");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -221,1178 +401,698 @@ export default function WorkPlanSection({
               const event: AgentStreamEvent = JSON.parse(trimmed.slice(6));
               if (event.type === "progress") {
                 setStreamEvent(event);
-                setStreamHistory((prev) => [...prev, event]);
-              } else if (event.type === "complete" && (event as any).data) {
-                const planData = (event as any).data;
-                setDraftProposal(planData);
-                setEditedObjective(planData.engagement_objective || "");
-                setShowInputForm(false);
-                setStreamEvent(null);
-              } else if (event.type === "error") {
-                setErrorMsg(event.detail || "AI service is currently unavailable. Please verify your AI service configuration or try again shortly.");
+              } else if (event.type === "complete" && event.data) {
+                const prop = event.data;
+                const newItems: WorkTask[] = [];
+
+                if (Array.isArray(prop.tasks) && prop.tasks.length > 0) {
+                  prop.tasks.forEach((t: any, idx: number) => {
+                    newItems.push({
+                      id: `task-gen-${Date.now()}-${idx + 1}`,
+                      title: t.title,
+                      description: t.description || t.why_it_matters || `Generated by Plan Agent for ${customerName}`,
+                      status: "TODO",
+                      approval_status: "APPROVED",
+                      due_date: t.due_date || computePresetDue(idx + 1, 17, 0),
+                      sequence_order: idx + 1
+                    });
+                  });
+                } else if (Array.isArray(prop.milestones)) {
+                  prop.milestones.forEach((m: any, mIdx: number) => {
+                    if (Array.isArray(m.deliverables)) {
+                      m.deliverables.forEach((del: string, dIdx: number) => {
+                        newItems.push({
+                          id: `task-gen-${Date.now()}-${mIdx + 1}-${dIdx + 1}`,
+                          title: del,
+                          description: `Milestone: ${m.title || `Phase ${mIdx + 1}`}`,
+                          status: "TODO",
+                          approval_status: "APPROVED",
+                          due_date: computePresetDue(newItems.length + 1, 17, 0),
+                          sequence_order: newItems.length + 1
+                        });
+                      });
+                    }
+                  });
+                }
+
+                setGeneratedTasks(newItems);
                 setStreamEvent(null);
               }
-            } catch (jsonErr) {
-              console.warn("Failed to parse SSE line:", line, jsonErr);
+            } catch {
+              // ignore parse errors
             }
           }
         }
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Network error generating proposal.");
-      setStreamEvent(null);
+    } catch {
+      notify("Plan Agent was unable to generate tasks right now. Try again shortly.", "error");
     } finally {
-      setIsProposing(false);
+      setIsGenerating(false);
     }
   };
 
-  const handleApprovePlan = async () => {
-    if (!draftProposal) return;
-
-    setIsApproving(true);
-    setErrorMsg(null);
-
+  // Ingest Plan Agent Generated Tasks to Active Database Plan
+  const handleIngestGeneratedTasks = async () => {
+    if (generatedTasks.length === 0) return;
     try {
-      const planToApprove = {
-        ...draftProposal,
-        engagement_objective: editedObjective || draftProposal.engagement_objective
-      };
-
-      const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || (isManager ? "demo-manager-token" : "demo-fde-token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
-      }
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan/approve`, {
+      const res = await fetch(`${API_BASE}/engagements/${engagementId}/tasks`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          plan: planToApprove,
-          decision_note: isManager
-            ? "Manager reviewed and approved structured work plan."
-            : "FDE approved and activated execution work plan within scope."
+          tasks: generatedTasks
         })
       });
 
-      const json = await res.json();
-      if (res.ok && json.success) {
-        const approvedPlanData = json.data.work_plan || planToApprove;
-        const newVersion = json.data.version || version;
-        setActivePlan(approvedPlanData);
-        setVersion(newVersion);
-        setDraftProposal(null);
-        setSuccessMsg(`Work Plan approved and activated as authoritative state (v${newVersion})!`);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId, type: "PLAN_APPROVED" } }));
-        }
-        if (onPlanApproved) {
-          onPlanApproved(approvedPlanData, newVersion);
-        }
-        setTimeout(() => setSuccessMsg(null), 4000);
-      } else {
-        setErrorMsg(json.detail || json.message || "Approval failed.");
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Network error approving plan.");
-    } finally {
-      setIsApproving(false);
-    }
-  };
-
-  const toggleMilestone = (milestoneId: string) => {
-    setExpandedMilestones((prev) => ({
-      ...prev,
-      [milestoneId]: !prev[milestoneId]
-    }));
-  };
-
-  const handleToggleDod = async (dodId: string) => {
-    if (!activePlan || !activePlan.definition_of_done) return;
-
-    // Optimistic UI update
-    const updatedDod = activePlan.definition_of_done.map((item, idx) => {
-      if (typeof item === "string") {
-        const id = `dod-${idx + 1}`;
-        return { id, title: item, completed: dodId === id };
-      }
-      if (item.id === dodId) {
-        return { ...item, completed: !item.completed };
-      }
-      return item;
-    });
-
-    const updatedPlan: WorkPlanData = {
-      ...activePlan,
-      definition_of_done: updatedDod
-    };
-    setActivePlan(updatedPlan);
-
-    try {
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/goals/${dodId}/toggle`, {
-        method: "PATCH"
-      });
       if (res.ok) {
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId, type: "GOAL_TOGGLED" } }));
-        }
-        if (onPlanApproved) {
-          onPlanApproved(updatedPlan, version);
-        }
+        setTasks((prev) => [...prev, ...generatedTasks]);
+        setShowGenerateModal(false);
+        setPlanPrompt("");
+        setGeneratedTasks([]);
+        notify(`Ingested ${generatedTasks.length} tasks into active work plan!`, "success");
+        if (onPlanApproved) onPlanApproved();
+      } else {
+        throw new Error("Failed to save tasks");
       }
-    } catch (err) {
-      console.warn("Failed to toggle Outcome Goal item in backend:", err);
+    } catch {
+      notify("Failed to save generated tasks to plan.", "error");
     }
   };
 
-  const handleReassessPlan = async () => {
-    if (!reassessEvidence.trim() || isReassessing) return;
-    setIsReassessing(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
+  // Quick Due Date Reschedule
+  const handleSaveDueDate = async (newDue: string) => {
+    if (!editingDueDateTaskId) return;
+    const task = tasks.find((t) => t.id === editingDueDateTaskId);
+    if (!task) return;
+
+    setTasks((prev) => prev.map((t) => (t.id === editingDueDateTaskId ? { ...t, due_date: newDue } : t)));
 
     try {
-      const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null) || (isManager ? "demo-manager-token" : "demo-fde-token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
-      }
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/plan/reassess`, {
-        method: "POST",
+      await fetch(`${API_BASE}/engagements/${engagementId}/tasks/${editingDueDateTaskId}`, {
+        method: "PATCH",
         headers,
-        body: JSON.stringify({
-          new_evidence_items: [reassessEvidence.trim()],
-          session_id: engagementId
-        })
+        body: JSON.stringify({ due_date: newDue })
       });
-
-      const json = await res.json();
-      if (res.ok && json.success && json.data) {
-        setReassessmentResult(json.data);
-        setSuccessMsg("PLAN Agent completed iterative plan reassessment.");
-        if (typeof window !== "undefined") {
-          localStorage.removeItem(`brief_cache_${engagementId}`);
-          localStorage.setItem(`brief_invalidated_${engagementId}`, Date.now().toString());
-        }
-        if (onPlanApproved && activePlan) {
-          onPlanApproved(activePlan, version);
-        }
-      } else {
-        setErrorMsg(json.detail || json.message || "Failed to reassess plan.");
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Network error reassessing work plan.");
-    } finally {
-      setIsReassessing(false);
+      notify(`Due date set to ${newDue}`, "success");
+      setEditingDueDateTaskId(null);
+      if (onPlanApproved) onPlanApproved();
+    } catch {
+      notify("Failed to update due date.", "error");
     }
   };
+
+  const editingTask = tasks.find((t) => t.id === editingDueDateTaskId);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-2xs space-y-5">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Toast Notification */}
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 p-3 rounded-lg text-xs font-semibold shadow-lg flex items-center gap-2 animate-fadeIn border ${
+            notification.type === "success"
+              ? "bg-emerald-50 text-emerald-900 border-emerald-300"
+              : notification.type === "error"
+              ? "bg-rose-50 text-rose-900 border-rose-300"
+              : "bg-slate-900 text-white border-slate-800"
+          }`}
+        >
+          {notification.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-rose-600" />}
+          <span>{notification.message}</span>
+        </div>
+      )}
+
+      {/* Header & Primary Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <ListTodo className="h-5 w-5 text-blue-600" />
-            <h2 className="text-base font-bold font-display text-slate-900">
-              Natural-Language Work Planning
-            </h2>
-            {activePlan && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-semibold">
-                Active Plan v{version}
-              </span>
-            )}
-            {draftProposal && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-mono font-semibold">
-                Draft Proposal (Review)
-              </span>
-            )}
+            <ListTodo className="h-5 w-5 text-indigo-600" />
+            <h1 className="text-xl font-bold font-display text-slate-900">Plan &amp; Tasks</h1>
+            <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-semibold border border-slate-200">
+              Active Plan v{version}
+            </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Describe scope and deliverables in natural language; Plan Agent formulates verified milestones, Outcome Goals, and task dependencies.
+          <p className="text-xs text-slate-500 mt-1">
+            Authoritative delivery tasks, target due dates, and manager approval governance for {customerName}.
           </p>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          {activePlan && !showInputForm && !draftProposal && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowReassessModal(true);
-                  setReassessmentResult(null);
-                  setReassessEvidence("");
-                }}
-                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                title="Iteratively reassess active plan against newly observed technical evidence or scope constraints"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                <span>Reassess Plan</span>
-              </button>
+          {/* Plan Agent Generation Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowGenerateModal(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-indigo-200" />
+            <span>Generate Tasks with Plan Agent</span>
+          </button>
 
-              <button
-                onClick={() => {
-                  setShowInputForm(true);
-                  setNaturalLanguageInput("");
-                }}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
-              >
-                <RotateCcw className="h-3.5 w-3.5 text-slate-600" />
-                <span>Revise Work Plan</span>
-              </button>
-            </>
-          )}
-
-          {!activePlan && !showInputForm && !draftProposal && (
-            <button
-              onClick={() => setShowInputForm(true)}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>Plan This Engagement</span>
-            </button>
-          )}
+          {/* Manual Add Task Button */}
+          <button
+            type="button"
+            onClick={() => setShowAddTaskModal(true)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>+ Add Task</span>
+          </button>
         </div>
       </div>
 
-      {/* Notifications */}
-      {errorMsg && (
-        <div className="bg-rose-50 border border-rose-200 rounded-md p-3 text-xs text-rose-800 flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-          <div className="flex-1">{errorMsg}</div>
+      {/* Summary KPI Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+          <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">Total Tasks</span>
+          <p className="text-xl font-bold font-display text-slate-900 mt-0.5">{totalTasks}</p>
         </div>
-      )}
-
-      {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-md p-3 text-xs text-emerald-800 flex items-start gap-2">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-          <div className="flex-1">{successMsg}</div>
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+          <span className="text-[10px] font-mono font-bold text-emerald-600 uppercase">Completed</span>
+          <p className="text-xl font-bold font-display text-emerald-700 mt-0.5">{completedTasks}</p>
         </div>
-      )}
+        <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+          <span className="text-[10px] font-mono font-bold text-blue-600 uppercase">In Progress</span>
+          <p className="text-xl font-bold font-display text-blue-700 mt-0.5">{inProgressTasks}</p>
+        </div>
+        <div className={`p-3 border rounded-xl shadow-2xs ${pendingApprovalTasks > 0 ? "bg-amber-50 border-amber-300" : "bg-white border-slate-200"}`}>
+          <span className={`text-[10px] font-mono font-bold uppercase ${pendingApprovalTasks > 0 ? "text-amber-800" : "text-slate-400"}`}>
+            Pending Approval
+          </span>
+          <p className={`text-xl font-bold font-display mt-0.5 ${pendingApprovalTasks > 0 ? "text-amber-900 font-black" : "text-slate-900"}`}>
+            {pendingApprovalTasks}
+          </p>
+        </div>
+      </div>
 
-      {/* REASSESSMENT CARD */}
-      {showReassessModal && (
-        <div className="bg-amber-50/60 border border-amber-300 rounded-lg p-5 space-y-4 animate-fadeIn">
-          <div className="flex items-start justify-between border-b border-amber-200/80 pb-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded bg-amber-500 text-slate-950 font-bold">
-                  <Sparkles className="h-3.5 w-3.5" />
-                </span>
-                <h3 className="text-sm font-bold text-slate-900 font-display">
-                  Iterative Plan Reassessment (PLAN Agent)
-                </h3>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold border border-amber-200">
-                  Preserves Work History
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-600">
-                Maintains all active task completion states while evaluating whether newly observed evidence or scope shifts require Outcome Goals updates.
-              </p>
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2 text-xs overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setFilter("ALL")}
+          className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+            filter === "ALL" ? "bg-slate-900 text-white font-bold" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          All Tasks ({totalTasks})
+        </button>
+        <button
+          onClick={() => setFilter("TODO")}
+          className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+            filter === "TODO" ? "bg-slate-900 text-white font-bold" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          To Do ({tasks.filter((t) => t.status === "TODO").length})
+        </button>
+        <button
+          onClick={() => setFilter("IN_PROGRESS")}
+          className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+            filter === "IN_PROGRESS" ? "bg-slate-900 text-white font-bold" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          In Progress ({inProgressTasks})
+        </button>
+        <button
+          onClick={() => setFilter("COMPLETED")}
+          className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+            filter === "COMPLETED" ? "bg-slate-900 text-white font-bold" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Completed ({completedTasks})
+        </button>
+        {pendingApprovalTasks > 0 && (
+          <button
+            onClick={() => setFilter("PENDING")}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+              filter === "PENDING" ? "bg-amber-500 text-slate-950 shadow-sm" : "bg-amber-100 text-amber-900 hover:bg-amber-200"
+            }`}
+          >
+            <span>Needs Manager Approval</span>
+            <span className="text-[10px] px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded-full font-mono">{pendingApprovalTasks}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Tasks List */}
+      <div className="space-y-2.5">
+        {filteredTasks.length === 0 ? (
+          <div className="p-8 text-center bg-white border border-slate-200 rounded-xl space-y-3">
+            <ListTodo className="h-8 w-8 text-slate-300 mx-auto" />
+            <p className="text-xs text-slate-500 font-medium">No tasks found in this view.</p>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <button
+                onClick={() => setShowGenerateModal(true)}
+                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded text-xs transition"
+              >
+                Generate with Plan Agent
+              </button>
+              <button
+                onClick={() => setShowAddTaskModal(true)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded text-xs transition"
+              >
+                + Add Manual Task
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setShowReassessModal(false);
-                setReassessmentResult(null);
-              }}
-              className="p-1 text-slate-400 hover:text-slate-700 rounded transition cursor-pointer"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </button>
           </div>
+        ) : (
+          filteredTasks.map((task, idx) => {
+            const isCompleted = task.status === "COMPLETED";
+            const isInProgress = task.status === "IN_PROGRESS";
+            const isPending = task.approval_status === "PENDING_APPROVAL";
 
-          {!reassessmentResult ? (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider font-mono block">
-                  New Technical Evidence / Observed Constraints
-                </label>
-                <textarea
-                  rows={3}
-                  value={reassessEvidence}
-                  onChange={(e) => setReassessEvidence(e.target.value)}
-                  placeholder="Enter newly observed customer requirements, technical blockers, or worknote constraints to evaluate against the plan..."
-                  className="w-full bg-white border border-amber-300 rounded-md p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
+            return (
+              <div
+                key={task.id}
+                className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  isPending
+                    ? "bg-amber-50/70 border-amber-300 shadow-2xs"
+                    : isCompleted
+                    ? "bg-slate-50 border-slate-200 opacity-80"
+                    : "bg-white border-slate-200 hover:border-slate-300 shadow-2xs"
+                }`}
+              >
+                {/* Left side: Status toggle & Task details */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleTaskStatus(task)}
+                    className="mt-0.5 text-slate-400 hover:text-slate-900 transition shrink-0 cursor-pointer focus:outline-none"
+                    title={isPending ? "Awaiting Manager Approval" : "Click to advance status"}
+                  >
+                    {isPending ? (
+                      <Lock className="h-4 w-4 text-amber-600" />
+                    ) : isCompleted ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    ) : isInProgress ? (
+                      <div className="h-4 w-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-slate-300 hover:text-slate-600" />
+                    )}
+                  </button>
 
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[11px] font-mono text-slate-500">Quick Presets:</span>
-                  {[
-                    "Customer security team requires SAML 2.0 SSO validation prior to deployment.",
-                    "Cutover migration downtime window must be reduced to under 5 minutes.",
-                    "Customer requires data encryption in transit with custom KMS keys."
-                  ].map((preset, idx) => (
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs font-semibold ${isCompleted ? "line-through text-slate-400" : "text-slate-900"}`}>
+                        {task.title}
+                      </span>
+
+                      {/* Approval Status Badge */}
+                      {isPending ? (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center gap-1">
+                          <Lock className="h-3 w-3 text-amber-700" />
+                          <span>Pending Approval</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium">
+                          Approved
+                        </span>
+                      )}
+
+                      {/* Status Pill */}
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${
+                          isCompleted
+                            ? "bg-emerald-100 text-emerald-800"
+                            : isInProgress
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {task.status}
+                      </span>
+                    </div>
+
+                    {task.description && (
+                      <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{task.description}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right side: Target Due Date & Actions */}
+                <div className="flex items-center gap-2 sm:self-center shrink-0">
+                  {/* Clickable Target Due Date Badge */}
+                  <button
+                    type="button"
+                    onClick={() => setEditingDueDateTaskId(task.id)}
+                    title="Click to reschedule due date"
+                    className="flex items-center gap-1 text-[11px] font-mono font-medium px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition cursor-pointer shadow-2xs"
+                  >
+                    <Clock className="h-3 w-3 text-slate-400" />
+                    <span>{task.due_date || "Set due date"}</span>
+                  </button>
+
+                  {/* Manager Quick-Approve Button (Shown only for Manager when task is pending approval) */}
+                  {(isManager || role === "MANAGER") && isPending && (
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => setReassessEvidence(preset)}
-                      className="text-[11px] px-2 py-0.5 bg-white hover:bg-amber-100 text-slate-700 rounded border border-amber-200 transition truncate max-w-xs cursor-pointer shadow-2xs"
+                      onClick={() => handleApproveTask(task)}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                      title="Manager Authorization: Approve task for production work"
                     >
-                      {preset}
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      <span>Approve Task</span>
                     </button>
+                  )}
+
+                  {/* Delete Task */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTask(task.id, task.title)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                    title="Delete task"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* MODAL 1: Generate Tasks with Plan Agent */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-slate-900 text-sm">Plan Agent Task Generator</h3>
+                  <p className="text-[10px] text-slate-500">Autonomous requirement breakdown &amp; task sequencing</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGenerateModal(false);
+                  setGeneratedTasks([]);
+                  setStreamEvent(null);
+                }}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">
+                Describe deployment scope or deliverables:
+              </label>
+              <textarea
+                rows={3}
+                value={planPrompt}
+                onChange={(e) => setPlanPrompt(e.target.value)}
+                placeholder="e.g. Migrate 50M records to Cloud SQL. Verify failover with under 15 min cutover window. Security team requires architecture signoff."
+                className="w-full text-xs p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-600 shadow-2xs resize-none"
+              />
+              {/* Quick suggestions */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[10px] text-slate-400">Examples:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPlanPrompt(
+                      `Execute database migration for ${customerName} to Cloud SQL with zero data loss, dry run rehearsals, and cutover testing.`
+                    )
+                  }
+                  className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 transition"
+                >
+                  Database Cutover
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPlanPrompt(
+                      `Implement SSO security integration, RBAC auditing, and compliance verification for ${customerName}.`
+                    )
+                  }
+                  className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 transition"
+                >
+                  SSO &amp; Security
+                </button>
+              </div>
+            </div>
+
+            {/* Live Streaming Indicator */}
+            {isGenerating && (
+              <div className="p-3 rounded-lg bg-slate-900 text-white space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
+                    <span>Plan Agent Sequencing Tasks...</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-indigo-300">Step {streamEvent?.step || 1} of 4</span>
+                </div>
+                <p className="text-[11px] text-slate-300">{streamEvent?.message || "Analyzing enterprise architecture specs..."}</p>
+              </div>
+            )}
+
+            {/* Generated Tasks Preview */}
+            {generatedTasks.length > 0 && (
+              <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">
+                    Generated Tasks ({generatedTasks.length}):
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-mono font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Target Due Dates Assigned
+                  </span>
+                </div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto no-scrollbar">
+                  {generatedTasks.map((t, idx) => (
+                    <div key={idx} className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-900 truncate pr-2">{t.title}</span>
+                      <span className="text-[10px] font-mono text-slate-500 shrink-0">{t.due_date}</span>
+                    </div>
                   ))}
                 </div>
               </div>
+            )}
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowReassessModal(false)}
-                  className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleReassessPlan}
-                  disabled={isReassessing || !reassessEvidence.trim()}
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
-                >
-                  {isReassessing ? (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5 animate-spin" />
-                      <span>Reassessing with PLAN Agent...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5" />
-                      <span>Reassess Active Plan</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white border border-amber-200 rounded-md p-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                    reassessmentResult.outcome_health === "HEALTHY"
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : "bg-amber-50 text-amber-800 border-amber-200"
-                  }`}>
-                    Outcome Health: {reassessmentResult.outcome_health}
-                  </span>
-                  {reassessmentResult.scope_drift_detected && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 font-semibold">
-                      Scope Drift Detected
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-mono text-slate-400">
-                  {reassessmentResult.reassessed_at?.slice(0, 19).replace("T", " ")}
-                </span>
-              </div>
-
-              {reassessmentResult.scope_drift_explanation && (
-                <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded text-amber-900 text-xs">
-                  <strong>Scope Drift Analysis:</strong> {reassessmentResult.scope_drift_explanation}
-                </div>
-              )}
-
-              {reassessmentResult.recommended_modifications && reassessmentResult.recommended_modifications.length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold uppercase text-slate-500 font-mono block">
-                    PLAN Recommendations:
-                  </span>
-                  <ul className="space-y-1 text-slate-800">
-                    {reassessmentResult.recommended_modifications.map((rec: string, idx: number) => (
-                      <li key={idx} className="flex items-start gap-1.5">
-                        <span className="text-amber-600 font-bold">•</span>
-                        <span>{rec}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {reassessmentResult.requires_manager_approval && (
-                <div className="p-2.5 bg-purple-50 border border-purple-200 rounded text-purple-900 text-xs flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-purple-700 shrink-0" />
-                  <span>
-                    Consequential Scope Change: Requires Engineering Manager approval under SaaS governance.
-                  </span>
-                </div>
-              )}
-
-              <div className="flex justify-end pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowReassessModal(false)}
-                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition"
-                >
-                  Close &amp; View Plan
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 1. NATURAL LANGUAGE INPUT FORM */}
-      {showInputForm && !draftProposal && (
-        <form onSubmit={handleProposePlan} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-blue-600" />
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide font-mono">
-                {activePlan ? "Propose Plan Revision" : "Describe Required Work"}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setNaturalLanguageInput(SAMPLE_PROMPT)}
-              className="text-[11px] text-blue-600 hover:text-blue-800 font-medium underline flex items-center gap-1 cursor-pointer"
-            >
-              <Info className="h-3 w-3" />
-              Load Example Prompt
-            </button>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 block">
-              Work Description, Deadlines & Technical Constraints:
-            </label>
-            <textarea
-              rows={4}
-              value={naturalLanguageInput}
-              onChange={(e) => setNaturalLanguageInput(e.target.value)}
-              placeholder="e.g. Our customer wants to migrate their legacy application to Google Cloud within 12 weeks. We need to assess the existing architecture, identify security and compliance requirements, migrate critical workflows, validate the new environment, and prepare the customer's team for handover..."
-              className="w-full text-xs p-3 rounded-md border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-sans text-slate-900 leading-relaxed shadow-inner"
-            />
-            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
-              <span>Privacy Guardrail active: Customer PII is scrubbed before agent evaluation.</span>
-              <span>Zero hallucinated dates or owners.</span>
-            </div>
-          </div>
-
-          {/* Real-time Multi-Agent Progress Stream */}
-          {isProposing && (
-            <AgentProgressStream
-              currentEvent={streamEvent}
-              history={streamHistory}
-              title="Supervisor & Specialist Multi-Agent Orchestration"
-            />
-          )}
-
-          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-200">
-            {activePlan && (
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowInputForm(false)}
-                className="w-full sm:w-auto px-3 py-2 sm:py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer text-center"
+                onClick={() => setShowGenerateModal(false)}
+                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 transition"
               >
                 Cancel
               </button>
-            )}
-            <button
-              type="submit"
-              disabled={isProposing || !naturalLanguageInput.trim()}
-              className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center justify-center gap-2 shadow-2xs cursor-pointer text-center"
-            >
-              {isProposing ? (
-                <>
-                  <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Plan Agent Synthesizing Plan...</span>
-                </>
+              {generatedTasks.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleIngestGeneratedTasks}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Ingest {generatedTasks.length} Tasks to Plan</span>
+                </button>
               ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  <span>Generate Work Plan Proposal</span>
-                </>
+                <button
+                  type="button"
+                  onClick={handleGeneratePlanTasks}
+                  disabled={isGenerating || !planPrompt.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>{isGenerating ? "Generating..." : "Generate Tasks"}</span>
+                </button>
               )}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* 2. DRAFT PROPOSAL REVIEW & EDIT STATE */}
-      {draftProposal && (
-        <div className="space-y-5">
-          {/* Banner */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="text-xs font-bold text-amber-900 block font-mono uppercase tracking-wide">
-                  Draft Proposal (Not Authoritative Until Approved)
-                </span>
-                <span className="text-xs text-amber-800">
-                  Review the structured proposal below. You may edit the objective, review milestone dependencies, and verify assumptions before committing to authoritative state.
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-              <button
-                onClick={() => setDraftProposal(null)}
-                className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer text-center"
-              >
-                Discard Draft
-              </button>
-              <button
-                onClick={handleApprovePlan}
-                disabled={isApproving}
-                className="flex-1 sm:flex-none px-4 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer text-center"
-              >
-                {isApproving ? (
-                  <>
-                    <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Persisting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-4 w-4" />
-                    <span>Approve Plan</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Proposal Objective */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
-                Engagement Objective
-              </span>
-              <button
-                onClick={() => setIsEditingProposal(!isEditingProposal)}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 cursor-pointer"
-              >
-                <Edit3 className="h-3.5 w-3.5" />
-                <span>{isEditingProposal ? "Done Editing" : "Edit Objective"}</span>
-              </button>
-            </div>
-
-            {isEditingProposal ? (
-              <textarea
-                rows={2}
-                value={editedObjective}
-                onChange={(e) => setEditedObjective(e.target.value)}
-                className="w-full text-xs p-2.5 rounded border border-blue-400 bg-white font-sans text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            ) : (
-              <p className="text-sm font-semibold text-slate-900 font-sans leading-snug">
-                {editedObjective || draftProposal.engagement_objective}
-              </p>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono font-medium">
-                {draftProposal.timeline_summary}
-              </span>
-              {draftProposal.is_provisional && (
-                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-mono font-medium flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Provisional (Missing inputs identified)
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Facts, Assumptions & Missing Gaps Triage */}
-          {draftProposal.facts_and_assumptions && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Confirmed Facts */}
-              <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3 space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 font-mono flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  Confirmed Facts ({draftProposal.facts_and_assumptions.confirmed_facts?.length || 0})
-                </span>
-                <ul className="space-y-1 text-xs text-slate-700">
-                  {draftProposal.facts_and_assumptions.confirmed_facts?.map((f, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5">
-                      <span className="text-emerald-600 font-bold">•</span>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Inferred Assumptions */}
-              <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 font-mono flex items-center gap-1.5">
-                  <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                  Inferred Assumptions ({draftProposal.facts_and_assumptions.inferred_assumptions?.length || 0})
-                </span>
-                <ul className="space-y-1 text-xs text-slate-700">
-                  {draftProposal.facts_and_assumptions.inferred_assumptions?.map((a, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5">
-                      <span className="text-amber-600 font-bold">•</span>
-                      <span>{a}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Unresolved Questions & Missing Gaps */}
-              <div className="bg-blue-50/60 border border-blue-200 rounded-lg p-3 space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 font-mono flex items-center gap-1.5">
-                  <HelpCircle className="h-3.5 w-3.5 text-blue-600" />
-                  Missing Facts & Clarifications ({draftProposal.facts_and_assumptions.unresolved_questions_or_gaps?.length || 0})
-                </span>
-                <ul className="space-y-1 text-xs text-slate-700">
-                  {draftProposal.clarifying_questions && draftProposal.clarifying_questions.length > 0 ? (
-                    draftProposal.clarifying_questions.map((q, idx) => (
-                      <li key={idx} className="flex items-start gap-1.5">
-                        <span className="text-blue-600 font-bold">?</span>
-                        <span className="italic">{q}</span>
-                      </li>
-                    ))
-                  ) : (
-                    draftProposal.facts_and_assumptions.unresolved_questions_or_gaps?.map((g, idx) => (
-                      <li key={idx} className="flex items-start gap-1.5">
-                        <span className="text-blue-600 font-bold">•</span>
-                        <span>{g}</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* Milestones & Tasks Preview */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 font-mono flex items-center gap-2">
-              <MilestoneIcon className="h-3.5 w-3.5 text-blue-600" />
-              Proposed Milestones & Work Packages ({draftProposal.milestones?.length || 0})
-            </h3>
-
-            <div className="space-y-3">
-              {draftProposal.milestones?.map((milestone) => {
-                const milestoneTasks = draftProposal.tasks?.filter((t) => t.milestone_id === milestone.id) || [];
-                const isExpanded = !!expandedMilestones[milestone.id];
-
-                return (
-                  <div
-                    key={milestone.id}
-                    className="border border-slate-200 rounded-lg bg-white overflow-hidden shadow-2xs"
-                  >
-                    <div
-                      onClick={() => toggleMilestone(milestone.id)}
-                      className="p-3.5 bg-slate-50 hover:bg-slate-100 transition flex items-center justify-between cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="h-6 w-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center font-mono">
-                          {milestone.sequence_order}
-                        </span>
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900">{milestone.title}</h4>
-                          <span className="text-[11px] text-slate-500">
-                            {milestoneTasks.length} concrete work packages
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-slate-400" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-slate-400" />
-                        )}
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="p-4 space-y-3 border-t border-slate-200 bg-white">
-                        {/* Deliverables & Dependencies */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50/50 p-2.5 rounded border border-slate-100">
-                          <div>
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1 font-mono">
-                              Deliverables:
-                            </span>
-                            <ul className="space-y-0.5 text-slate-700">
-                              {milestone.deliverables?.map((d, i) => (
-                                <li key={i} className="flex items-center gap-1.5">
-                                  <Check className="h-3 w-3 text-emerald-600" />
-                                  <span>{d}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          <div>
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1 font-mono">
-                              Prerequisites & Customer Decisions:
-                            </span>
-                            <ul className="space-y-0.5 text-slate-700">
-                              {milestone.dependencies?.map((dep, i) => (
-                                <li key={i} className="flex items-center gap-1.5 text-amber-800">
-                                  <Clock className="h-3 w-3 text-amber-600 shrink-0" />
-                                  <span>Prerequisite: {dep}</span>
-                                </li>
-                              ))}
-                              {milestone.customer_decisions_required?.map((dec, i) => (
-                                <li key={i} className="flex items-center gap-1.5 text-purple-800">
-                                  <ShieldCheck className="h-3 w-3 text-purple-600 shrink-0" />
-                                  <span>Gating Decision: {dec}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-
-                        {/* Concrete Tasks — Aligned Scannable List */}
-                        {milestoneTasks.length > 0 && (
-                          <div className="space-y-1 pt-1">
-                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block font-mono">
-                              Work Items ({milestoneTasks.length}):
-                            </span>
-                            <ul className="divide-y divide-slate-100 pl-3 border-l-2 border-slate-200">
-                              {milestoneTasks.map((task) => (
-                                <li
-                                  key={task.id}
-                                  className="py-2 flex items-start justify-between gap-3 text-xs"
-                                >
-                                  <div className="space-y-0.5 flex-1">
-                                    <span className="font-medium text-slate-900 block">{task.title}</span>
-                                    {task.description && (
-                                      <p className="text-slate-500 text-[11px] leading-relaxed">{task.description}</p>
-                                    )}
-                                    {task.dependencies && task.dependencies.length > 0 && (
-                                      <span className="text-[10px] text-slate-400 font-mono block">
-                                        Prerequisite: {task.dependencies.join(", ")}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-600 bg-slate-100 shrink-0">
-                                    {task.status}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Outcome Goals Checklist Preview */}
-          {draftProposal.definition_of_done && draftProposal.definition_of_done.length > 0 && (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 font-mono block">
-                Target Outcome Goals:
-              </span>
-              <ul className="space-y-1 text-xs text-slate-700">
-                {draftProposal.definition_of_done.map((dod, idx) => {
-                  const title = typeof dod === "string" ? dod : dod.title;
-                  return (
-                    <li key={idx} className="flex items-center gap-2">
-                      <div className="h-3.5 w-3.5 rounded border border-slate-400 bg-white" />
-                      <span>{title}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
-          {/* Bottom Actions */}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-            <span className="text-xs text-slate-500">
-              {isManager
-                ? "Manager approval activates plan and authorizes scope commitments."
-                : "FDE self-approval activates execution work plans within approved engagement scope."}
-            </span>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setDraftProposal(null)}
-                className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-50 cursor-pointer"
-              >
-                Discard Draft
-              </button>
-              <button
-                onClick={handleApprovePlan}
-                disabled={isApproving}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-              >
-                {isApproving ? (
-                  <>
-                    <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Persisting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-4 w-4" />
-                    <span>Approve & Activate Plan</span>
-                  </>
-                )}
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 3. ACTIVE APPROVED AUTHORITATIVE WORK STATE */}
-      {activePlan && !draftProposal && !showInputForm && (
-        <div className="space-y-5">
-          {/* Active Objective & Timeline */}
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-mono">
-                Active Objective
-              </span>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono font-semibold">
-                Authoritative Work State (v{version})
-              </span>
+      {/* MODAL 2: Add Manual Task */}
+      {showAddTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+          <form
+            onSubmit={handleCreateManualTask}
+            className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Plus className="h-4 w-4 text-slate-900" />
+                <h3 className="font-display font-bold text-slate-900 text-sm">Create New Work Task</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddTaskModal(false)}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <p className="text-sm font-bold text-slate-900 font-sans leading-snug">
-              {activePlan.engagement_objective}
-            </p>
-            <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
-              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono font-medium">
-                {activePlan.timeline_summary}
-              </span>
-              {activePlan.is_provisional && (
-                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-mono font-medium">
-                  Provisional Plan
-                </span>
+
+            {/* Role Governance Banner */}
+            <div
+              className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                isManager || role === "MANAGER"
+                  ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+                  : "bg-amber-50 border border-amber-200 text-amber-900"
+              }`}
+            >
+              {isManager || role === "MANAGER" ? (
+                <>
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>
+                    <strong>Manager Mode:</strong> Task will be created as <em>Approved Work</em>.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>
+                    <strong>FDE Mode:</strong> Task will be submitted for Manager authorization.
+                  </span>
+                </>
               )}
             </div>
-          </div>
 
-          {/* Target Measurable Outcomes */}
-          {activePlan.outcomes && activePlan.outcomes.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono flex items-center gap-1.5">
-                  <Target className="h-4 w-4 text-emerald-600" />
-                  Target Measurable Outcomes ({activePlan.outcomes.length})
-                </span>
-                <span className="text-[11px] text-slate-500 font-mono">Bound to Outcome v{version}</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                {activePlan.outcomes.map((outcome, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-md bg-emerald-50/50 border border-emerald-100 flex items-start gap-2"
-                  >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span className="text-slate-800 font-medium leading-snug">{outcome}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Target Outcome Goals Interactive Contract Checklist */}
-          {activePlan.definition_of_done && activePlan.definition_of_done.length > 0 && (() => {
-            const dodItems = activePlan.definition_of_done.map((item, idx) => {
-              if (typeof item === "string") {
-                return { id: `dod-${idx + 1}`, title: item, completed: false };
-              }
-              return item;
-            });
-            const completedCount = dodItems.filter((d) => d.completed).length;
-            const pct = Math.round((completedCount / dodItems.length) * 100);
-
-            return (
-              <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckSquare className="h-4 w-4 text-blue-600" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
-                      Outcome Goals ({dodItems.length})
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-600 font-mono">
-                      {completedCount} of {dodItems.length} completed
-                    </span>
-                    <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded border ${
-                      pct === 100
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : "bg-blue-50 text-blue-800 border-blue-200"
-                    }`}>
-                      {pct}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200/50">
-                  <div
-                    className="bg-blue-600 h-full transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-
-                {/* Interactive Checklist */}
-                <ul className="space-y-1.5 pt-1">
-                  {dodItems.map((item) => (
-                    <li
-                      key={item.id}
-                      onClick={() => handleToggleDod(item.id)}
-                      className={`flex items-start gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition ${
-                        item.completed
-                          ? "bg-slate-50/80 border-slate-200 text-slate-500"
-                          : "bg-white hover:bg-blue-50/40 border-slate-200 hover:border-blue-200 text-slate-900"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        className="mt-0.5 shrink-0 focus:outline-none"
-                      >
-                        {item.completed ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        ) : (
-                          <div className="h-4 w-4 rounded border-2 border-slate-300 hover:border-blue-500 transition" />
-                        )}
-                      </button>
-                      <div className="flex-1">
-                        <span className={`leading-snug block ${item.completed ? "line-through text-slate-400" : "font-medium"}`}>
-                          {item.title}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                        {item.completed ? "Verified" : "Pending"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })()}
-
-          {/* Confirmed Facts vs Inferred Assumptions Triage */}
-          {activePlan.facts_and_assumptions && (
-            ((activePlan.facts_and_assumptions.confirmed_facts && activePlan.facts_and_assumptions.confirmed_facts.length > 0) ||
-             (activePlan.facts_and_assumptions.inferred_assumptions && activePlan.facts_and_assumptions.inferred_assumptions.length > 0)) && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                  Verified Scope Triage & Planning Assumptions
-                </span>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  {activePlan.facts_and_assumptions.confirmed_facts && activePlan.facts_and_assumptions.confirmed_facts.length > 0 && (
-                    <div className="bg-white p-2.5 rounded border border-slate-200 space-y-1">
-                      <span className="text-[10px] font-bold text-emerald-700 uppercase font-mono block">
-                        Confirmed Ground Truth Facts:
-                      </span>
-                      <ul className="space-y-1 text-slate-700 text-[11px]">
-                        {activePlan.facts_and_assumptions.confirmed_facts.map((fact, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-emerald-600 font-bold">•</span>
-                            <span>{fact}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {activePlan.facts_and_assumptions.inferred_assumptions && activePlan.facts_and_assumptions.inferred_assumptions.length > 0 && (
-                    <div className="bg-white p-2.5 rounded border border-slate-200 space-y-1">
-                      <span className="text-[10px] font-bold text-blue-700 uppercase font-mono block">
-                        Inferred Planning Assumptions:
-                      </span>
-                      <ul className="space-y-1 text-slate-700 text-[11px]">
-                        {activePlan.facts_and_assumptions.inferred_assumptions.map((assump, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <span className="text-blue-600 font-bold">•</span>
-                            <span>{assump}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          )}
-
-          {/* Active Milestones & Tasks */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 font-mono flex items-center gap-2">
-                <MilestoneIcon className="h-3.5 w-3.5 text-blue-600" />
-                Active Milestones & Delivery Stages ({activePlan.milestones?.length || 0})
-              </h3>
-              <span className="text-[11px] text-slate-500">
-                Shared state active across PLAN, KNOW, MOVE, DELIVER &amp; SUPPORT
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {activePlan.milestones?.map((milestone) => {
-                const milestoneTasks = activePlan.tasks?.filter((t) => t.milestone_id === milestone.id) || [];
-                const isExpanded = !!expandedMilestones[milestone.id];
-
-                return (
-                  <div
-                    key={milestone.id}
-                    className="border border-slate-200 rounded-lg bg-white overflow-hidden shadow-2xs"
-                  >
-                    <div
-                      onClick={() => toggleMilestone(milestone.id)}
-                      className="p-3.5 bg-slate-50 hover:bg-slate-100 transition flex items-center justify-between cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="h-6 w-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center font-mono">
-                          {milestone.sequence_order}
-                        </span>
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900">{milestone.title}</h4>
-                          <span className="text-[11px] text-slate-500">
-                            {milestoneTasks.length} active tasks
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-slate-400" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-slate-400" />
-                        )}
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="p-4 space-y-3 border-t border-slate-200 bg-white">
-                        {/* Deliverables & Dependencies */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50/50 p-2.5 rounded border border-slate-100">
-                          <div>
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1 font-mono">
-                              Deliverables:
-                            </span>
-                            <ul className="space-y-0.5 text-slate-700">
-                              {milestone.deliverables?.map((d, i) => (
-                                <li key={i} className="flex items-center gap-1.5">
-                                  <Check className="h-3 w-3 text-emerald-600" />
-                                  <span>{d}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          <div>
-                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1 font-mono">
-                              Prerequisites & Gating Decisions:
-                            </span>
-                            <ul className="space-y-0.5 text-slate-700">
-                              {milestone.dependencies?.map((dep, i) => (
-                                <li key={i} className="flex items-center gap-1.5 text-amber-800">
-                                  <Clock className="h-3 w-3 text-amber-600 shrink-0" />
-                                  <span>Prerequisite: {dep}</span>
-                                </li>
-                              ))}
-                              {milestone.customer_decisions_required?.map((dec, i) => (
-                                <li key={i} className="flex items-center gap-1.5 text-purple-800">
-                                  <ShieldCheck className="h-3 w-3 text-purple-600 shrink-0" />
-                                  <span>Gating Decision: {dec}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-
-                        {/* Concrete Tasks — Aligned Scannable List */}
-                        {milestoneTasks.length > 0 && (
-                          <div className="space-y-1 pt-1">
-                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block font-mono">
-                              Work Items ({milestoneTasks.length}):
-                            </span>
-                            <ul className="divide-y divide-slate-100 pl-3 border-l-2 border-slate-200">
-                              {milestoneTasks.map((task) => (
-                                <li
-                                  key={task.id}
-                                  className="py-2 flex items-start justify-between gap-3 text-xs"
-                                >
-                                  <div className="space-y-0.5 flex-1">
-                                    <span className="font-medium text-slate-900 block">{task.title}</span>
-                                    {task.description && (
-                                      <p className="text-slate-500 text-[11px] leading-relaxed">{task.description}</p>
-                                    )}
-                                    {task.dependencies && task.dependencies.length > 0 && (
-                                      <span className="text-[10px] text-slate-400 font-mono block">
-                                        Prerequisite: {task.dependencies.join(", ")}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-emerald-800 bg-emerald-50 border border-emerald-200/50 shrink-0">
-                                    {task.status}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Triaged Assumptions and Next Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activePlan.next_actions && activePlan.next_actions.length > 0 && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-blue-600" />
-                  Recommended Next Actions
-                </span>
-                <ul className="space-y-1 text-xs text-slate-700">
-                  {activePlan.next_actions.map((act, i) => (
-                    <li key={i} className="flex items-start gap-1.5">
-                      <span className="text-blue-600 font-bold">•</span>
-                      <span>{act}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {activePlan.risks && activePlan.risks.length > 0 && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-800 font-mono flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                  Identified Delivery Risks
-                </span>
-                <ul className="space-y-1 text-xs text-slate-700">
-                  {activePlan.risks.map((risk, i) => (
-                    <li key={i} className="flex items-start gap-1.5">
-                      <span className="text-amber-600 font-bold">•</span>
-                      <span>{risk}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          {/* Bridge to Deliver Agent */}
-          <div className="bg-slate-900 text-white rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded bg-white/10 flex items-center justify-center shrink-0">
-                <Send className="h-4 w-4 text-blue-300" />
-              </div>
+            <div className="space-y-3 text-xs">
               <div>
-                <p className="text-xs font-bold text-white">
-                  Next Step: Draft Executive Customer Update
-                </p>
-                <p className="text-xs text-slate-300">
-                  DELIVER Agent can aggregate these milestones into an executive report for Manager sign-off and PDF release.
-                </p>
+                <label className="font-bold text-slate-700 block mb-1">Task Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="e.g. Complete schema validation for payments database"
+                  className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Why it matters (Description)</label>
+                <textarea
+                  rows={2}
+                  value={newTaskWhy}
+                  onChange={(e) => setNewTaskWhy(e.target.value)}
+                  placeholder="e.g. Required before initiating the migration pipeline rehearsal."
+                  className="w-full p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-2xs resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Target Due Date (IST)</label>
+                {/* Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                  {DUE_PRESETS.map((p) => {
+                    const presetStr = computePresetDue(p.offsetDays, p.hour, p.minute);
+                    const isSelected = newTaskDueDate === presetStr;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setNewTaskDueDate(presetStr)}
+                        className={`text-[10px] px-2 py-1 rounded font-mono transition cursor-pointer ${
+                          isSelected
+                            ? "bg-slate-900 text-white font-bold"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="p-2 rounded bg-slate-50 border border-slate-200 text-[11px] font-mono font-medium text-slate-800">
+                  {newTaskDueDate}
+                </div>
               </div>
             </div>
-            <a
-              href="/delivery"
-              className="bg-white hover:bg-slate-100 text-slate-900 font-semibold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition shrink-0 self-start sm:self-auto"
-            >
-              <span>Open Deliver Agent</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </a>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowAddTaskModal(false)}
+                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingTask || !newTaskTitle.trim()}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-50"
+              >
+                {isSubmittingTask ? "Saving..." : "Create Task"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL 3: Reschedule Task Due Date */}
+      {editingDueDateTaskId && editingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-700" />
+                <h3 className="font-bold text-slate-900 text-xs">Reschedule Task Due Date</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingDueDateTaskId(null)}
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs font-medium text-slate-800 line-clamp-1">{editingTask.title}</p>
+
+            {/* Quick Presets */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Quick Presets:</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {DUE_PRESETS.map((p) => {
+                  const val = computePresetDue(p.offsetDays, p.hour, p.minute);
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => handleSaveDueDate(val)}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left text-xs text-slate-800 transition cursor-pointer font-medium"
+                    >
+                      <div className="font-bold">{p.label}</div>
+                      <div className="text-[10px] font-mono text-slate-500">{val.split(",")[1]}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Date / Time */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
+              <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Custom IST Date:</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="p-2 border border-slate-200 rounded text-xs"
+                />
+                <input
+                  type="time"
+                  value={customTime}
+                  onChange={(e) => setCustomTime(e.target.value)}
+                  className="p-2 border border-slate-200 rounded text-xs"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSaveDueDate(formatCustomISTDueDate(customDate, customTime))}
+                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                Apply Custom Date
+              </button>
+            </div>
           </div>
         </div>
       )}

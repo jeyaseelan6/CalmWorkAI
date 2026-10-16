@@ -108,7 +108,7 @@ def get_latest_daily_work_brief(
 ):
     """
     Retrieves the most recent persisted Morning Brief for an engagement.
-    Enables zero-latency morning dashboard rendering without waiting for new LLM inference.
+    Enables zero-latency morning dashboard rendering from database without calling LLM.
     """
     latest = morning_brief_skill.get_latest_brief(engagement_id=engagement_id, db=db)
     if not latest:
@@ -122,6 +122,7 @@ def get_latest_daily_work_brief(
         "success": True,
         "data": latest,
         "has_brief": True,
+        "generated_at": latest.get("persisted_at") or latest.get("timestamp"),
         "message": "Latest morning brief retrieved successfully."
     }
 
@@ -147,9 +148,13 @@ def get_daily_work_brief(
         trigger_source=f"ON_DEMAND ({user_name})"
     )
 
+    data = brief.model_dump()
+    data["persisted_at"] = datetime.utcnow().isoformat()
+
     return {
         "success": True,
-        "data": brief.model_dump(),
+        "data": data,
+        "generated_at": data["persisted_at"],
         "message": "Sequential Morning Brief generated via Morning Brief Skill and persisted."
     }
 
@@ -163,25 +168,13 @@ async def get_daily_work_brief_stream(
 ):
     """
     Proactive Intelligence Mode (Real-Time SSE Stream):
-    Streams sequential multi-agent execution events in real time.
+    Streams sequential Morning Brief Skill execution events in real time and persists to database.
     """
     eng = await asyncio.to_thread(lambda: db.query(Engagement).filter(Engagement.id == engagement_id).first())
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
 
-    current_outcome = await asyncio.to_thread(lambda: db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first())
-    statement = current_outcome.statement if current_outcome else ""
-    version = current_outcome.version if current_outcome else 1
-    criteria = current_outcome.success_criteria if current_outcome else []
-    approvals = await asyncio.to_thread(lambda: db.query(Approval).filter(Approval.engagement_id == engagement_id, Approval.status == "PENDING").all())
-    timeline = await asyncio.to_thread(lambda: db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).order_by(TimelineEvent.created_at.desc()).all())
-
-    customer_name = eng.customer_name
-    status_val = eng.status
-    pending_approvals_count = len(approvals)
-    current_work_cycle = eng.current_work_cycle
-    work_plan = current_outcome.work_plan if current_outcome else None
-
+    user_name = current_user.get("name", "Engineer")
     queue: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
@@ -192,44 +185,31 @@ async def get_daily_work_brief_stream(
         async def run_worker():
             try:
                 brief = await asyncio.to_thread(
-                    supervisor_coordinator.generate_daily_work_brief,
+                    morning_brief_skill.execute_and_persist,
                     engagement_id=engagement_id,
-                    customer_name=customer_name,
-                    status=status_val,
-                    outcome_statement=statement,
-                    version=version,
-                    pending_approvals=pending_approvals_count,
-                    current_work_cycle=current_work_cycle,
-                    timeline_events=timeline,
-                    success_criteria=criteria,
-                    approved_work_plan=work_plan,
+                    db=db,
+                    trigger_source=f"ON_DEMAND ({user_name})",
                     progress_callback=sync_progress_callback
                 )
-                def persist_timeline_event():
-                    db.add(TimelineEvent(
-                        id=f"evt-{uuid.uuid4().hex[:8]}",
-                        engagement_id=engagement_id,
-                        event_type="MORNING_BRIEF_GENERATED",
-                        title=f"Morning Brief Generated (v{version})",
-                        description=f"Supervisor synthesized sequential Morning Brief (PLAN → KNOW → MOVE). Proposed Plan: {brief.proposed_work_plan.recommended_first_action}. DELIVER excluded.",
-                        actor_type="SUPERVISOR",
-                        actor_id="supervisor_coordinator",
-                        created_at=datetime.utcnow()
-                    ))
-                    db.commit()
-                await asyncio.to_thread(persist_timeline_event)
+                brief_dict = brief.model_dump()
+                brief_dict["persisted_at"] = datetime.utcnow().isoformat()
 
                 loop.call_soon_threadsafe(
                     queue.put_nowait,
-                    {"type": "complete", "success": True, "data": brief.model_dump()}
+                    {
+                        "type": "complete",
+                        "success": True,
+                        "data": brief_dict,
+                        "generated_at": brief_dict["persisted_at"]
+                    }
                 )
             except Exception as e:
-                logger.error(f"Error during streamed daily work brief: {str(e)}")
+                logger.error(f"Error during streamed Morning Brief Skill: {str(e)}")
                 loop.call_soon_threadsafe(
                     queue.put_nowait,
                     {
                         "type": "error",
-                        "detail": "AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+                        "detail": f"Failed to execute Morning Brief Skill: {str(e)}"
                     }
                 )
             finally:

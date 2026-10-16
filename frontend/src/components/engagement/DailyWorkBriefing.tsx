@@ -155,7 +155,19 @@ export default function DailyWorkBriefing({ onClose }: DailyWorkBriefingProps = 
   };
 
   useEffect(() => {
-    fetchBrief();
+    // Zero LLM calls on load: only query database for previously persisted brief
+    fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/latest`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data?.has_brief && data?.data) {
+          setBrief(data.data);
+          const ts = data.generated_at || data.data.persisted_at || data.data.timestamp;
+          if (ts) setLastRefreshed(String(ts));
+        } else {
+          setBrief(null);
+        }
+      })
+      .catch(() => {});
   }, [activeCustomer.id]);
 
   if (!brief) {

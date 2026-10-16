@@ -111,6 +111,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
   const [hasFreshEvidence, setHasFreshEvidence] = useState(false);
 
   // Fetch latest pre-computed morning brief on customer change (e.g. from 8:00 AM IST scheduled run)
+  // Fetch latest persisted morning brief from database on customer change (ZERO LLM calls on page load)
   useEffect(() => {
     setBrief(null);
     setLastRefreshed("");
@@ -126,13 +127,14 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
         .then((data) => {
           if (data?.success && data?.has_brief && data?.data) {
             setBrief(data.data);
-            if (data.generated_at) {
-              setLastRefreshed(formatISTDateTime(data.generated_at));
+            const ts = data.generated_at || data.data.persisted_at || data.data.timestamp;
+            if (ts) {
+              setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
             }
           }
         })
         .catch((e) => {
-          console.debug("No pre-computed morning brief available:", e);
+          console.debug("No previously generated morning brief found in database:", e);
         });
     }
   }, [activeCustomer?.id, token]);
@@ -150,7 +152,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     }
   }, [activeCustomer?.id]);
 
-  // Run sequential Morning Brief (PLAN -> KNOW -> MOVE) only on explicit click
+  // Run sequential Morning Brief (PLAN -> KNOW -> MOVE) ONLY on explicit user button click
   const runMorningBrief = useCallback(async () => {
     if (!activeCustomer?.id) return;
     setBriefLoading(true);
@@ -198,8 +200,10 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 setStreamEvent(event);
               } else if (event.type === "complete" && event.data) {
                 setBrief(event.data);
-                setLastRefreshed(getNowISTTime(true));
+                const ts = event.generated_at || event.data.persisted_at || getNowISTTime(true);
+                setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
                 setStreamEvent(null);
+                setHasFreshEvidence(false);
                 fetchEngagementDetail(activeCustomer.id);
               }
             } catch (e) {
@@ -218,7 +222,9 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
         const fallbackData = await fallbackRes.json();
         if (fallbackData.success && fallbackData.data) {
           setBrief(fallbackData.data);
-          setLastRefreshed(getNowISTTime(true));
+          const ts = fallbackData.generated_at || fallbackData.data.persisted_at || getNowISTTime(true);
+          setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
+          setHasFreshEvidence(false);
           fetchEngagementDetail(activeCustomer.id);
         }
       } catch (fallbackErr) {
@@ -228,14 +234,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       setBriefLoading(false);
       setStreamEvent(null);
     }
-  }, [activeCustomer?.id, fetchEngagementDetail]);
-
-  const handleSyncAll = () => {
-    fetchEngagementDetail(activeCustomer.id);
-    if (brief) {
-      runMorningBrief();
-    }
-  };
+  }, [activeCustomer?.id, fetchEngagementDetail, token]);
 
   const isAcme = activeCustomer.id === "eng-acme-001";
   const outcomeStatement =
@@ -621,9 +620,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
       }
 
       await fetchEngagementDetail(activeCustomer.id);
-      if (brief) {
-        await runMorningBrief();
-      }
     } catch (e: any) {
       // Reconcile and revert optimistic update on failure!
       setLocalTasks(previousTasks);
@@ -675,9 +671,20 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-display font-bold text-slate-900">My Day</h1>
               </div>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {activeCustomer.customerName} &middot; {activeCustomer.engagementName}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <p className="text-sm text-slate-500">
+                  {activeCustomer.customerName} &middot; {activeCustomer.engagementName}
+                </p>
+                {lastRefreshed ? (
+                  <span className="text-[11px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-medium">
+                    Last updated: {lastRefreshed}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-mono text-slate-400">
+                    · No brief in database
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -693,21 +700,11 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 type="button"
                 onClick={runMorningBrief}
                 disabled={briefLoading}
-                title="Run PLAN, KNOW, and MOVE agents to generate Morning Brief"
+                title="Run Morning Brief Skill across PLAN, KNOW, and MOVE agents"
                 className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
                 <span>{briefLoading ? "Running Agents..." : brief ? "Re-run Brief" : "Morning Brief"}</span>
-              </button>
-
-              <button
-                onClick={handleSyncAll}
-                disabled={isLoading}
-                title="Refresh State"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
-                <span>Refresh</span>
               </button>
 
               <button
@@ -732,14 +729,18 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
         </div>
       ) : (
         /* Embedded Action Ribbon inside Engagement Workspace */
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono font-bold text-slate-700 uppercase tracking-wider">
               Daily Work Sequence
             </span>
-            {lastRefreshed && (
+            {lastRefreshed ? (
+              <span className="text-[11px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-medium">
+                Last updated: {lastRefreshed}
+              </span>
+            ) : (
               <span className="text-[11px] font-mono text-slate-400">
-                · Brief updated at {lastRefreshed}
+                · No brief generated yet
               </span>
             )}
           </div>
@@ -749,21 +750,11 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
               type="button"
               onClick={runMorningBrief}
               disabled={briefLoading}
-              title="Run PLAN, KNOW, and MOVE agents to generate Morning Brief"
+              title="Run Morning Brief Skill across PLAN, KNOW, and MOVE agents"
               className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
             >
               <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
               <span>{briefLoading ? "Running Agents..." : brief ? "Re-run Morning Brief" : "Morning Brief"}</span>
-            </button>
-
-            <button
-              onClick={handleSyncAll}
-              disabled={isLoading}
-              title="Refresh State"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
-              <span>Refresh</span>
             </button>
           </div>
         </div>
@@ -1361,15 +1352,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                       {nextActionError}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={runMorningBrief}
-                    disabled={briefLoading}
-                    className="px-3 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50 inline-flex items-center gap-1.5"
-                  >
-                    <Sun className="h-3.5 w-3.5" />
-                    <span>Retry Morning Brief</span>
-                  </button>
                 </div>
               ) : (
                 <div className="text-xs text-slate-400 text-center py-6">

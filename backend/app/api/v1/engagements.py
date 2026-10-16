@@ -366,14 +366,21 @@ def update_routine_task(
             target_task = t
             break
 
-    # If pending manager approval, block status transitions until approved
+    # If pending manager approval, block status transitions until approved unless manager is approving it
     if target_task and target_task.get("approval_status") == "PENDING_APPROVAL":
-        new_status = payload.get("status")
-        if new_status and str(new_status).upper() in ["COMPLETED", "DONE", "IN_PROGRESS"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Task is pending manager approval. Newly created tasks must be approved by an Engineering Manager before becoming approved work."
-            )
+        if payload.get("approval_status") == "APPROVED":
+            if user_role != "MANAGER":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only an Engineering Manager can approve pending tasks."
+                )
+        else:
+            new_status = payload.get("status")
+            if new_status and str(new_status).upper() in ["COMPLETED", "DONE", "IN_PROGRESS"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Task is pending manager approval. Newly created tasks must be approved by an Engineering Manager before becoming approved work."
+                )
 
     # Apply updates to target task
     if target_task:
@@ -435,7 +442,28 @@ def update_routine_task(
     is_completed = (new_status in ["COMPLETED", "DONE"])
     task_title = target_task.get("title") or task_id
 
-    if is_completed:
+    if payload.get("approval_status") == "APPROVED":
+        # Resolve any pending approval for this task
+        appr = db.query(Approval).filter(
+            Approval.engagement_id == engagement_id,
+            Approval.target_id == task_id,
+            Approval.status == ApprovalStatus.PENDING
+        ).first()
+        if appr:
+            appr.status = ApprovalStatus.APPROVED
+            appr.decided_by = f"Manager ({actor_name})"
+            appr.decided_at = datetime.utcnow()
+        db.add(TimelineEvent(
+            id=f"evt-{uuid.uuid4().hex[:8]}",
+            engagement_id=engagement_id,
+            event_type="TASK_APPROVED",
+            title=f"Task Approved: {task_title}",
+            description=f"Manager {actor_name} approved task '{task_title}'.",
+            actor_type="MANAGER",
+            actor_id=actor_id,
+            created_at=datetime.utcnow()
+        ))
+    elif is_completed:
         db.add(TimelineEvent(
             id=f"evt-{uuid.uuid4().hex[:8]}",
             engagement_id=engagement_id,
