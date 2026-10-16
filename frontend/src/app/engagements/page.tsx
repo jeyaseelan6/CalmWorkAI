@@ -143,13 +143,6 @@ export default function EngagementsIndexPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => handleSelectEngagement(cust, "changes")}
-                      className="px-2.5 py-1.5 min-h-[36px] bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-slate-700 text-xs font-medium transition cursor-pointer"
-                    >
-                      Scope &amp; Risks
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => handleSelectEngagement(cust, "myday")}
                       className="px-3 py-1.5 min-h-[36px] bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold flex items-center gap-1 transition shadow-2xs cursor-pointer"
                     >
