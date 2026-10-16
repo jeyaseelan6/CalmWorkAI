@@ -52,7 +52,7 @@ function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
   const currentNav: NavItem[] = [
     { 
       id: "engagements", 
-      label: "My Engagements", 
+      label: "My Workspaces", 
       href: "/engagements", 
       icon: Building2 
     },
@@ -400,7 +400,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {activeCustomer && (
             <div className="mb-2.5 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200">
               <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
-                <span className="font-mono text-[9px] uppercase tracking-wider">Active Client</span>
+                <span className="font-mono text-[9px] uppercase tracking-wider">Active Workspace</span>
                 <span className={`h-1.5 w-1.5 rounded-full ${activeCustomer.status === "HEALTHY" ? "bg-emerald-500" : "bg-amber-500"}`} />
               </div>
               <p className="text-xs font-semibold text-slate-900 truncate mt-0.5" title={activeCustomer.customerName}>
@@ -462,15 +462,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Right Side Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* "+ New Engagement" on desktop (Manager only) */}
+            {/* "+ New Workspace" on desktop (Manager only) */}
             {isManager && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="hidden lg:flex border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                title="Create a new customer engagement (Manager role required)"
+                title="Create a new workspace (Manager role required)"
               >
                 <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                <span>+ New Engagement</span>
+                <span>+ New Workspace</span>
               </button>
             )}
 
@@ -533,7 +533,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span>My Day</span>
           </Link>
 
-          {/* 2. My Engagements */}
+          {/* 2. My Workspaces */}
           <Link
             href="/engagements"
             className={`flex flex-col items-center justify-center py-1 px-2 min-h-[44px] min-w-[44px] rounded-lg text-[10px] font-medium transition ${
@@ -543,7 +543,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <Building2 className="h-4 w-4 mb-0.5" />
-            <span>Engagements</span>
+            <span>Workspaces</span>
           </Link>
 
           {/* 3. Approvals */}
