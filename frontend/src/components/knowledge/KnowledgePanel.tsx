@@ -2,30 +2,14 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  BookOpen, Search, Sparkles, FileText, Send,
+  BookOpen, Search, Sparkles, FileText,
   CheckCircle2, AlertTriangle, UploadCloud, FileUp, Folder,
-  RefreshCw, Check, Layers, Clock, Lock, FileCode,
+  RefreshCw, Check, Clock, Lock, FileCode, Layers,
   Eye, Download, ZoomIn, ZoomOut, RotateCcw, X, Copy,
   ExternalLink, Image as ImageIcon, Filter, ChevronDown
 } from "lucide-react";
 import { formatISTDateTime } from "@/utils/date";
-
-interface Citation {
-  document_title: string;
-  chunk_id: string;
-  snippet: string;
-  relevance_score: number;
-}
-
-interface GroundedAnswerData {
-  question: string;
-  answer: string;
-  citations: Citation[];
-  confidence_score: number;
-  tenant_isolated: boolean;
-  privacy_scrubbed: boolean;
-  evidence_sufficient?: boolean;
-}
+import { useEngagement } from "@/context/EngagementContext";
 
 interface IndexedDocument {
   id: string;
@@ -71,11 +55,7 @@ const CATEGORIES = [
 ];
 
 export default function KnowledgePanel({ engagementId, customerName }: KnowledgePanelProps) {
-  // Query State
-  const [query, setQuery] = useState("");
-  const [queryLoading, setQueryLoading] = useState(false);
-  const [answerData, setAnswerData] = useState<GroundedAnswerData | null>(null);
-  const [queryError, setQueryError] = useState<string | null>(null);
+  const { openSupervisorWithContext } = useEngagement();
 
   // Documents & Library State
   const [documents, setDocuments] = useState<IndexedDocument[]>([]);
@@ -88,7 +68,6 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   // Search & Filtering State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const askCardRef = useRef<HTMLDivElement>(null);
 
   // Document Viewer Modal State
   const [viewingDoc, setViewingDoc] = useState<IndexedDocument | null>(null);
@@ -208,40 +187,6 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
     });
   }, [documents, searchQuery, selectedCategory]);
 
-  // Handle RAG Q&A
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-
-    setQueryLoading(true);
-    setQueryError(null);
-    try {
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/knowledge/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: query, top_k: 3 })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          setAnswerData(json.data);
-        } else {
-          setQueryError(json.message || "No grounded answer could be retrieved.");
-          setAnswerData(null);
-        }
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        setQueryError(errJson.detail || "KNOW Agent failed to query knowledge vector store.");
-        setAnswerData(null);
-      }
-    } catch (err: unknown) {
-      setQueryError((err as Error).message || "Network error while querying KNOW Agent.");
-      setAnswerData(null);
-    } finally {
-      setQueryLoading(false);
-    }
-  };
-
   // Handle File Upload
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -342,194 +287,10 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
   return (
     <div className="space-y-6">
       {/* ========================================================= */}
-      {/* CARD 1: Grounded Q&A Interface (Ask KNOW Agent)           */}
-      {/* ========================================================= */}
-      <div ref={askCardRef} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        {/* Card 1 Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 shadow-2xs">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                Ask KNOW Agent
-                <span className="text-[10px] bg-teal-100 text-teal-800 font-mono px-2 py-0.5 rounded font-semibold border border-teal-200">
-                  RAG Active
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Grounded questions across verified technical documents and architecture for <strong className="text-slate-700 font-semibold">{customerName}</strong>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 1 Body */}
-        <div className="p-4 sm:p-5 space-y-4">
-          {/* Query Search Form */}
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder={`Ask anything about ${customerName}'s architecture, security policies, or specifications...`}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition shadow-2xs"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={queryLoading}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition disabled:opacity-50 shrink-0 cursor-pointer shadow-2xs"
-            >
-              {queryLoading ? (
-                <>
-                  <Sparkles className="h-3.5 w-3.5 animate-spin" />
-                  <span>Synthesizing...</span>
-                </>
-              ) : (
-                <>
-                  <span>Ask Agent</span>
-                  <Send className="h-3.5 w-3.5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Quick suggestions based on uploaded docs */}
-          {documents.length > 0 && !answerData && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-xs text-slate-400 font-medium">Quick Queries:</span>
-              <button
-                type="button"
-                onClick={() => setQuery("What are the enterprise security and SSO requirements?")}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition cursor-pointer"
-              >
-                &ldquo;What are the SSO requirements?&rdquo;
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuery("What is the database cutover window and migration pipeline?")}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition cursor-pointer"
-              >
-                &ldquo;What is the cutover window?&rdquo;
-              </button>
-            </div>
-          )}
-
-          {/* Error Output */}
-          {queryError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-              <span>{queryError}</span>
-            </div>
-          )}
-
-          {/* Answer Output */}
-          {answerData && (
-            <div className="space-y-4 pt-3 border-t border-slate-100 animate-fadeIn">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-semibold flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                  Grounded Knowledge Synthesis:
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-700 font-mono font-bold bg-slate-100 px-2 py-0.5 rounded">
-                    Confidence: {Math.round(answerData.confidence_score * 100)}%
-                  </span>
-                  {answerData.privacy_scrubbed && (
-                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-mono text-xs font-bold flex items-center gap-1">
-                      <Lock className="h-3 w-3 text-emerald-600" />
-                      Privacy Scrubbed
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Synthesized Answer */}
-              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 text-xs text-slate-900 leading-relaxed whitespace-pre-wrap font-medium">
-                {answerData.answer}
-              </div>
-
-              {/* Insufficient Evidence Warning Banner */}
-              {(answerData.evidence_sufficient === false ||
-                (answerData.citations?.length === 0 && answerData.confidence_score < 0.5) ||
-                answerData.answer.toLowerCase().includes("don't have enough verified engagement evidence")) && (
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-                  <div className="space-y-1">
-                    <span className="font-bold block">Authorized Evidence Insufficient</span>
-                    <p className="text-amber-800 leading-relaxed">
-                      The KNOW agent found insufficient verified engagement documents or operational records to ground a definitive answer without speculation. Please upload relevant technical specifications, runbooks, or architecture notes to expand verified evidence.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Citations & Evidence Context */}
-              {answerData.citations && answerData.citations.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                      <Layers className="h-3.5 w-3.5 text-teal-600" />
-                      Verified Source Evidence ({answerData.citations.length} Chunks)
-                    </span>
-                    <span className="text-xs text-slate-400">Strictly grounded &middot; zero hallucinations</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    {answerData.citations.map((c, i) => {
-                      const matchedDoc = documents.find(
-                        (d) => d.title.toLowerCase() === c.document_title.toLowerCase()
-                      );
-
-                      return (
-                        <div key={i} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
-                          <div className="flex items-center justify-between font-semibold text-xs text-slate-900">
-                            <span className="flex items-center gap-1.5 text-teal-800 truncate">
-                              <FileText className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                              <span className="truncate">{c.document_title}</span>
-                            </span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-slate-500 font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded">
-                                Relevance: {c.relevance_score}
-                              </span>
-                              {matchedDoc && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenViewer(matchedDoc)}
-                                  className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold px-2 py-0.5 rounded bg-teal-50 hover:bg-teal-100 border border-teal-200 transition cursor-pointer"
-                                >
-                                  View Source
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-slate-600 italic text-xs leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
-                            &ldquo;{c.snippet}&rdquo;
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 italic">
-                  No specific document chunks were cited for this response.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* CARD 2: Document Library                                  */}
+      {/* DOCUMENT LIBRARY                                          */}
       {/* ========================================================= */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        {/* Card 2 Header */}
+        {/* Document Library Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-5 border-b border-slate-200 bg-slate-50/50">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 shadow-2xs">
@@ -864,13 +625,15 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                       <button
                         type="button"
                         onClick={() => {
-                          setQuery(`Summarize the key requirements from ${doc.title}`);
-                          askCardRef.current?.scrollIntoView({ behavior: "smooth" });
+                          openSupervisorWithContext({
+                            initialQuery: `What are the key technical requirements and architectural details in "${doc.title}"?`
+                          });
                         }}
                         className="text-xs text-teal-700 hover:text-teal-900 font-semibold px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200 transition flex items-center gap-1 cursor-pointer"
+                        title="Analyze with CalmWork AI Orchestrated Assistant"
                       >
                         <Sparkles className="h-3 w-3" />
-                        <span>Ask AI &rarr;</span>
+                        <span>Ask CalmWork AI &rarr;</span>
                       </button>
                     </div>
                   </div>
@@ -958,13 +721,15 @@ export default function KnowledgePanel({ engagementId, customerName }: Knowledge
                   onClick={() => {
                     const docTitle = viewingDoc.title;
                     handleCloseViewer();
-                    setActiveTab("query");
-                    setQuery(`Summarize the core specifications and requirements in ${docTitle}`);
+                    openSupervisorWithContext({
+                      initialQuery: `What are the core specifications and architectural requirements in "${docTitle}"?`
+                    });
                   }}
                   className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold border border-teal-200 flex items-center gap-1 transition cursor-pointer"
+                  title="Ask CalmWork AI Orchestrated Assistant"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                  <span>Ask AI</span>
+                  <span>Ask CalmWork AI</span>
                 </button>
 
                 {/* Close Button */}

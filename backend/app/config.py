@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     )
     
     # Google Cloud & AI Settings (Primary Competition Platform)
-    GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "calmwork-ai-dev")
-    GCP_LOCATION: str = os.getenv("GCP_LOCATION", "us-central1")
-    GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME", "calmwork-documents")
+    GCP_PROJECT_ID: Optional[str] = os.getenv("GCP_PROJECT_ID", "calmwork-ai")
+    GCP_LOCATION: str = os.getenv("GCP_LOCATION", "asia-south1")
+    GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME", "calmwork-documents-63094329383")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     USE_VERTEX_AI: bool = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
