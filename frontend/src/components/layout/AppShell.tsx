@@ -29,6 +29,7 @@ import {
 import RecordWorknoteDrawer from "@/components/layout/RecordWorknoteDrawer";
 import CreateEngagementModal from "@/components/engagement/CreateEngagementModal";
 import AskCalmWorkChat from "@/components/supervisor/AskCalmWorkChat";
+import WorkspaceRail from "@/components/layout/WorkspaceRail";
 
 export interface NavItem {
   id: string;
@@ -191,99 +192,62 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  const renderEngagementSwitcher = () => (
-    <div className="mb-3 relative px-1">
-      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
-        Active Engagement
-      </label>
-      <button
-        type="button"
-        onClick={() => setDropdownOpen(!dropdownOpen)}
-        className="w-full bg-slate-50 border border-slate-200 rounded-md p-2 flex items-center justify-between text-left hover:border-slate-300 transition-all text-xs cursor-pointer"
-      >
-        <div className="truncate">
-          <span className="font-semibold text-slate-900 block truncate">{activeCustomer.customerName}</span>
-          <span className="text-[11px] text-slate-500 block truncate">{activeCustomer.engagementName}</span>
-        </div>
-        <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-1" />
-      </button>
 
-      {dropdownOpen && (
-        <div className="absolute left-1 right-1 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-1.5 space-y-1">
-          <div className="px-1.5 py-1 text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
-            <span>Switch Workspace</span>
-            <span className="font-mono text-[9px] text-slate-500">{customers.length} total</span>
-          </div>
 
-          {customers.length > 4 && (
-            <div className="px-0.5 pb-1">
-              <input
-                type="text"
-                placeholder="Search engagement..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
-              />
-            </div>
-          )}
-
-          <div className="max-h-60 overflow-y-auto space-y-0.5">
-            {filteredCustomers.map((cust) => (
-              <button
-                key={cust.id}
-                type="button"
-                onClick={() => {
-                  switchEngagement(cust);
-                  setDropdownOpen(false);
-                  setIsMobileMenuOpen(false);
-                  setCustomerSearch("");
-                  if (pathname?.startsWith("/engagements")) {
-                    router.push(`/engagements/${cust.id}${activeTab ? `?tab=${activeTab}` : ""}`);
-                  }
-                }}
-                className={`w-full text-left p-2 rounded text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                  cust.id === activeCustomer.id 
-                    ? "bg-slate-100 text-slate-900 font-semibold border-l-2 border-slate-900" 
-                    : "hover:bg-slate-50 text-slate-700"
+  const renderMobileEngagementSwitcher = () => (
+    <div className="mb-3 px-1">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          Switch Client ({customers.length})
+        </span>
+        {isManager && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setShowCreateModal(true);
+            }}
+            className="text-[10px] font-semibold text-slate-700 hover:text-slate-900 flex items-center gap-0.5"
+          >
+            <Plus className="h-3 w-3" />
+            <span>New</span>
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar">
+        {customers.map((cust) => {
+          const isActive = cust.id === activeCustomer.id;
+          const isHealthy = cust.status === "HEALTHY";
+          const initials = cust.customerName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+          return (
+            <button
+              key={cust.id}
+              type="button"
+              onClick={() => {
+                switchEngagement(cust);
+                setIsMobileMenuOpen(false);
+                if (pathname?.startsWith("/engagements")) {
+                  router.push(`/engagements/${cust.id}${activeTab ? `?tab=${activeTab}` : ""}`);
+                } else {
+                  router.push(`/engagements/${cust.id}?tab=myday`);
+                }
+              }}
+              className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center font-bold text-xs relative transition-all cursor-pointer ${
+                isActive
+                  ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-900"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+              }`}
+            >
+              <span>{initials}</span>
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${
+                  isHealthy ? "bg-emerald-500" : "bg-amber-500"
                 }`}
-              >
-                <div className="truncate">
-                  <div className="font-semibold truncate">{cust.customerName}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{cust.engagementName}</div>
-                </div>
-                {cust.status === "NEEDS_REASSESSMENT" && (
-                  <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 ml-1.5" title="Needs Reassessment" />
-                )}
-                {cust.status === "HEALTHY" && (
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 ml-1.5" title="Healthy" />
-                )}
-              </button>
-            ))}
-            {filteredCustomers.length === 0 && (
-              <div className="p-2 text-center text-xs text-slate-400">
-                No matching engagements
-              </div>
-            )}
-          </div>
-
-          {isManager && (
-            <div className="pt-1 mt-1 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setDropdownOpen(false);
-                  setIsMobileMenuOpen(false);
-                  setShowCreateModal(true);
-                }}
-                className="w-full text-left p-1.5 rounded text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1.5 font-medium transition cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5 text-slate-500" />
-                <span>New Engagement...</span>
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+              />
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -326,8 +290,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
 
-              {/* Engagement Switcher */}
-              {renderEngagementSwitcher()}
+              {/* Mobile Client Switcher Strip */}
+              {renderMobileEngagementSwitcher()}
 
               {/* Navigation Items */}
               <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
@@ -367,22 +331,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Desktop Sidebar (hidden on mobile) */}
-      <aside className="hidden md:flex w-60 border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0">
+      {/* Slim Vertical Icon Rail (Leftmost Client Switcher, 56px) */}
+      <WorkspaceRail onOpenCreateModal={() => setShowCreateModal(true)} />
+
+      {/* Desktop Client Sidebar (hidden on mobile) */}
+      <aside className="hidden md:flex w-56 border-r border-slate-200 bg-white flex-col justify-between p-3.5 shrink-0">
         <div>
-          {/* Logo & Application Header */}
-          <Link href="/engagements" className="flex items-center gap-2.5 px-2 py-2 mb-3 border-b border-slate-200 group">
-            <div className="h-7 w-7 rounded bg-slate-900 text-white flex items-center justify-center font-display font-bold text-sm shadow-2xs">
-              C
-            </div>
-            <div>
-              <h1 className="font-display font-bold text-slate-900 text-sm tracking-tight">CalmWork AI</h1>
-            </div>
-          </Link>
-
-          {/* Active Customer Switcher */}
-          {renderEngagementSwitcher()}
-
           {/* Navigation Links wrapped in Suspense */}
           <Suspense fallback={<div className="h-24 bg-slate-100 rounded-md animate-pulse" />}>
             <NavLinks />
