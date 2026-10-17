@@ -15,14 +15,136 @@ import logging
 from datetime import datetime
 
 from app.db.database import get_db
-from app.models import Engagement, Outcome, Approval, TimelineEvent
+from app.models import Engagement, Outcome, Approval, TimelineEvent, WorkspaceChatMessage
 from app.api.deps import supervisor_coordinator, support_agent, storage_service
 from app.api.schemas import UniversalSupervisorQueryPayload, SupportInvestigationRequest
 from app.auth import get_current_user
 
+from app.agents.invariants import IST_TZ
+from datetime import timezone
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Supervisor"])
+
+
+def format_ist_time(dt: datetime) -> str:
+    """Formats datetime into IST standard 24h string."""
+    if not dt:
+        return ""
+    dt_utc = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    return dt_utc.astimezone(IST_TZ).strftime("%H:%M IST")
+
+
+@router.get("/engagements/{engagement_id}/supervisor/messages")
+def get_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db)):
+    """
+    Retrieves chronological chat history for 'Ask CalmWork AI' in this workspace.
+    Initializes default localized welcome message if history is empty.
+    """
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    messages = (
+        db.query(WorkspaceChatMessage)
+        .filter(WorkspaceChatMessage.engagement_id == engagement_id)
+        .order_by(WorkspaceChatMessage.created_at.asc())
+        .all()
+    )
+
+    if not messages:
+        welcome_id = f"msg-welcome-{engagement_id}"
+        welcome_msg = WorkspaceChatMessage(
+            id=welcome_id,
+            engagement_id=engagement_id,
+            sender="SUPERVISOR",
+            text=f"Hello! I am the CalmWork Supervisor for {eng.customer_name}. Ask about project status, scope changes, blockers, or attach error logs and screenshots for quick diagnosis.",
+            intent="MULTI_AGENT",
+            delegated_agent={
+                "id": "MULTI_AGENT",
+                "name": "CalmWork Supervisor",
+                "role": "Multi-Agent Orchestration",
+                "badge_label": "Universal Orchestrator",
+                "color": "slate"
+            },
+            capabilities_used=["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
+            suggested_followups=[
+                "What changed today in scope & work plan?",
+                "What should I do next? (Next action)",
+                "What is the technical architecture & specs?",
+                "Draft an executive customer update."
+            ],
+            created_at=datetime.utcnow()
+        )
+        db.add(welcome_msg)
+        db.commit()
+        db.refresh(welcome_msg)
+        messages = [welcome_msg]
+
+    serialized = []
+    for m in messages:
+        serialized.append({
+            "id": m.id,
+            "sender": m.sender,
+            "text": m.text,
+            "intent": m.intent or "MULTI_AGENT",
+            "delegatedAgent": m.delegated_agent,
+            "capabilitiesUsed": m.capabilities_used or [],
+            "sources": m.sources or [],
+            "suggestedFollowups": m.suggested_followups or [],
+            "screenshotPreview": m.screenshot_preview,
+            "supportResult": m.support_result,
+            "timestamp": format_ist_time(m.created_at)
+        })
+
+    return {
+        "success": True,
+        "data": serialized,
+        "message": f"Retrieved {len(serialized)} messages for workspace {engagement_id}."
+    }
+
+
+@router.delete("/engagements/{engagement_id}/supervisor/messages")
+def clear_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db)):
+    """Clears conversation history for the given workspace and resets to initial greeting."""
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    db.query(WorkspaceChatMessage).filter(WorkspaceChatMessage.engagement_id == engagement_id).delete()
+    db.commit()
+
+    # Re-seed clean welcome message
+    welcome_msg = WorkspaceChatMessage(
+        id=f"msg-welcome-{engagement_id}",
+        engagement_id=engagement_id,
+        sender="SUPERVISOR",
+        text=f"Hello! I am the CalmWork Supervisor for {eng.customer_name}. Ask about project status, scope changes, blockers, or attach error logs and screenshots for quick diagnosis.",
+        intent="MULTI_AGENT",
+        delegated_agent={
+            "id": "MULTI_AGENT",
+            "name": "CalmWork Supervisor",
+            "role": "Multi-Agent Orchestration",
+            "badge_label": "Universal Orchestrator",
+            "color": "slate"
+        },
+        capabilities_used=["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
+        suggested_followups=[
+            "What changed today in scope & work plan?",
+            "What should I do next? (Next action)",
+            "What is the technical architecture & specs?",
+            "Draft an executive customer update."
+        ],
+        created_at=datetime.utcnow()
+    )
+    db.add(welcome_msg)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Conversation history cleared for workspace {engagement_id}."
+    }
 
 
 @router.get("/engagements/{engagement_id}/supervisor/summary")
@@ -61,11 +183,22 @@ def get_supervisor_summary(engagement_id: str, db: Session = Depends(get_db)):
 def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQueryPayload, db: Session = Depends(get_db)):
     """
     Universal Conversational Interface ('Ask CalmWork'):
-    Receives user query, orchestrates multi-agent reasoning, enforces privacy and anti-hallucination policies.
+    Receives user query, orchestrates multi-agent reasoning, persists user query and response to PostgreSQL.
     """
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
+
+    # 1. Persist User Query to PostgreSQL
+    user_msg_id = f"msg-usr-{uuid.uuid4().hex[:8]}"
+    db.add(WorkspaceChatMessage(
+        id=user_msg_id,
+        engagement_id=engagement_id,
+        sender="USER",
+        text=payload.query,
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
 
     current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
     statement = current_outcome.statement if current_outcome else ""
@@ -91,10 +224,29 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
         engagement_progress=eng.progress
     )
 
+    # 2. Persist Supervisor Response to PostgreSQL
+    agent_meta = response.delegated_agent.model_dump() if response.delegated_agent else None
+    sources_list = [s.model_dump() for s in response.sources] if response.sources else []
+
+    sup_msg_id = f"msg-sup-{uuid.uuid4().hex[:8]}"
+    db.add(WorkspaceChatMessage(
+        id=sup_msg_id,
+        engagement_id=engagement_id,
+        sender="SUPERVISOR",
+        text=response.answer,
+        intent=response.intent_detected,
+        delegated_agent=agent_meta,
+        capabilities_used=response.capabilities_used,
+        sources=sources_list,
+        suggested_followups=response.suggested_followups,
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
     return {
         "success": True,
         "data": response.model_dump(),
-        "message": "Supervisor universal query processed successfully."
+        "message": "Supervisor universal query processed and saved to database successfully."
     }
 
 
@@ -292,6 +444,43 @@ def investigate_support_incident(
         actor_type="SUPPORT_AGENT",
         actor_id="agent_support",
         metadata_json=timeline_meta,
+        created_at=datetime.utcnow()
+    ))
+
+    # Persist User Screenshot Diagnostic Request
+    user_query_text = payload.issue_description or "Analyze attached screenshot for production incident diagnostic."
+    user_msg_id = f"msg-usr-{uuid.uuid4().hex[:8]}"
+    db.add(WorkspaceChatMessage(
+        id=user_msg_id,
+        engagement_id=engagement_id,
+        sender="USER",
+        text=user_query_text,
+        screenshot_preview=payload.screenshot_base64[:200] if payload.screenshot_base64 else None,
+        created_at=datetime.utcnow()
+    ))
+
+    # Persist SUPPORT Agent Diagnostic Response
+    sup_msg_id = f"msg-sup-{uuid.uuid4().hex[:8]}"
+    db.add(WorkspaceChatMessage(
+        id=sup_msg_id,
+        engagement_id=engagement_id,
+        sender="SUPERVISOR",
+        text=f"Diagnosed {result.severity} incident ({result.incident_id}): {result.summary}",
+        intent="SUPPORT",
+        delegated_agent={
+            "id": "SUPPORT",
+            "name": "SUPPORT Agent",
+            "role": "Production Support & Visual Diagnostics",
+            "badge_label": "Incident & Diagnostic Specialist",
+            "color": "emerald"
+        },
+        capabilities_used=["SUPPORT"],
+        support_result=result.model_dump(),
+        suggested_followups=[
+            "Explain root cause hypothesis",
+            "Show recommended triage steps",
+            "Draft customer incident update"
+        ],
         created_at=datetime.utcnow()
     ))
     db.commit()

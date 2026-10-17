@@ -16,11 +16,15 @@ import {
   AlertTriangle,
   CheckCircle2,
   Lock,
-  Radio
+  Radio,
+  Trash2
 } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
 import { getNowISTTime } from "@/utils/date";
 import { API_BASE } from "@/utils/api";
+
+// Fast in-memory cache keyed by workspace (engagementId) to ensure zero-latency switching
+const workspaceChatMemoryCache: Record<string, ChatMessage[]> = {};
 
 interface DelegatedAgent {
   id: string;
@@ -160,8 +164,19 @@ const AGENT_META: Record<string, {
   }
 };
 
-function renderFormattedInline(str: string) {
-  const segments = str.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+function renderInlineTokens(str: string) {
+  // Gracefully balance unclosed bold or italic tags (e.g. truncated "**Ticket")
+  let sanitized = str;
+  const boldCount = (sanitized.match(/\*\*/g) || []).length;
+  if (boldCount % 2 !== 0) {
+    sanitized += "**";
+  }
+  const italicCount = (sanitized.match(/(?<!\*)\*(?!\*)/g) || []).length;
+  if (italicCount % 2 !== 0) {
+    sanitized += "*";
+  }
+
+  const segments = sanitized.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
   return segments.map((seg, i) => {
     if (seg.startsWith("**") && seg.endsWith("**")) {
       return <strong key={i} className="font-semibold text-slate-900">{seg.slice(2, -2)}</strong>;
@@ -173,6 +188,37 @@ function renderFormattedInline(str: string) {
       return <code key={i} className="px-1 py-0.5 bg-slate-100 text-slate-800 font-mono text-[11px] rounded border border-slate-200">{seg.slice(1, -1)}</code>;
     }
     return seg;
+  });
+}
+
+function renderFormattedInline(str: string) {
+  // Split on HTML break tags (<br>, <br/>, <br />) or literal newlines
+  const parts = str.split(/<br\s*\/?>/gi);
+  return parts.map((part, pIdx) => {
+    const trimmed = part.trim();
+    if (!trimmed) return null;
+    const isBullet = trimmed.startsWith("• ") || trimmed.startsWith("- ") || trimmed.startsWith("* ");
+    const isNumbered = /^\d+[\.\)]\s/.test(trimmed);
+    const bulletContent = isBullet 
+      ? trimmed.replace(/^[•\-\*]\s*/, "") 
+      : isNumbered 
+      ? trimmed.replace(/^\d+[\.\)]\s*/, "")
+      : trimmed;
+
+    return (
+      <div 
+        key={pIdx} 
+        className={isBullet || isNumbered ? "flex items-start gap-1.5 my-1" : pIdx > 0 ? "mt-1.5" : ""}
+      >
+        {isBullet && <span className="text-slate-400 select-none shrink-0 leading-normal">•</span>}
+        {isNumbered && (
+          <span className="text-slate-500 font-medium select-none shrink-0 leading-normal text-[11px]">
+            {trimmed.match(/^\d+[\.\)]/)?.[0]}
+          </span>
+        )}
+        <span className="flex-1 leading-normal">{renderInlineTokens(bulletContent)}</span>
+      </div>
+    );
   });
 }
 
@@ -189,23 +235,24 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
 
   const flushTable = (key: number) => {
     if (tableRows.length === 0) return;
-    const rows = tableRows.map((r) =>
-      r
-        .split("|")
-        .map((c) => c.trim())
-        .filter((_, i, arr) => i > 0 && i < arr.length - 1)
-    );
+    const rows = tableRows.map((r) => {
+      const parts = r.split("|").map((c) => c.trim());
+      if (parts.length > 0 && parts[0] === "") parts.shift();
+      if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+      return parts;
+    });
+
     const filteredRows = rows.filter((r) => !r.every((c) => /^[-:\s]+$/.test(c)));
     if (filteredRows.length > 0) {
       const headerRow = filteredRows[0];
       const bodyRows = filteredRows.slice(1);
       elements.push(
-        <div key={`table-${key}`} className="my-2 overflow-x-auto rounded border border-slate-200 shadow-2xs">
-          <table className="min-w-full divide-y divide-slate-200 text-[11px]">
+        <div key={`table-${key}`} className="my-2.5 overflow-x-auto rounded-lg border border-slate-200 shadow-2xs">
+          <table className="min-w-full divide-y divide-slate-200 text-xs">
             <thead className="bg-slate-50 font-semibold text-slate-700">
               <tr>
                 {headerRow.map((col, cIdx) => (
-                  <th key={cIdx} className="px-2.5 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider">
+                  <th key={cIdx} className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-slate-600 bg-slate-50">
                     {renderFormattedInline(col)}
                   </th>
                 ))}
@@ -213,9 +260,16 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {bodyRows.map((bRow, rIdx) => (
-                <tr key={rIdx} className="hover:bg-slate-50/50">
+                <tr key={rIdx} className="hover:bg-slate-50/60 transition-colors">
                   {bRow.map((cell, cIdx) => (
-                    <td key={cIdx} className="px-2.5 py-1.5 text-slate-800">
+                    <td 
+                      key={cIdx} 
+                      className={`px-3 py-2 text-slate-800 align-top ${
+                        cIdx === 0 && bRow.length > 1 
+                          ? "font-semibold text-slate-900 whitespace-nowrap bg-slate-50/40 w-32" 
+                          : ""
+                      }`}
+                    >
                       {renderFormattedInline(cell)}
                     </td>
                   ))}
@@ -231,8 +285,14 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      tableRows.push(trimmed);
+    // Accept table rows even if trailing pipe is omitted or line has multiple cells
+    const isTableRow = trimmed.startsWith("|") && (trimmed.endsWith("|") || (trimmed.match(/\|/g) || []).length >= 2);
+    if (isTableRow) {
+      let normalized = trimmed;
+      if (!normalized.endsWith("|")) {
+        normalized += " |";
+      }
+      tableRows.push(normalized);
       return;
     }
     if (tableRows.length > 0) {
@@ -244,10 +304,11 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
       return;
     }
 
-    if (trimmed.startsWith("### ")) {
+    if (trimmed.startsWith("# ") || trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
+      const headingText = trimmed.replace(/^#+\s*/, "");
       elements.push(
         <h4 key={idx} className="font-display font-bold text-xs text-slate-900 mt-2.5 pt-1 pb-0.5 border-b border-slate-200">
-          {trimmed.replace(/^###\s*/, "")}
+          {headingText}
         </h4>
       );
       return;
@@ -282,9 +343,9 @@ function FormattedMessageBody({ rawText }: { rawText: string }) {
     }
 
     elements.push(
-      <p key={idx}>
+      <div key={idx} className="leading-relaxed">
         {renderFormattedInline(trimmed)}
-      </p>
+      </div>
     );
   });
 
@@ -325,30 +386,89 @@ export default function AskCalmWorkChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const msgSeqRef = useRef<number>(1);
+  const defaultWelcomeMessage: ChatMessage = {
+    id: `msg-welcome-${targetEngagementId}`,
+    sender: "SUPERVISOR",
+    text: `Hello! I am the CalmWork Supervisor for ${targetCustomerName}. Ask about project status, scope changes, blockers, or attach error logs and screenshots for quick diagnosis.`,
+    intent: "MULTI_AGENT",
+    delegatedAgent: {
+      id: "MULTI_AGENT",
+      name: "CalmWork Supervisor",
+      role: "Multi-Agent Orchestration",
+      badge_label: "Universal Orchestrator",
+      color: "slate"
+    },
+    capabilitiesUsed: ["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
+    suggestedFollowups: [
+      "What changed today in scope & work plan?",
+      "What should I do next? (Next action)",
+      "What is the technical architecture & specs?",
+      "Draft an executive customer update."
+    ],
+    timestamp: getNowISTTime(true)
+  };
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    {
-      id: `msg-welcome-${targetEngagementId}`,
-      sender: "SUPERVISOR",
-      text: `Hello! I am the CalmWork Supervisor for ${targetCustomerName}. Ask about project status, scope changes, blockers, or attach error logs and screenshots for quick diagnosis.`,
-      intent: "MULTI_AGENT",
-      delegatedAgent: {
-        id: "MULTI_AGENT",
-        name: "CalmWork Supervisor",
-        role: "Multi-Agent Orchestration",
-        badge_label: "Universal Orchestrator",
-        color: "slate"
-      },
-      capabilitiesUsed: ["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
-      suggestedFollowups: [
-        "What changed today?",
-        "Why is production blocked?",
-        "What should I do next?",
-        "Prepare a customer update."
-      ],
-      timestamp: getNowISTTime(true)
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    return workspaceChatMemoryCache[targetEngagementId] || [defaultWelcomeMessage];
+  });
+
+  const [fetchingHistory, setFetchingHistory] = useState(false);
+
+  // Sync / Rehydrate chat history from in-memory cache and PostgreSQL database on workspace switch
+  useEffect(() => {
+    // 1. Instant recall from memory cache (0ms perceived lag)
+    if (workspaceChatMemoryCache[targetEngagementId] && workspaceChatMemoryCache[targetEngagementId].length > 0) {
+      setMessages(workspaceChatMemoryCache[targetEngagementId]);
+    } else {
+      setMessages([defaultWelcomeMessage]);
     }
-  ]);
+
+    // 2. Background rehydration from PostgreSQL database
+    let isCancelled = false;
+    setFetchingHistory(!workspaceChatMemoryCache[targetEngagementId]);
+
+    fetch(`${API_BASE}/engagements/${targetEngagementId}/supervisor/messages`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isCancelled && data.success && Array.isArray(data.data) && data.data.length > 0) {
+          workspaceChatMemoryCache[targetEngagementId] = data.data;
+          setMessages(data.data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch persisted workspace chat history:", err);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setFetchingHistory(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [targetEngagementId, targetCustomerName]);
+
+  const appendMessage = (newMsg: ChatMessage) => {
+    setMessages((prev) => {
+      const updated = [...prev, newMsg];
+      workspaceChatMemoryCache[targetEngagementId] = updated;
+      return updated;
+    });
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirm(`Clear conversation history for workspace "${targetCustomerName}"?`)) return;
+    try {
+      await fetch(`${API_BASE}/engagements/${targetEngagementId}/supervisor/messages`, {
+        method: "DELETE"
+      });
+      delete workspaceChatMemoryCache[targetEngagementId];
+      setMessages([defaultWelcomeMessage]);
+    } catch (err) {
+      console.error("Failed to clear workspace chat history:", err);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -443,7 +563,7 @@ export default function AskCalmWorkChat({
       timestamp: getNowISTTime(true)
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    appendMessage(userMsg);
     setQuery("");
     setAttachedScreenshot(null);
     setAttachmentError(null);
@@ -497,7 +617,7 @@ export default function AskCalmWorkChat({
             ],
             timestamp: getNowISTTime(true)
           };
-          setMessages((prev) => [...prev, supMsg]);
+          appendMessage(supMsg);
         } else {
           throw new Error(data.detail || data.message || "Failed to investigate screenshot");
         }
@@ -537,7 +657,7 @@ export default function AskCalmWorkChat({
             suggestedFollowups: data.data.suggested_followups,
             timestamp: getNowISTTime(true)
           };
-          setMessages((prev) => [...prev, supMsg]);
+          appendMessage(supMsg);
         }
       }
     } catch (err: unknown) {
@@ -549,7 +669,7 @@ export default function AskCalmWorkChat({
         intent: "MULTI_AGENT",
         timestamp: getNowISTTime(true)
       };
-      setMessages((prev) => [...prev, errMsg]);
+      appendMessage(errMsg);
     } finally {
       setLoading(false);
     }
@@ -593,6 +713,16 @@ export default function AskCalmWorkChat({
             <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">DELIVER</span>
             <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">SUPPORT</span>
           </div>
+
+          <button
+            type="button"
+            onClick={handleClearHistory}
+            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+            title="Clear workspace conversation history"
+            aria-label="Clear chat history"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
 
           {isDrawer && onClose && (
             <button

@@ -339,16 +339,21 @@ class SupervisorCoordinator:
         intent = None
         if groq_service.is_configured() or is_live_inference_enabled():
             classification_prompt = (
-                f"You are the intent router for CalmWork AI multi-agent platform.\n"
-                f"Classify the user message into EXACTLY ONE category:\n"
-                f"- PLAN: Questions about delivery plans, milestones, tasks, scope changes, requirement drift, what changed today/recently, contract drift, definition of done (DoD), outcome goals, roadmaps, re-planning, or delivery phasing.\n"
-                f"- MOVE: Questions about immediate next actions, what to do next, priorities, blockers, unblocking pipelines/production, stalled items, overdue tasks, daily focus, or why progress is blocked.\n"
-                f"- DELIVER: Requests to prepare or draft a customer update, stakeholder communication, client email, progress report, status memo, release notes, or formal milestone sign-off.\n"
-                f"- KNOW: Questions about technical architecture, system specs, database schemas, cutover windows, rollback procedures, runbooks, security policies, documentation, transcripts, or how systems work.\n"
-                f"- SUPPORT: Questions about production incidents, system outages, errors, bugs, crashes, screenshot diagnostics, stack traces, or troubleshooting.\n"
-                f"- MULTI_AGENT: Inquiries spanning multiple areas (e.g. 360 overview, operational briefing, or general project status summary).\n\n"
+                f"You are the CalmWork Supervisor Router. Your sole job is to classify the user's primary intended outcome into exactly one agent.\n\n"
+                f"CRITICAL DIRECTIVE (ANTI-GRAVITY PRINCIPLE):\n"
+                f"Do NOT match on literal words. Ignore vocabulary surface triggers:\n"
+                f"- The word 'plan' does NOT automatically mean PLAN (e.g., 'What is our plan to fix this blocker?' -> MOVE).\n"
+                f"- The word 'blocked' does NOT automatically mean MOVE (e.g., 'Does the SOP say blocked ports fail the audit?' -> KNOW).\n"
+                f"- Technical terms ('schema', 'cert', 'db') do NOT automatically mean KNOW if asking what action to take next.\n\n"
+                f"Evaluate solely by the CORE HUMAN DESIRE:\n"
+                f"1. MOVE: 'Tell me what action to take right now, who needs to unblock what, or what to prioritize.'\n"
+                f"2. PLAN: 'Reshape, create, or modify the structure of our project roadmap and task lists.'\n"
+                f"3. KNOW: 'Retrieve a factual, technical, or historical answer from documents, runbooks, or past notes.'\n"
+                f"4. DELIVER: 'Draft or format a communication to be sent outside to stakeholders or executives.'\n"
+                f"5. SUPPORT: Production incident diagnosis, bug triage, stack traces, crash logs, or screenshot diagnostics.\n"
+                f"6. MULTI_AGENT: 'Give me a high-level 360-degree executive snapshot of where everything stands.'\n\n"
                 f"User Message: \"{sanitized_query}\"\n\n"
-                f"Return ONLY the single word category name: PLAN, MOVE, DELIVER, KNOW, SUPPORT, or MULTI_AGENT."
+                f"Return ONLY the single word category name: MOVE, PLAN, KNOW, DELIVER, SUPPORT, or MULTI_AGENT."
             )
             try:
                 raw_cat = groq_service.generate_chat_completion(
@@ -456,13 +461,13 @@ class SupervisorCoordinator:
                     f"Active Work Plan Tasks (Target Due Dates in IST):\n{tasks_formatted}\n\n"
                     f"Recent Timeline Events & Worknotes (All in IST):\n{timeline_formatted}\n\n"
                     f"User Query: \"{sanitized_query}\"\n\n"
-                    f"Provide a concise, direct, professional response answering the user's question with full context of delivery milestones, recent timeline events, worknotes, and whether current work remains strictly within approved scope. Ensure any dates or times mentioned are strictly in IST 24h format."
+                    f"Provide a concise, direct, professional response answering the user's question with full context of delivery milestones, recent timeline events, worknotes, and whether current work remains strictly within approved scope. Ensure any dates or times mentioned are strictly in IST 24h format. Format with clean Markdown (do not use raw HTML like <br> tags)."
                 )
                 try:
                     llm_response = groq_service.generate_chat_completion(
                         prompt=plan_prompt,
-                        system_instruction="You are the CalmWork PLAN Agent. Respond concisely and professionally. Keep all timestamps strictly in IST 24-hour clock notation.",
-                        max_tokens=600
+                        system_instruction="You are the CalmWork PLAN Agent. Respond concisely and professionally using clean Markdown. Avoid raw HTML tags. Keep all timestamps strictly in IST 24-hour clock notation.",
+                        max_tokens=1000
                     )
                 except Exception as e:
                     logger.debug(f"PLAN LLM call fallback: {e}")
@@ -538,8 +543,8 @@ class SupervisorCoordinator:
                 try:
                     llm_response = groq_service.generate_chat_completion(
                         prompt=move_prompt,
-                        system_instruction="You are the CalmWork MOVE Agent. Provide high-clarity operational guidance. Keep all timestamps and deadlines strictly in IST 24-hour clock notation.",
-                        max_tokens=600
+                        system_instruction="You are the CalmWork MOVE Agent. Provide high-clarity operational guidance. Format using clean Markdown without raw HTML tags like <br>. Finish all sentences and tables cleanly. Keep all timestamps and deadlines strictly in IST 24-hour clock notation.",
+                        max_tokens=1200
                     )
                 except Exception as e:
                     logger.debug(f"MOVE LLM call fallback: {e}")
@@ -597,13 +602,13 @@ class SupervisorCoordinator:
                     f"2. Key Milestones Achieved (with dates in IST 24h notation)\n"
                     f"3. Next Milestones & Commitments (with target deadlines in IST 24h notation)\n"
                     f"4. Customer Action Items (if any)\n"
-                    f"Note: Remind the user that manager approval is required before external distribution."
+                    f"Note: Remind the user that manager approval is required before external distribution. Format cleanly in Markdown without raw HTML tags like <br>."
                 )
                 try:
                     llm_response = groq_service.generate_chat_completion(
                         prompt=deliver_prompt,
-                        system_instruction="You are the CalmWork DELIVER Agent. Write clear, executive-grade customer communications. Keep all dates and times strictly in IST 24-hour clock notation.",
-                        max_tokens=700
+                        system_instruction="You are the CalmWork DELIVER Agent. Write clear, executive-grade customer communications in clean Markdown without raw HTML tags. Keep all dates and times strictly in IST 24-hour clock notation.",
+                        max_tokens=1200
                     )
                 except Exception as e:
                     logger.debug(f"DELIVER LLM call fallback: {e}")

@@ -4,6 +4,7 @@ from app.models.timeline import TimelineEvent
 from app.models.approval import Approval, ApprovalType, ApprovalStatus
 from app.models.document import DocumentModel, DocumentCategory, DocumentStatus
 from app.models.user import UserModel, UserRole
+from app.models.chat_message import WorkspaceChatMessage
 
 __all__ = [
     "Base",
@@ -20,5 +21,6 @@ __all__ = [
     "DocumentCategory",
     "DocumentStatus",
     "UserModel",
-    "UserRole"
+    "UserRole",
+    "WorkspaceChatMessage"
 ]
