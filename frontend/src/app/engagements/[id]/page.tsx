@@ -10,6 +10,7 @@ import WorkPlanSection from "@/components/engagement/WorkPlanSection";
 import TimelinePanel from "@/components/timeline/TimelinePanel";
 import { useEngagement } from "@/context/EngagementContext";
 import { useParams, useSearchParams } from "next/navigation";
+import { Sun } from "lucide-react";
 
 function EngagementDetailContent() {
   const routeParams = useParams();
@@ -25,7 +26,10 @@ function EngagementDetailContent() {
     approvedAcme,
     fetchEngagementDetail,
     activeTab,
-    setActiveTab
+    setActiveTab,
+    runMorningBrief,
+    briefLoading,
+    lastRefreshed
   } = useEngagement();
 
   // Sync route parameter and query tab with active engagement context
@@ -74,12 +78,12 @@ function EngagementDetailContent() {
                   {activeCustomer.engagementName}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate" title={currentOutcomeStatement}>
-                Delivery Workspace · {activeEngagementData?.engagement?.current_work_cycle || "Step 4: Build & Integrate"} · {currentOutcomeStatement}
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                {activeEngagementData?.engagement?.current_work_cycle || "Step 1: Understand the Business Reality"}
               </p>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
               <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border ${
                 isHealthy
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -88,9 +92,24 @@ function EngagementDetailContent() {
                 <span className={`h-1.5 w-1.5 rounded-full ${isHealthy ? "bg-emerald-500" : "bg-amber-500"}`} />
                 <span>{isHealthy ? "Healthy" : "Needs Review"}</span>
               </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-mono">
-                Goals v{currentOutcomeVersion}
-              </span>
+
+              <div className="flex flex-col items-end gap-0.5">
+                <button
+                  type="button"
+                  onClick={runMorningBrief}
+                  disabled={briefLoading}
+                  title="Run Morning Brief Skill across PLAN, KNOW, and MOVE agents"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                >
+                  <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
+                  <span>{briefLoading ? "Running Agents..." : "Morning Brief"}</span>
+                </button>
+                {lastRefreshed && (
+                  <span className="text-[10px] font-mono text-slate-500">
+                    Last updated: {lastRefreshed}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

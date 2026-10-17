@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 
 from app.db.database import get_db
-from app.models import Engagement, Outcome, Approval, TimelineEvent, WorkspaceChatMessage
+from app.models import Engagement, Outcome, Approval, ApprovalType, ApprovalStatus, TimelineEvent, WorkspaceChatMessage
 from app.api.deps import supervisor_coordinator, support_agent, storage_service
 from app.api.schemas import UniversalSupervisorQueryPayload, SupportInvestigationRequest
 from app.auth import get_current_user
@@ -244,6 +244,29 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
         customer_update=cu_payload,
         created_at=datetime.utcnow()
     ))
+
+    # If DELIVER agent generated a customer update draft in chat, sync to pending approval
+    if cu_payload:
+        existing_appr = db.query(Approval).filter(
+            Approval.engagement_id == engagement_id,
+            Approval.type == ApprovalType.CUSTOMER_UPDATE,
+            Approval.status == ApprovalStatus.PENDING
+        ).first()
+        if existing_appr:
+            existing_appr.decision_note = json.dumps(cu_payload)
+        else:
+            new_appr = Approval(
+                id=f"appr-cu-{uuid.uuid4().hex[:8]}",
+                engagement_id=engagement_id,
+                type=ApprovalType.CUSTOMER_UPDATE,
+                target_id=engagement_id,
+                status=ApprovalStatus.PENDING,
+                requested_by="FDE (DELIVER Agent)",
+                decision_note=json.dumps(cu_payload),
+                created_at=datetime.utcnow()
+            )
+            db.add(new_appr)
+
     db.commit()
 
     return {

@@ -18,7 +18,7 @@ import {
   Lock,
   Radio,
   Trash2,
-  Download,
+  Printer,
   FileText,
   Check,
   Clock,
@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
 import { useAuth } from "@/context/AuthContext";
-import { downloadCustomerUpdatePdf } from "@/utils/pdfGenerator";
+import { printCustomerUpdateDocument } from "@/utils/pdfGenerator";
 import { getNowISTTime } from "@/utils/date";
 import { API_BASE } from "@/utils/api";
 
@@ -535,8 +535,8 @@ export default function AskCalmWorkChat({
     }
   };
 
-  const handleDownloadPdfInChat = (draft: CustomerUpdateDraft) => {
-    downloadCustomerUpdatePdf({
+  const handlePrintCustomerUpdateInChat = (draft: CustomerUpdateDraft) => {
+    printCustomerUpdateDocument({
       customerName: draft.customer_name || targetCustomerName,
       engagementName: targetCustomerName,
       subject: draft.subject,
@@ -1236,24 +1236,33 @@ export default function AskCalmWorkChat({
                                 </span>
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() => handleApproveCustomerUpdateInChat(m.customerUpdate!.engagement_id)}
-                                disabled={actionLoadingId === m.customerUpdate.engagement_id}
-                                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
-                                title="Authorize and approve release for client distribution"
-                              >
-                                {actionLoadingId === m.customerUpdate.engagement_id ? (
-                                  <Sparkles className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                )}
-                                <span>
-                                  {actionLoadingId === m.customerUpdate.engagement_id
-                                    ? "Approving..."
-                                    : "Approve Customer Update"}
+                              {isManager && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveCustomerUpdateInChat(m.customerUpdate!.engagement_id)}
+                                  disabled={actionLoadingId === m.customerUpdate.engagement_id}
+                                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                                  title="Authorize and approve release for client distribution"
+                                >
+                                  {actionLoadingId === m.customerUpdate.engagement_id ? (
+                                    <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                  )}
+                                  <span>
+                                    {actionLoadingId === m.customerUpdate.engagement_id
+                                      ? "Approving..."
+                                      : "Approve Customer Update"}
+                                  </span>
+                                </button>
+                              )}
+
+                              {!isManager && submittedUpdates[m.customerUpdate.engagement_id] && (
+                                <span className="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded font-medium flex items-center gap-1">
+                                  <Clock className="h-3 w-3 text-blue-600" />
+                                  <span>Pending Manager Approval</span>
                                 </span>
-                              </button>
+                              )}
                             </div>
                           ) : (
                             <span className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded font-semibold flex items-center gap-1.5">
@@ -1262,20 +1271,20 @@ export default function AskCalmWorkChat({
                             </span>
                           )}
 
-                          {/* Download PDF button — Available to Both Roles Once Approved */}
+                          {/* Print / Preview button — Available to Both Roles Once Approved */}
                           <button
                             type="button"
-                            onClick={() => handleDownloadPdfInChat(m.customerUpdate!)}
+                            onClick={() => handlePrintCustomerUpdateInChat(m.customerUpdate!)}
                             disabled={!approvedUpdates[m.customerUpdate.engagement_id]}
                             className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs ${
                               approvedUpdates[m.customerUpdate.engagement_id]
                                 ? "bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 cursor-pointer"
                                 : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
                             }`}
-                            title={approvedUpdates[m.customerUpdate.engagement_id] ? "Download Executive PDF" : "Available after Engineering Manager approval"}
+                            title={approvedUpdates[m.customerUpdate.engagement_id] ? "Print / Preview Executive Report" : "Available after Engineering Manager approval"}
                           >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>Download PDF</span>
+                            <Printer className="h-3.5 w-3.5 text-slate-500" />
+                            <span>Print / Preview</span>
                           </button>
                         </div>
 

@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 import uuid
 import logging
 from datetime import datetime
+import json
 
 from app.db.database import get_db
 from app.models import (
@@ -173,7 +174,9 @@ def generate_customer_update(
         Approval.type == ApprovalType.CUSTOMER_UPDATE,
         Approval.status == ApprovalStatus.PENDING
     ).first()
-    if not existing_appr:
+    if existing_appr:
+        existing_appr.decision_note = json.dumps(draft.model_dump())
+    else:
         new_appr = Approval(
             id=f"appr-cu-{uuid.uuid4().hex[:8]}",
             engagement_id=engagement_id,
@@ -181,10 +184,11 @@ def generate_customer_update(
             target_id=engagement_id,
             status=ApprovalStatus.PENDING,
             requested_by=f"{user_role} ({actor_name})",
+            decision_note=json.dumps(draft.model_dump()),
             created_at=datetime.utcnow()
         )
         db.add(new_appr)
-        db.commit()
+    db.commit()
 
     return {
         "success": True,
@@ -217,7 +221,19 @@ def submit_customer_update(
     for o in old_approved:
         o.status = ApprovalStatus.SUPERSEDED
 
-    # Ensure a pending approval exists for this engagement
+    # Ensure a pending approval exists for this engagement with the submitted draft payload
+    draft_dict = {
+        "engagement_id": engagement_id,
+        "subject": payload.subject,
+        "executive_summary": payload.executive_summary,
+        "key_milestones_achieved": payload.key_milestones_achieved,
+        "next_milestone_target": payload.next_milestone_target,
+        "customer_action_items": payload.customer_action_items,
+        "format_type": payload.format_type,
+        "privacy_scrubbed": payload.privacy_scrubbed,
+        "status": "PENDING_MANAGER_APPROVAL"
+    }
+
     existing_pending = db.query(Approval).filter(
         Approval.engagement_id == engagement_id,
         Approval.type == ApprovalType.CUSTOMER_UPDATE,
@@ -226,6 +242,7 @@ def submit_customer_update(
 
     if existing_pending:
         existing_pending.requested_by = f"{user_role} ({actor_name})"
+        existing_pending.decision_note = json.dumps(draft_dict)
         existing_pending.created_at = datetime.utcnow()
         approval_id = existing_pending.id
     else:
@@ -237,6 +254,7 @@ def submit_customer_update(
             target_id=engagement_id,
             status=ApprovalStatus.PENDING,
             requested_by=f"{user_role} ({actor_name})",
+            decision_note=json.dumps(draft_dict),
             created_at=datetime.utcnow()
         )
         db.add(new_appr)
@@ -297,7 +315,17 @@ def approve_customer_update(
     for appr in pending_apprs:
         appr.status = ApprovalStatus.APPROVED
         appr.reviewed_by = manager_name
-        appr.decision_note = decision_note
+        if appr.decision_note:
+            try:
+                d = json.loads(appr.decision_note)
+                if isinstance(d, dict) and "subject" in d:
+                    d["status"] = "APPROVED"
+                    d["approved_by"] = manager_name
+                    appr.decision_note = json.dumps(d)
+            except Exception:
+                appr.decision_note = decision_note
+        else:
+            appr.decision_note = decision_note
         appr.reviewed_at = datetime.utcnow()
 
     if not pending_apprs:
@@ -337,6 +365,40 @@ def approve_customer_update(
             "approved_at": datetime.utcnow().isoformat()
         },
         "message": "Executive customer update approved successfully. Download and release authorized for FDE and Manager."
+    }
+
+
+@router.get("/engagements/{engagement_id}/customer-updates/draft", tags=["Delivery"])
+def get_customer_update_draft(
+    engagement_id: str,
+    db: Session = Depends(get_db)
+):
+    """Retrieve the latest saved or approved customer update draft for this workspace."""
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    latest_appr = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE
+    ).order_by(Approval.created_at.desc()).first()
+
+    if latest_appr and latest_appr.decision_note:
+        try:
+            parsed = json.loads(latest_appr.decision_note)
+            if isinstance(parsed, dict) and "subject" in parsed:
+                return {
+                    "success": True,
+                    "data": parsed,
+                    "message": "Latest customer update draft retrieved."
+                }
+        except Exception:
+            pass
+
+    return {
+        "success": False,
+        "data": None,
+        "message": "No customer update draft found for this workspace."
     }
 
 

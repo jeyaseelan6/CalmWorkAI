@@ -612,6 +612,26 @@ class SupervisorCoordinator:
                     approval_required=True
                 )
 
+            if not customer_update_draft.executive_summary:
+                customer_update_draft.executive_summary = (
+                    f"Engineering progress update for {customer_name}. Core delivery objectives for {current_work_cycle} are on track."
+                )
+            if not customer_update_draft.key_milestones_achieved:
+                customer_update_draft.key_milestones_achieved = (
+                    [c.get("title", "") for c in crit_items if c.get("completed")]
+                    or ["Baseline discovery and core architectural setup underway"]
+                )
+            if not customer_update_draft.next_milestone_target:
+                customer_update_draft.next_milestone_target = (
+                    [c.get("title", "") for c in crit_items if not c.get("completed")][0]
+                    if any(not c.get("completed") for c in crit_items)
+                    else "Upcoming milestone deliverables"
+                )
+            if not customer_update_draft.customer_action_items:
+                customer_update_draft.customer_action_items = [
+                    "Review progress update and confirm milestone alignment with engineering team."
+                ]
+
             parts = [
                 f"### {customer_update_draft.subject}\n",
                 f"**Executive Summary**:\n{customer_update_draft.executive_summary}\n",
@@ -624,7 +644,7 @@ class SupervisorCoordinator:
                 parts.append("\n**Customer Action Items**:")
                 for a in customer_update_draft.customer_action_items:
                     parts.append(f"- {a}")
-            parts.append("\n*Note: Customer updates can be modified and submitted for Manager approval. Once approved, the report can be downloaded by either the Manager or FDE.*")
+            parts.append("\n*Note: Customer updates can be modified and submitted for Manager approval. Once approved, the report can be previewed or printed by either the Manager or FDE.*")
             answer = "\n".join(parts)
 
         elif intent == "KNOW":

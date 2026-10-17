@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { downloadCustomerUpdatePdf, printCustomerUpdateDocument } from "@/utils/pdfGenerator";
+import { printCustomerUpdateDocument } from "@/utils/pdfGenerator";
 import {
   FileCheck,
   Sparkles,
@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Mail,
   AlertTriangle,
-  Download,
   Printer,
   UserCheck,
   Send,
@@ -97,13 +96,45 @@ export default function CustomerUpdatePanel({
       });
   }, [engagementId, token]);
 
+  // Fetch existing draft if present in backend
+  const loadExistingDraft = useCallback(() => {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/draft`, { headers })
+      .then((res) => {
+        if (!res.ok) throw new Error("Draft fetch failed");
+        return res.json();
+      })
+      .then((json) => {
+        if (json.success && json.data) {
+          setDraft((prev) => {
+            if (isEditingDraft || wasEdited) {
+              return prev;
+            }
+            return {
+              ...json.data,
+              customer_name: json.data.customer_name || customerName
+            };
+          });
+        }
+      })
+      .catch(() => {
+        // No existing draft or offline
+      });
+  }, [engagementId, customerName, token, isEditingDraft, wasEdited]);
+
   useEffect(() => {
     checkApprovalStatus();
+    loadExistingDraft();
 
     // Listen to local event
     const handleSync = (e: any) => {
       if (!e?.detail?.engagementId || e.detail.engagementId === engagementId) {
         checkApprovalStatus();
+        loadExistingDraft();
       }
     };
     if (typeof window !== "undefined") {
@@ -117,6 +148,7 @@ export default function CustomerUpdatePanel({
       channel.onmessage = (event) => {
         if (!event?.data?.engagementId || event.data.engagementId === engagementId) {
           checkApprovalStatus();
+          loadExistingDraft();
         }
       };
     }
@@ -129,7 +161,7 @@ export default function CustomerUpdatePanel({
         channel.close();
       }
     };
-  }, [checkApprovalStatus, engagementId]);
+  }, [checkApprovalStatus, loadExistingDraft, engagementId]);
 
   const handleGenerateUpdate = async () => {
     setLoading(true);
@@ -358,46 +390,6 @@ export default function CustomerUpdatePanel({
     setSuccessMsg(null);
   };
 
-  const handleDownloadPdf = async () => {
-    if (!draft) return;
-    setError(null);
-
-    // Verify backend authorization
-    try {
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE}/engagements/${engagementId}/customer-updates/pdf-status`, { headers });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        setError(errJson.detail || "Manager approval required before PDF download is enabled.");
-        setApproved(false);
-        return;
-      }
-      const json = await res.json();
-      if (!json.success || !json.data?.pdf_authorized) {
-        setError("Manager approval required: Server reports PDF release is not yet authorized.");
-        setApproved(false);
-        return;
-      }
-    } catch {
-      setError("Unable to verify authorization with backend server.");
-      return;
-    }
-
-    downloadCustomerUpdatePdf({
-      customerName,
-      engagementName,
-      subject: draft.subject,
-      executiveSummary: draft.executive_summary,
-      keyMilestonesAchieved: draft.key_milestones_achieved,
-      nextMilestoneTarget: draft.next_milestone_target,
-      customerActionItems: draft.customer_action_items,
-      status: "APPROVED",
-      isApproved: true,
-      privacyScrubbed: draft.privacy_scrubbed
-    });
-  };
-
   const handlePrintPdf = async () => {
     if (!draft) return;
     setError(null);
@@ -558,23 +550,10 @@ export default function CustomerUpdatePanel({
                     ? "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 cursor-pointer"
                     : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
                 }`}
-                title={approved ? "Print preview or save via browser PDF" : "Available after Engineering Manager approval"}
+                title={approved ? "Print preview or print via browser" : "Available after Engineering Manager approval"}
               >
                 <Printer className="h-3.5 w-3.5 text-slate-500" />
                 <span>Print / Preview</span>
-              </button>
-              <button
-                onClick={handleDownloadPdf}
-                disabled={!approved}
-                className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs ${
-                  approved
-                    ? "bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
-                    : "bg-slate-200 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
-                }`}
-                title={approved ? "Download authorized Executive Summary as PDF document" : "Available after Engineering Manager approval"}
-              >
-                <Download className="h-3.5 w-3.5 text-slate-200" />
-                <span>Download PDF</span>
               </button>
             </div>
           </div>
@@ -589,7 +568,7 @@ export default function CustomerUpdatePanel({
                   <span>Approved by {approvedBy || "David Miller (Engineering Manager)"}</span>
                 </div>
                 <p className="text-emerald-800 text-[11px] leading-relaxed">
-                  Report is approved and authorized for customer delivery. Both the <strong>Engineering Manager</strong> and <strong>Forward-Deployed Engineer (FDE)</strong> can download or print the PDF.
+                  Report is approved and authorized for customer delivery. Both the <strong>Engineering Manager</strong> and <strong>Forward-Deployed Engineer (FDE)</strong> can print or preview the report.
                 </p>
               </div>
             </div>
@@ -599,7 +578,7 @@ export default function CustomerUpdatePanel({
               <div className="space-y-0.5">
                 <div className="font-semibold text-blue-900">Submitted for Manager Approval</div>
                 <p className="text-blue-800 text-[11px] leading-relaxed">
-                  The executive customer update report is currently pending Manager sign-off. Once approved, PDF download and printing will be available to both Manager and FDE.
+                  The executive customer update report is currently pending Manager sign-off. Once approved, print and preview will be available to both Manager and FDE.
                 </p>
               </div>
             </div>
@@ -818,48 +797,43 @@ export default function CustomerUpdatePanel({
                   )}
                 </button>
 
-                <button
-                  onClick={handleManagerApprove}
-                  disabled={approvalLoading}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold px-3.5 py-2 rounded-md text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer disabled:opacity-50"
-                  title="Authorize release so Manager or FDE can download and deliver PDF to client"
-                >
-                  {approvalLoading ? (
-                    <Sparkles className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <FileCheck className="h-4 w-4" />
-                      <span>Manager Authorize &amp; Approve Release</span>
-                    </>
-                  )}
-                </button>
+                {isManager && (
+                  <button
+                    onClick={handleManagerApprove}
+                    disabled={approvalLoading}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold px-3.5 py-2 rounded-md text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer disabled:opacity-50"
+                    title="Authorize release so Manager or FDE can preview and print report"
+                  >
+                    {approvalLoading ? (
+                      <Sparkles className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <FileCheck className="h-4 w-4" />
+                        <span>Manager Authorize &amp; Approve Release</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {!isManager && isSubmitted && !wasEdited && (
+                  <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-md font-medium flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Pending Manager Approval</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex-1 min-w-[200px] bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-md text-xs flex items-center gap-2 font-semibold">
                 <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
-                <span>Approved by Manager! Authorized for Manager or FDE download.</span>
+                <span>Approved by Manager! Authorized for Manager or FDE preview &amp; print.</span>
               </div>
             )}
 
-            {/* 2. Download and Print Controls — Available to Both Roles Once Approved */}
-            <button
-              onClick={handleDownloadPdf}
-              disabled={!approved}
-              className={`font-semibold px-3.5 py-2 rounded-md text-xs transition border flex items-center gap-1.5 shadow-2xs ${
-                approved
-                  ? "bg-white hover:bg-slate-50 text-slate-800 border-slate-300 cursor-pointer"
-                  : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-              }`}
-              title={approved ? "Download Executive Summary as PDF document" : "Available after Engineering Manager approval"}
-            >
-              <Download className="h-4 w-4 text-slate-600" />
-              <span>Download PDF</span>
-            </button>
-
+            {/* 2. Print / Preview Controls — Available to Both Roles Once Approved */}
             <button
               onClick={handlePrintPdf}
               disabled={!approved}
-              className={`font-semibold px-3 py-2 rounded-md text-xs transition border flex items-center gap-1.5 shadow-2xs ${
+              className={`font-semibold px-3.5 py-2 rounded-md text-xs transition border flex items-center gap-1.5 shadow-2xs ${
                 approved
                   ? "bg-white hover:bg-slate-50 text-slate-700 border-slate-300 cursor-pointer"
                   : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
@@ -867,7 +841,7 @@ export default function CustomerUpdatePanel({
               title={approved ? "Print preview or print via browser" : "Available after Engineering Manager approval"}
             >
               <Printer className="h-3.5 w-3.5 text-slate-500" />
-              <span>Print</span>
+              <span>Print / Preview</span>
             </button>
 
             {/* 3. Reset / New Draft */}

@@ -27,6 +27,7 @@ export const DEFAULT_CUSTOMERS: CustomerEngagement[] = [
 ];
 
 import { API_BASE } from "@/utils/api";
+import { formatISTDateTime } from "@/utils/date";
 
 interface EngagementContextType {
   customers: CustomerEngagement[];
@@ -63,6 +64,14 @@ interface EngagementContextType {
   openSupervisorWithContext: (opts?: { tab?: string; selectedItem?: string; initialQuery?: string }) => void;
   supervisorInitialQuery: string | null;
   setSupervisorInitialQuery: (q: string | null) => void;
+  brief: any;
+  setBrief: React.Dispatch<React.SetStateAction<any>>;
+  briefLoading: boolean;
+  streamEvent: any;
+  lastRefreshed: string | null;
+  hasFreshEvidence: boolean;
+  setHasFreshEvidence: React.Dispatch<React.SetStateAction<boolean>>;
+  runMorningBrief: () => Promise<void>;
 }
 
 const EngagementContext = createContext<EngagementContextType | undefined>(undefined);
@@ -81,6 +90,11 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
   const [selectedItemContext, setSelectedItemContext] = useState<string | null>(null);
   const [isSupervisorDrawerOpen, setIsSupervisorDrawerOpen] = useState<boolean>(false);
   const [supervisorInitialQuery, setSupervisorInitialQuery] = useState<string | null>(null);
+  const [brief, setBrief] = useState<any>(null);
+  const [briefLoading, setBriefLoading] = useState<boolean>(false);
+  const [streamEvent, setStreamEvent] = useState<any>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+  const [hasFreshEvidence, setHasFreshEvidence] = useState<boolean>(false);
 
   const openSupervisorWithContext = (opts?: { tab?: string; selectedItem?: string; initialQuery?: string }) => {
     if (opts?.tab) setActiveTab(opts.tab);
@@ -415,6 +429,131 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  // Fetch latest pre-computed morning brief from database on customer change
+  useEffect(() => {
+    setBrief(null);
+    setLastRefreshed(null);
+    setStreamEvent(null);
+    setHasFreshEvidence(false);
+
+    if (activeCustomer?.id) {
+      const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/latest`, { headers })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.success && data?.has_brief && data?.data) {
+            setBrief(data.data);
+            const ts = data.generated_at || data.data.persisted_at || data.data.timestamp;
+            if (ts) {
+              setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
+            }
+          }
+        })
+        .catch((e) => {
+          console.debug("No previously generated morning brief found in database:", e);
+        });
+    }
+  }, [activeCustomer?.id]);
+
+  // Listen for state changes to flag fresh evidence
+  useEffect(() => {
+    const handleStateChange = (e: any) => {
+      if (e?.detail?.engagementId === activeCustomer?.id) {
+        setHasFreshEvidence(true);
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("calmwork-state-change", handleStateChange);
+      return () => window.removeEventListener("calmwork-state-change", handleStateChange);
+    }
+  }, [activeCustomer?.id]);
+
+  // Run sequential Morning Brief (PLAN -> KNOW -> MOVE)
+  const runMorningBrief = useCallback(async () => {
+    if (!activeCustomer?.id) return;
+    setBriefLoading(true);
+    setStreamEvent({
+      agent: "SUPERVISOR",
+      stage: "INIT",
+      message: "Starting sequential Morning Brief across PLAN, KNOW, and MOVE agents...",
+      step: 1,
+      total_steps: 5
+    });
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("calmwork_auth_token") : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/stream`, {
+        method: "POST",
+        headers
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error("Stream not available, using fallback");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(trimmed.slice(6));
+              if (event.type === "progress") {
+                setStreamEvent(event);
+              } else if (event.type === "complete" && event.data) {
+                setBrief(event.data);
+                const ts = event.generated_at || event.data.persisted_at || new Date().toISOString();
+                setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
+                setStreamEvent(null);
+                setHasFreshEvidence(false);
+                fetchEngagementDetail(activeCustomer.id);
+              }
+            } catch (e) {
+              console.warn("SSE parse error in brief stream:", e);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Streaming morning brief encountered error, using standard fallback:", err);
+      try {
+        const fallbackRes = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
+          method: "POST",
+          headers
+        });
+        const fallbackData = await fallbackRes.json();
+        if (fallbackData.success && fallbackData.data) {
+          setBrief(fallbackData.data);
+          const ts = fallbackData.generated_at || fallbackData.data.persisted_at || new Date().toISOString();
+          setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
+          setHasFreshEvidence(false);
+          fetchEngagementDetail(activeCustomer.id);
+        }
+      } catch (fallbackErr) {
+        console.error("Failed to generate Morning Brief:", fallbackErr);
+      }
+    } finally {
+      setBriefLoading(false);
+      setStreamEvent(null);
+    }
+  }, [activeCustomer?.id, fetchEngagementDetail]);
+
   return (
     <EngagementContext.Provider
       value={{
@@ -445,7 +584,15 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         setIsSupervisorDrawerOpen,
         openSupervisorWithContext,
         supervisorInitialQuery,
-        setSupervisorInitialQuery
+        setSupervisorInitialQuery,
+        brief,
+        setBrief,
+        briefLoading,
+        streamEvent,
+        lastRefreshed,
+        hasFreshEvidence,
+        setHasFreshEvidence,
+        runMorningBrief
       }}
     >
       {children}

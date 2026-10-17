@@ -43,6 +43,24 @@ function formatRoleName(role?: string): string {
   return clean.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 }
 
+function formatEvidenceItem(ev: string): string {
+  if (!ev) return "";
+  return ev
+    .replace("EngagementStatus.HEALTHY", "Healthy")
+    .replace("EngagementStatus.NEEDS_REASSESSMENT", "Needs Reassessment")
+    .replace("EngagementStatus.BLOCKED", "Blocked")
+    .replace("EngagementStatus.AT_RISK", "At Risk")
+    .replace("EngagementStatus.AWAITING_APPROVAL", "Awaiting Approval")
+    .replace("WorkCycleStep.STEP_1_UNDERSTAND_BUSINESS_REALITY", "Step 1: Understand the Business Reality")
+    .replace("WorkCycleStep.STEP_2_DEFINE_RIGHT_PROBLEM", "Step 2: Define the Right Problem")
+    .replace("WorkCycleStep.STEP_3_DESIGN_AI_APPROACH", "Step 3: Design the AI Approach")
+    .replace("WorkCycleStep.STEP_4_BUILD_WITHIN_CONSTRAINTS", "Step 4: Build Within Real Constraints")
+    .replace("WorkCycleStep.STEP_5_DEPLOY_INTO_PRODUCTION", "Step 5: Deploy Into Production")
+    .replace("WorkCycleStep.STEP_6_OWN_OUTCOMES_AND_IMPROVE", "Step 6: Own Outcomes and Improve")
+    .replace(/EngagementStatus\.(\w+)/g, "$1")
+    .replace(/WorkCycleStep\.(\w+)/g, "$1");
+}
+
 function computePresetDue(offsetDays: number, hour: number, minute: number = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -94,147 +112,22 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     backendError,
     loading: engagementLoading,
     approvedAcme,
-    fetchEngagementDetail
+    fetchEngagementDetail,
+    brief,
+    setBrief,
+    briefLoading,
+    streamEvent,
+    lastRefreshed,
+    hasFreshEvidence,
+    setHasFreshEvidence,
+    runMorningBrief
   } = useEngagement();
 
-  const [brief, setBrief] = useState<MorningBriefData | null>(null);
-  const [briefLoading, setBriefLoading] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<string>("");
   const [showEvidence, setShowEvidence] = useState(false);
-  const [streamEvent, setStreamEvent] = useState<{
-    agent?: string;
-    stage?: string;
-    message?: string;
-    step?: number;
-    total_steps?: number;
-  } | null>(null);
-  const [hasFreshEvidence, setHasFreshEvidence] = useState(false);
 
-  // Fetch latest pre-computed morning brief on customer change (e.g. from 8:00 AM IST scheduled run)
-  // Fetch latest persisted morning brief from database on customer change (ZERO LLM calls on page load)
   useEffect(() => {
-    setBrief(null);
-    setLastRefreshed("");
-    setStreamEvent(null);
     setLocalTasks([]);
-    setHasFreshEvidence(false);
-
-    if (activeCustomer?.id) {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/latest`, { headers })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.success && data?.has_brief && data?.data) {
-            setBrief(data.data);
-            const ts = data.generated_at || data.data.persisted_at || data.data.timestamp;
-            if (ts) {
-              setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
-            }
-          }
-        })
-        .catch((e) => {
-          console.debug("No previously generated morning brief found in database:", e);
-        });
-    }
-  }, [activeCustomer?.id, token]);
-
-  // Listen for state changes (worknotes, plan approvals, task changes) to signal fresh evidence
-  useEffect(() => {
-    const handleStateChange = (e: any) => {
-      if (e?.detail?.engagementId === activeCustomer?.id) {
-        setHasFreshEvidence(true);
-      }
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("calmwork-state-change", handleStateChange);
-      return () => window.removeEventListener("calmwork-state-change", handleStateChange);
-    }
   }, [activeCustomer?.id]);
-
-  // Run sequential Morning Brief (PLAN -> KNOW -> MOVE) ONLY on explicit user button click
-  const runMorningBrief = useCallback(async () => {
-    if (!activeCustomer?.id) return;
-    setBriefLoading(true);
-    setStreamEvent({
-      agent: "SUPERVISOR",
-      stage: "INIT",
-      message: "Starting sequential Morning Brief across PLAN, KNOW, and MOVE agents...",
-      step: 1,
-      total_steps: 5
-    });
-
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief/stream`, {
-        method: "POST",
-        headers
-      });
-
-      if (!res.ok || !res.body) {
-        throw new Error("Stream not available, using fallback");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("data: ")) {
-            try {
-              const event = JSON.parse(trimmed.slice(6));
-              if (event.type === "progress") {
-                setStreamEvent(event);
-              } else if (event.type === "complete" && event.data) {
-                setBrief(event.data);
-                const ts = event.generated_at || event.data.persisted_at || getNowISTTime(true);
-                setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
-                setStreamEvent(null);
-                setHasFreshEvidence(false);
-                fetchEngagementDetail(activeCustomer.id);
-              }
-            } catch (e) {
-              console.warn("SSE parse error in brief stream:", e);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Streaming morning brief encountered error, using standard fallback:", err);
-      try {
-        const fallbackRes = await fetch(`${API_BASE}/engagements/${activeCustomer.id}/supervisor/brief`, {
-          method: "POST",
-          headers
-        });
-        const fallbackData = await fallbackRes.json();
-        if (fallbackData.success && fallbackData.data) {
-          setBrief(fallbackData.data);
-          const ts = fallbackData.generated_at || fallbackData.data.persisted_at || getNowISTTime(true);
-          setLastRefreshed(typeof ts === "string" && ts.includes("T") ? formatISTDateTime(ts) : String(ts));
-          setHasFreshEvidence(false);
-          fetchEngagementDetail(activeCustomer.id);
-        }
-      } catch (fallbackErr) {
-        console.error("Failed to generate Morning Brief:", fallbackErr);
-      }
-    } finally {
-      setBriefLoading(false);
-      setStreamEvent(null);
-    }
-  }, [activeCustomer?.id, fetchEngagementDetail, token]);
 
   const isAcme = activeCustomer.id === "eng-acme-001";
   const outcomeStatement =
@@ -374,7 +267,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     return taskList;
   }, [activeEngagementData, activeCustomer.customerName]);
 
-  const workItems = proposedPlan?.work_items || [];
   const [localTasks, setLocalTasks] = useState<any[]>([]);
 
   useEffect(() => {
@@ -383,7 +275,10 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     }
   }, [baselineTasks]);
 
-  const effectiveTasks = localTasks.length > 0 ? localTasks : (workItems.length > 0 ? workItems : baselineTasks);
+  // Only manager-approved tasks appear in Today's Ordered Tasks
+  const effectiveTasks = (localTasks.length > 0 ? localTasks : baselineTasks).filter(
+    (t: any) => t && t.approval_status === "APPROVED"
+  );
 
   const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
@@ -704,7 +599,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
-                <span>{briefLoading ? "Running Agents..." : brief ? "Re-run Brief" : "Morning Brief"}</span>
+                <span>{briefLoading ? "Running Agents..." : "Morning Brief"}</span>
               </button>
 
               <button
@@ -727,38 +622,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
             </div>
           </div>
         </div>
-      ) : (
-        /* Embedded Action Ribbon inside Engagement Workspace */
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-mono font-bold text-slate-700 uppercase tracking-wider">
-              Daily Work Sequence
-            </span>
-            {lastRefreshed ? (
-              <span className="text-[11px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-medium">
-                Last updated: {lastRefreshed}
-              </span>
-            ) : (
-              <span className="text-[11px] font-mono text-slate-400">
-                · No brief generated yet
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={runMorningBrief}
-              disabled={briefLoading}
-              title="Run Morning Brief Skill across PLAN, KNOW, and MOVE agents"
-              className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
-            >
-              <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
-              <span>{briefLoading ? "Running Agents..." : brief ? "Re-run Morning Brief" : "Morning Brief"}</span>
-            </button>
-          </div>
-        </div>
-      )}
+      ) : null}
 
       {/* Fresh Evidence Invalidation Notice */}
       {hasFreshEvidence && brief && (
@@ -774,7 +638,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
             }}
             className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded text-xs transition shadow-2xs shrink-0 cursor-pointer"
           >
-            Re-run Brief
+            Morning Brief
           </button>
         </div>
       )}
@@ -1029,25 +893,8 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                     ({effectiveTasks.filter((t: any) => t.status === "COMPLETED").length}/{effectiveTasks.length} Done)
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {brief
-                    ? `Synthesized by Plan Agent &middot; Refreshed at ${lastRefreshed}`
-                    : "Active Workspace Work Plan &middot; Click 'Morning Brief' to re-prioritize"}
-                </p>
               </div>
               <div className="flex items-center gap-2">
-                {brief?.proposed_work_plan?.work_items && brief.proposed_work_plan.work_items.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleAdoptPlanAgentTasks}
-                    disabled={adoptingTasks}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
-                    title="Add tasks generated by Plan Agent directly to work plan without manager approval"
-                  >
-                    <Sparkles className="h-3 w-3 text-emerald-600" />
-                    <span>{adoptingTasks ? "Adding..." : `Add ${brief.proposed_work_plan.work_items.length} Plan Tasks`}</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setIsAddTaskModalOpen(true)}
@@ -1057,11 +904,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                   <Plus className="h-3.5 w-3.5" />
                   <span>+ Add Task</span>
                 </button>
-                {proposedPlan?.plan_id && (
-                  <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200 hidden sm:inline-block">
-                    Plan {proposedPlan.plan_id}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -1134,11 +976,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                                   <AlertTriangle className="h-3 w-3 text-rose-600" /> Rejected by Manager
                                 </span>
                               )}
-                              {item.approval_status === "APPROVED" && (
-                                <span className="inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                                  <Check className="h-2.5 w-2.5 text-emerald-600" /> Approved Work
-                                </span>
-                              )}
                             </div>
                             {item.why_it_matters && (
                               <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mt-1">
@@ -1160,42 +997,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                             <Clock className="h-3.5 w-3.5 text-amber-600 group-hover:scale-110 transition shrink-0" />
                             <span>Due: {item.due_date || "Set target"}</span>
                             <Edit2 className="h-3 w-3 text-amber-500 group-hover:text-amber-700 transition shrink-0" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTaskStatus(item)}
-                            disabled={item.approval_status === "PENDING_APPROVAL" || item.approval_status === "REJECTED"}
-                            className={`text-xs font-mono px-2.5 py-1 rounded-md border transition font-bold ${
-                              item.approval_status === "PENDING_APPROVAL"
-                                ? "bg-amber-50 text-amber-800 border-amber-300 cursor-not-allowed opacity-80"
-                                : item.approval_status === "REJECTED"
-                                ? "bg-rose-50 text-rose-800 border-rose-300 cursor-not-allowed opacity-80"
-                                : isDone
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 cursor-pointer"
-                                : inProgress
-                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 cursor-pointer"
-                                : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 cursor-pointer"
-                            }`}
-                            title={
-                              item.approval_status === "PENDING_APPROVAL"
-                                ? "Pending Manager Approval — Cannot be updated until approved"
-                                : item.approval_status === "REJECTED"
-                                ? "Proposal was rejected by Manager — Cannot be updated"
-                                : isDone
-                                ? "Click to set To Do"
-                                : "Click to toggle"
-                            }
-                          >
-                            {item.approval_status === "PENDING_APPROVAL"
-                              ? "Pending Approval"
-                              : item.approval_status === "REJECTED"
-                              ? "Rejected"
-                              : isDone
-                              ? "Done"
-                              : inProgress
-                              ? "In Progress"
-                              : "To Do"}
                           </button>
 
                           <button
@@ -1333,7 +1134,7 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                           {moveData.evidence.map((ev: string, evIdx: number) => (
                             <div key={evIdx} className="flex items-start gap-2">
                               <span className="text-amber-600 font-bold">•</span>
-                              <span className="leading-snug">{ev}</span>
+                              <span className="leading-snug">{formatEvidenceItem(ev)}</span>
                             </div>
                           ))}
                         </div>

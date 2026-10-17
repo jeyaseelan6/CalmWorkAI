@@ -163,13 +163,33 @@ class MoveAgent:
             except Exception as parse_err:
                 logger.warning(f"Failed to parse ADK MOVE output ({parse_err})")
 
+        status_raw = status.value if hasattr(status, "value") else str(status)
+        status_clean = "Healthy" if "HEALTHY" in status_raw else status_raw.replace("EngagementStatus.", "").replace("_", " ").title()
+
+        cycle_raw = current_work_cycle.value if hasattr(current_work_cycle, "value") else str(current_work_cycle)
+        cycle_clean = cycle_raw
+        if "STEP_1" in cycle_clean or "UNDERSTAND" in cycle_clean:
+            cycle_clean = "Step 1: Understand the Business Reality"
+        elif "STEP_2" in cycle_clean:
+            cycle_clean = "Step 2: Define the Right Problem"
+        elif "STEP_3" in cycle_clean:
+            cycle_clean = "Step 3: Design the AI Approach"
+        elif "STEP_4" in cycle_clean:
+            cycle_clean = "Step 4: Build Within Real Constraints"
+        elif "STEP_5" in cycle_clean:
+            cycle_clean = "Step 5: Deploy Into Production"
+        elif "STEP_6" in cycle_clean:
+            cycle_clean = "Step 6: Own Outcomes and Improve"
+        else:
+            cycle_clean = cycle_clean.replace("WorkCycleStep.", "").replace("_", " ").title()
+
         if not parsed or not isinstance(parsed, dict):
             logger.info("Live MOVE runner unavailable; providing deterministic velocity recommendation.")
-            situation = f"Workspace is progressing in {current_work_cycle} with {pending_approvals} pending approval(s)."
+            situation = f"Workspace is progressing in {cycle_clean} with {pending_approvals} pending approval(s)."
             recommendation = (
-                f"Review and authorize pending approvals to unblock deployment in {current_work_cycle}."
+                f"Review and authorize pending approvals to unblock deployment in {cycle_clean}."
                 if pending_approvals > 0
-                else f"Advance active sprint milestones and execute scheduled work tasks for {current_work_cycle}."
+                else f"Advance active sprint milestones and execute scheduled work tasks for {cycle_clean}."
             )
             why_now = (
                 "Manager authorization is required before downstream tasks can start."
@@ -179,26 +199,35 @@ class MoveAgent:
             return NextBestActionRecommendation(
                 engagement_id=engagement_id,
                 customer_name=customer_name,
-                action_title="Resolve Pending Approvals" if pending_approvals > 0 else f"Execute {current_work_cycle} Deliverables",
+                action_title="Resolve Pending Approvals" if pending_approvals > 0 else f"Execute {cycle_clean} Deliverables",
                 situation=situation,
                 recommendation=recommendation,
                 why_now=why_now,
                 impact="Unblocks downstream engineering work tasks and keeps delivery velocity on track.",
-                evidence=[f"Status: {status}", f"Work cycle: {current_work_cycle}", f"Pending approvals: {pending_approvals}"],
+                evidence=[f"Status: {status_clean}", f"Work cycle: {cycle_clean}", f"Pending approvals: {pending_approvals}"],
                 confidence="High",
                 approval_required=pending_approvals > 0,
                 priority_level="CRITICAL" if pending_approvals > 0 else "HIGH_PRIORITY",
-                target_work_cycle=current_work_cycle,
+                target_work_cycle=cycle_clean,
                 gating_blocker=None,
                 affected_role="MANAGER" if pending_approvals > 0 else "FDE",
                 privacy_scrubbed=True
             )
 
-        situation = parsed.get("situation", f"Engagement is progressing in {current_work_cycle}.")
+        situation = parsed.get("situation", f"Engagement is progressing in {cycle_clean}.")
         recommendation = parsed.get("recommendation", "")
         why_now = parsed.get("why_now", "")
         impact = parsed.get("impact", "")
-        evidence = parsed.get("evidence", [f"Status: {status}", f"Work cycle: {current_work_cycle}"])
+        raw_evidence = parsed.get("evidence", [f"Status: {status_clean}", f"Work cycle: {cycle_clean}"])
+        evidence = []
+        for e in raw_evidence:
+            e_str = str(e)
+            e_str = e_str.replace("EngagementStatus.HEALTHY", "Healthy").replace("WorkCycleStep.STEP_1_UNDERSTAND_BUSINESS_REALITY", "Step 1: Understand the Business Reality")
+            if "EngagementStatus." in e_str:
+                e_str = e_str.replace("EngagementStatus.", "").title()
+            if "WorkCycleStep." in e_str:
+                e_str = e_str.replace("WorkCycleStep.", "").replace("_", " ").title()
+            evidence.append(e_str)
         confidence = parsed.get("confidence", "Medium")
         approval_required = parsed.get("approval_required", False)
         priority = parsed.get("priority_level", "HIGH_PRIORITY")
