@@ -46,6 +46,16 @@ class GenerateCustomerUpdateRequest(BaseModel):
     format_type: str = "EXECUTIVE_SUMMARY"
 
 
+class SubmitCustomerUpdateRequest(BaseModel):
+    subject: str
+    executive_summary: str
+    key_milestones_achieved: List[str] = []
+    next_milestone_target: Optional[str] = ""
+    customer_action_items: List[str] = []
+    format_type: str = "EXECUTIVE_SUMMARY"
+    privacy_scrubbed: bool = True
+
+
 class ProposeWorkPlanRequest(BaseModel):
     natural_language_description: str
     session_id: Optional[str] = None
