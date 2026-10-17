@@ -2,6 +2,16 @@ import pytest
 from app.agents.know_agent import KnowAgent
 from app.agents.adk_runtime import set_mock_adk_response, clear_mock_adk_responses
 
+from app.db.database import SessionLocal
+
+@pytest.fixture
+def test_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @pytest.fixture(autouse=True)
 def setup_know_mock():
     set_mock_adk_response("verified engagement evidence", "Based on verified documentation, Cloud SQL cutover window is 15 minutes and AES-256 keys are managed in KMS.")
@@ -38,9 +48,24 @@ def test_document_processor_text():
     extracted = extract_text_from_file("security.md", text.encode("utf-8"))
     assert "OAuth2 bearer token" in extracted
 
-def test_document_upload_file_endpoint():
+def test_document_upload_file_endpoint(test_db):
     from fastapi.testclient import TestClient
     from app.main import app
+    from app.auth import create_access_token
+    from app.models import Engagement, EngagementStatus
+
+    eng = Engagement(
+        id="eng-acme-001",
+        customer_name="Acme Corp",
+        name="Acme Migration",
+        status=EngagementStatus.HEALTHY,
+        created_by="manager@calmwork.ai"
+    )
+    test_db.merge(eng)
+    test_db.commit()
+
+    token = create_access_token({"sub": "manager@calmwork.ai", "role": "MANAGER"})
+    headers = {"Authorization": f"Bearer {token}"}
     client = TestClient(app)
 
     file_content = (
@@ -50,6 +75,7 @@ def test_document_upload_file_endpoint():
 
     res = client.post(
         "/api/v1/engagements/eng-acme-001/documents/upload-file",
+        headers=headers,
         data={"category": "Architecture", "title": "KMS Policy Spec"},
         files={"file": ("kms_policy.txt", file_content, "text/plain")}
     )
@@ -62,6 +88,7 @@ def test_document_upload_file_endpoint():
     # Now verify Grounded RAG query retrieves it
     query_res = client.post(
         "/api/v1/engagements/eng-acme-001/knowledge/query",
+        headers=headers,
         json={"question": "What encryption standard is required for data at rest?", "top_k": 3}
     )
     assert query_res.status_code == 200

@@ -654,7 +654,7 @@ def test_plan_revision_creates_new_outcome_version(test_db: Session):
     assert outcomes[1].status == OutcomeStatus.APPROVED
 
 
-def test_ai_unavailable_returns_503_without_technical_leak(test_db: Session):
+def test_ai_unavailable_returns_503_without_technical_leak(test_db: Session, monkeypatch):
     """
     Verifies that when AI service is unavailable (no credentials and no runner output):
     1. coordinator.generate_natural_language_work_plan raises HTTPException with status 503.
@@ -663,6 +663,10 @@ def test_ai_unavailable_returns_503_without_technical_leak(test_db: Session):
     4. Absolutely NO deterministic mock tasks are fabricated.
     """
     clear_mock_adk_responses()
+    monkeypatch.setattr("app.config.settings.GROQ_API_KEY", "")
+    monkeypatch.setattr("app.config.settings.GEMINI_API_KEY", "")
+    monkeypatch.setattr("app.config.settings.USE_VERTEX_AI", False)
+    monkeypatch.setattr("app.agents.plan_agent.execute_adk_runner", lambda *args, **kwargs: None)
     privacy_engine = PrivacyPolicyEngine(use_cloud_dlp=False)
     coordinator = SupervisorCoordinator(privacy_engine=privacy_engine)
 

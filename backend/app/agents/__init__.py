@@ -33,6 +33,12 @@ from app.agents.invariants import (
     UNIVERSAL_AGENT_INVARIANTS,
     build_agent_instruction
 )
+from app.agents.fde_playbook import (
+    FDE_CORE_PLAYBOOK,
+    PLAN_FDE_DIRECTIVE,
+    MOVE_FDE_DIRECTIVE,
+    SUPERVISOR_FDE_DIRECTIVE
+)
 
 # Backwards compatibility wrapper: UNDERSTAND capabilities migrated into PLAN
 from app.agents.understand_agent import UnderstandAgent
@@ -63,5 +69,10 @@ __all__ = [
     "get_current_ist_datetime",
     "get_current_ist_str",
     "UNIVERSAL_AGENT_INVARIANTS",
-    "build_agent_instruction"
+    "build_agent_instruction",
+    "FDE_CORE_PLAYBOOK",
+    "PLAN_FDE_DIRECTIVE",
+    "MOVE_FDE_DIRECTIVE",
+    "SUPERVISOR_FDE_DIRECTIVE"
 ]
+

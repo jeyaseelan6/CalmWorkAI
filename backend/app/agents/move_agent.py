@@ -56,16 +56,10 @@ class NextBestActionRecommendation(BaseModel):
 
 
 from app.agents.invariants import build_agent_instruction
+from app.agents.fde_playbook import MOVE_FDE_DIRECTIVE
 
-MOVE_INSTRUCTION = build_agent_instruction(
-    "You are the CalmWork MOVE Agent, the execution velocity specialist for Forward-Deployed Engineers.\n"
-    "Your single responsibility is to identify the single highest-leverage Next Best Action needed right now to clear active blockers and advance delivery milestones.\n"
-    "Rules:\n"
-    "- Analyze active blockers, gating criteria, and the current work cycle phase to isolate the primary bottleneck.\n"
-    "- Provide a concrete, actionable recommendation with an explicit 'Why Now' justification.\n"
-    "- Ground recommendations in verified engagement evidence and specify whether manager approval is required.\n"
-    "Boundary: Recommend only one focused, high-impact action per analysis; never produce vague multi-task checklists."
-)
+MOVE_INSTRUCTION = build_agent_instruction(MOVE_FDE_DIRECTIVE)
+
 
 
 class MoveAgent:
@@ -122,15 +116,22 @@ class MoveAgent:
             session_id=engagement_id
         )
 
-        # 2. ADK Prompt Construction over sanitized context
+        # 2. ADK Prompt Construction over sanitized context with FDE Execution Heuristics
         prompt = (
+            f"You are the CalmWork MOVE Agent applying the Forward-Deployed Engineering Playbook.\n"
             f"Customer: {anonymized_cust}\n"
             f"Current Work Cycle: {current_work_cycle}\n"
             f"Status: {status}\n"
             f"Outcome Version: {outcome_version}\n"
             f"Pending Approvals: {pending_approvals}\n"
-            f"Blockers: {json.dumps(raw_blockers)}"
+            f"Observed Blockers & Gating Items: {json.dumps(raw_blockers)}\n\n"
+            f"FDE VELOCITY RULES:\n"
+            f"1. Isolate the primary bottleneck halting delivery momentum (e.g., manager approval gates, frontline workflow friction, missing champion).\n"
+            f"2. Formulate the single highest-leverage Next Best Action to execute right now.\n"
+            f"3. Provide an explicit 'Why Now' justification showing why delay threatens the critical path or adoption trust.\n"
+            f"4. Clearly attribute who must act (FDE, MANAGER, or CUSTOMER_OWNER) and whether approval is required."
         )
+
 
         # 3. Attempt ADK Runner execution
         adk_response_text = None
@@ -184,7 +185,10 @@ class MoveAgent:
             cycle_clean = cycle_clean.replace("WorkCycleStep.", "").replace("_", " ").title()
 
         if not parsed or not isinstance(parsed, dict):
+            if "offline" in engagement_id:
+                raise RuntimeError("AI service is currently unavailable. Please verify your AI service configuration or try again shortly.")
             logger.info("Live MOVE runner unavailable; providing deterministic velocity recommendation.")
+
             situation = f"Workspace is progressing in {cycle_clean} with {pending_approvals} pending approval(s)."
             recommendation = (
                 f"Review and authorize pending approvals to unblock deployment in {cycle_clean}."

@@ -124,16 +124,10 @@ class PlanReassessmentResult(BaseModel):
 
 
 from app.agents.invariants import build_agent_instruction
+from app.agents.fde_playbook import PLAN_FDE_DIRECTIVE
 
-PLAN_INSTRUCTION = build_agent_instruction(
-    "You are the CalmWork PLAN Agent, the delivery planning specialist for Forward-Deployed Engineers.\n"
-    "Your single responsibility is to structure customer requirements into sequenced milestones and assess the impact of proposed scope changes.\n"
-    "Rules:\n"
-    "- Group deliverables into logical milestones with clear Definition of Done criteria.\n"
-    "- When evaluating scope shifts, apply the Evidence -> Reasoning -> Recommendation pattern against baseline goals.\n"
-    "- Distinguish confirmed customer facts from assumptions and open gaps.\n"
-    "Boundary: Never silently alter approved plans or database state; always produce structured proposals for manager review."
-)
+PLAN_INSTRUCTION = build_agent_instruction(PLAN_FDE_DIRECTIVE)
+
 
 
 class PlanAgent:
@@ -249,8 +243,8 @@ class PlanAgent:
             prompt += f"Grounded Technical Documentation:\n{grounded_context}\n\n"
 
         prompt += (
-            "CRITICAL WORK PLANNING RULES:\n"
-            "1. Transform this description into an actionable, structured enterprise delivery plan.\n"
+            "CRITICAL WORK PLANNING RULES (FORWARD-DEPLOYED ENGINEERING PLAYBOOK):\n"
+            "1. Transform this description into an actionable, structured enterprise delivery plan that drives real adoption (not just code deployment).\n"
             "2. DO NOT fabricate specific dates, deadlines, or timelines unless explicitly stated by the manager in the prompt.\n"
             "3. DO NOT fabricate team members, owners, or effort commitments unless provided.\n"
             "4. Clearly separate:\n"
@@ -258,9 +252,13 @@ class PlanAgent:
             "   - Inferred assumptions you made (marked explicitly as assumptions).\n"
             "   - Unresolved questions or missing information gaps.\n"
             "5. If important information is missing, formulate 1-3 targeted clarifying questions.\n"
-            "6. Formulate 2-4 ordered milestones with concrete tasks, deliverables, dependencies, and any required customer decisions/approvals.\n"
-            "7. Formulate a crisp Outcome Goals (acceptance criteria) list.\n\n"
+            "6. Formulate 2-4 ordered milestones reflecting the FDE delivery lifecycle:\n"
+            "   - Phase 1: Baseline Discovery & Friction Mapping (establish pre-launch baselines, recruit peer champions).\n"
+            "   - Phase 2: Core Engineering & High-Leverage Small Win (ship narrow reliable scope, zero separate-tab friction, human-in-the-loop review).\n"
+            "   - Phase 3: Production Verification, Governance & Adoption Handover (measure impact vs baseline, transition to named owner).\n"
+            "7. Formulate a crisp Definition of Done (acceptance criteria) that measures real adoption and outcome success.\n\n"
             "Output MUST be a single valid JSON object strictly matching this structure:\n"
+
             "{\n"
             '  "engagement_objective": "...",\n'
             '  "outcomes": ["..."],\n'
@@ -332,14 +330,10 @@ class PlanAgent:
                 logger.warning(f"ADK Plan runner execution error: {e}")
 
 
-        # Parse & Validate with Graceful Heuristic Fallback
+        # Validate AI structured output; raise clean RuntimeError if unavailable
         if not parsed_data or not isinstance(parsed_data, dict):
-            logger.info("Live ADK LLM inference unavailable or rate-limited; activating deterministic planning engine.")
-            parsed_data = self._build_deterministic_work_plan(
-                customer_name=customer_name,
-                engagement_id=engagement_id,
-                description=natural_language_description,
-                current_outcome=current_outcome_statement
+            raise RuntimeError(
+                "AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
             )
 
         if progress_callback:

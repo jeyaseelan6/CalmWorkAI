@@ -43,8 +43,11 @@ from app.agents.adk_runtime import (
 )
 from app.ai.groq_service import groq_service
 from app.config import settings
+from app.agents.invariants import build_agent_instruction
+from app.agents.fde_playbook import SUPERVISOR_FDE_DIRECTIVE
 
 logger = logging.getLogger(__name__)
+
 
 
 class AgentStatusSummary(BaseModel):
@@ -234,13 +237,10 @@ class SupervisorCoordinator:
             name="supervisor_coordinator",
             description="Central multi-agent coordinator for conversational queries, intent routing, and delivery orchestration.",
             model=self.model,
-            instruction=(
-                "You are the CalmWork Supervisor Multi-Agent Coordinator for Forward-Deployed Engineers. "
-                "Synthesize findings across PLAN, KNOW, MOVE, DELIVER, and SUPPORT. "
-                "Respond helpfully, politely, and concisely based strictly on verified engagement facts."
-            ),
+            instruction=build_agent_instruction(SUPERVISOR_FDE_DIRECTIVE),
             before_model_callback=create_privacy_guardrail_callback(self.privacy_engine)
         )
+
 
         self.runner = create_adk_runner(
             agent=self.supervisor_agent,
@@ -349,10 +349,10 @@ class SupervisorCoordinator:
                 f"- The word 'blocked' does NOT automatically mean MOVE (e.g., 'Does the SOP say blocked ports fail the audit?' -> KNOW).\n"
                 f"- Technical terms ('schema', 'cert', 'db') do NOT automatically mean KNOW if asking what action to take next.\n\n"
                 f"Evaluate solely by the CORE HUMAN DESIRE:\n"
-                f"1. MOVE: 'Tell me what action to take right now, who needs to unblock what, or what to prioritize.'\n"
-                f"2. PLAN: 'Reshape, create, or modify the structure of our project roadmap and task lists.'\n"
-                f"3. KNOW: 'Retrieve a factual, technical, or historical answer from documents, runbooks, or past notes.'\n"
-                f"4. DELIVER: 'Draft or format a communication to be sent outside to stakeholders or executives.'\n"
+                f"1. MOVE: 'Tell me what action to take right now, who needs to unblock what, today's priorities, or execution velocity.'\n"
+                f"2. PLAN: 'Inquire about or modify delivery plans, project milestones, scope changes, what changed today, roadmap phasing, work breakdowns, or Definition of Done.'\n"
+                f"3. KNOW: 'Retrieve a factual, technical, or architecture answer from technical specifications, codebase, schemas, runbooks, or past notes.'\n"
+                f"4. DELIVER: 'Draft or format a communication to be sent outside to stakeholders, clients, or executives.'\n"
                 f"5. SUPPORT: Production incident diagnosis, bug triage, stack traces, crash logs, or screenshot diagnostics.\n"
                 f"6. MULTI_AGENT: 'Give me a high-level 360-degree executive snapshot of where everything stands.'\n"
                 f"7. SUPERVISOR: Unrelated conversational messages, personal remarks, romantic statements, greetings, pleasantries, off-topic chat, or out-of-scope inquiries (e.g., 'I love you', 'hello', 'who are you', 'how are you doing', 'tell me a joke', 'what's the weather').\n\n"
@@ -1391,16 +1391,25 @@ class SupervisorCoordinator:
         Supervisor Work Planning Orchestration:
         Delegates exclusively to dedicated PLAN Agent without duplicating planning logic.
         """
-        return self.plan_agent.generate_natural_language_work_plan(
-            engagement_id=engagement_id,
-            customer_name=customer_name,
-            natural_language_description=natural_language_description,
-            existing_plan_edits=existing_plan_edits,
-            current_outcome_statement=current_outcome_statement,
-            current_success_criteria=current_success_criteria,
-            session_id=session_id,
-            progress_callback=progress_callback
-        )
+        try:
+            return self.plan_agent.generate_natural_language_work_plan(
+                engagement_id=engagement_id,
+                customer_name=customer_name,
+                natural_language_description=natural_language_description,
+                existing_plan_edits=existing_plan_edits,
+                current_outcome_statement=current_outcome_statement,
+                current_success_criteria=current_success_criteria,
+                session_id=session_id,
+                progress_callback=progress_callback
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error generating natural language work plan: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is currently unavailable. Please verify your AI service configuration or try again shortly."
+            )
 
 
 
