@@ -799,15 +799,11 @@ export default function AskCalmWorkChat({
           throw new Error(data.detail || data.message || "Failed to investigate screenshot");
         }
       } else {
-        // Normal text query through Supervisor Query endpoint with contextual grounding
-        const contextPrefix = currentTab
-          ? `[Context: Active Tab "${currentTab}"${currentSelectedItem ? `, Selected: "${currentSelectedItem}"` : ""}] `
-          : "";
-
+        // Normal text query through Supervisor Query endpoint
         const res = await fetch(`${API_BASE}/engagements/${targetEngagementId}/supervisor/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: `${contextPrefix}${userText}` })
+          body: JSON.stringify({ query: userText })
         });
         const data = await res.json();
 
@@ -995,7 +991,9 @@ export default function AskCalmWorkChat({
                           />
                         </div>
                       )}
-                      <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                      <p className="whitespace-pre-wrap leading-relaxed">
+                        {m.text ? m.text.replace(/^\[Context:[^\]]*\]\s*/i, "") : ""}
+                      </p>
                       <div className="text-[9px] text-slate-400 font-mono mt-1 text-right">
                         {m.timestamp}
                       </div>

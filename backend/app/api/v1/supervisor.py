@@ -12,6 +12,7 @@ import asyncio
 import json
 import uuid
 import logging
+import re
 from datetime import datetime
 
 from app.db.database import get_db
@@ -84,10 +85,11 @@ def get_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db
 
     serialized = []
     for m in messages:
+        user_clean_text = re.sub(r"^\[Context:[^\]]*\]\s*", "", m.text or "").strip() if m.sender == "USER" else m.text
         serialized.append({
             "id": m.id,
             "sender": m.sender,
-            "text": m.text,
+            "text": user_clean_text,
             "intent": m.intent or "MULTI_AGENT",
             "delegatedAgent": m.delegated_agent,
             "capabilitiesUsed": m.capabilities_used or [],
@@ -190,13 +192,14 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
 
-    # 1. Persist User Query to PostgreSQL
+    # 1. Persist Clean User Query to PostgreSQL
+    clean_user_text = re.sub(r"^\[Context:[^\]]*\]\s*", "", payload.query or "").strip()
     user_msg_id = f"msg-usr-{uuid.uuid4().hex[:8]}"
     db.add(WorkspaceChatMessage(
         id=user_msg_id,
         engagement_id=engagement_id,
         sender="USER",
-        text=payload.query,
+        text=clean_user_text,
         created_at=datetime.utcnow()
     ))
     db.commit()
