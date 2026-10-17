@@ -276,6 +276,8 @@ class SupervisorCoordinator:
         # 1. Apply Defense-in-Depth Privacy Boundary
         sanitized_query, mapping = self.privacy_engine.process_llm_input(raw_query, session_id=engagement_id)
         q_lower = sanitized_query.lower().strip()
+        clean_query = re.sub(r"^\[Context:[^\]]*\]\s*", "", sanitized_query).strip()
+        q_clean_lower = clean_query.lower().strip()
 
         # 2. Extract & Format Grounded Engagement Context
         crit_items = success_criteria or []
@@ -352,9 +354,10 @@ class SupervisorCoordinator:
                 f"3. KNOW: 'Retrieve a factual, technical, or historical answer from documents, runbooks, or past notes.'\n"
                 f"4. DELIVER: 'Draft or format a communication to be sent outside to stakeholders or executives.'\n"
                 f"5. SUPPORT: Production incident diagnosis, bug triage, stack traces, crash logs, or screenshot diagnostics.\n"
-                f"6. MULTI_AGENT: 'Give me a high-level 360-degree executive snapshot of where everything stands.'\n\n"
-                f"User Message: \"{sanitized_query}\"\n\n"
-                f"Return ONLY the single word category name: MOVE, PLAN, KNOW, DELIVER, SUPPORT, or MULTI_AGENT."
+                f"6. MULTI_AGENT: 'Give me a high-level 360-degree executive snapshot of where everything stands.'\n"
+                f"7. SUPERVISOR: Unrelated conversational messages, personal remarks, romantic statements, greetings, pleasantries, off-topic chat, or out-of-scope inquiries (e.g., 'I love you', 'hello', 'who are you', 'how are you doing', 'tell me a joke', 'what's the weather').\n\n"
+                f"User Message: \"{clean_query or sanitized_query}\"\n\n"
+                f"Return ONLY the single word category name: MOVE, PLAN, KNOW, DELIVER, SUPPORT, MULTI_AGENT, or SUPERVISOR."
             )
             try:
                 raw_cat = groq_service.generate_chat_completion(
@@ -364,15 +367,30 @@ class SupervisorCoordinator:
                 )
                 if raw_cat:
                     candidate = raw_cat.strip().upper()
-                    for cat in ["SUPPORT", "PLAN", "MOVE", "DELIVER", "KNOW", "MULTI_AGENT", "UNDERSTAND"]:
+                    for cat in ["SUPERVISOR", "IRRELEVANT", "SUPPORT", "PLAN", "MOVE", "DELIVER", "KNOW", "MULTI_AGENT", "UNDERSTAND"]:
                         if cat in candidate:
-                            intent = "PLAN" if cat == "UNDERSTAND" else cat
+                            if cat in ("SUPERVISOR", "IRRELEVANT"):
+                                intent = "SUPERVISOR"
+                            elif cat == "UNDERSTAND":
+                                intent = "PLAN"
+                            else:
+                                intent = cat
                             break
             except Exception as ex:
                 logger.debug(f"LLM intent classification fallback to rule matching: {ex}")
 
         # Semantic pattern matching fallback with comprehensive domain trigger dictionaries
         if not intent:
+            SUPERVISOR_TRIGGERS = [
+                "i love you", "love you", "i like you", "marry me", "do you love me",
+                "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+                "how are you", "how are you doing", "what's up", "whats up",
+                "who are you", "what are you", "what is your name", "who made you",
+                "what can you do", "help me", "how can you help", "can you help",
+                "tell me a joke", "sing a song", "weather", "recipe", "sports",
+                "thank you", "thanks", "bye", "goodbye", "see you"
+            ]
+
             MULTI_AGENT_TRIGGERS = [
                 "360", "operational briefing", "full operational update", "multi-agent",
                 "full overview", "project status overview", "complete status", "comprehensive update",
@@ -419,9 +437,19 @@ class SupervisorCoordinator:
                 "prerequisites", "specs"
             ]
 
+            is_personal_or_irrelevant = (
+                any(term in q_clean_lower for term in SUPERVISOR_TRIGGERS)
+                or bool(re.search(r'\b(love|like|date|marry|kiss|hug)\s+(you|u)\b', q_clean_lower))
+                or bool(re.search(r'^(hi|hello|hey|yo|greetings|hola)\b', q_clean_lower))
+                or bool(re.search(r'\b(who|what)\s+are\s+you\b', q_clean_lower))
+                or bool(re.search(r'\b(tell\s+me\s+a\s+joke|sing\s+a\s+song|are\s+you\s+real)\b', q_clean_lower))
+            )
+
             multi_word_hits = len([w for w in ["changed", "blocking", "customer", "next", "spec", "update", "plan", "support"] if w in q_lower])
 
-            if any(term in q_lower for term in MULTI_AGENT_TRIGGERS) or multi_word_hits >= 3:
+            if is_personal_or_irrelevant:
+                intent = "SUPERVISOR"
+            elif any(term in q_lower for term in MULTI_AGENT_TRIGGERS) or multi_word_hits >= 3:
                 intent = "MULTI_AGENT"
             elif any(term in q_lower for term in SUPPORT_TRIGGERS):
                 intent = "SUPPORT"
@@ -435,10 +463,15 @@ class SupervisorCoordinator:
                 intent = "KNOW"
             elif multi_word_hits >= 2:
                 intent = "MULTI_AGENT"
-            else:
+            elif any(kw in q_clean_lower for kw in ["what", "how", "why", "where", "when", "which", "can", "is", "are", "docs", "spec", "runbook"]):
                 intent = "KNOW"
+            else:
+                intent = "SUPERVISOR"
 
-        capabilities_used = [intent] if intent != "MULTI_AGENT" else ["PLAN", "MOVE", "KNOW", "DELIVER", "SUPPORT"]
+        capabilities_used = (
+            ["SUPERVISOR"] if intent == "SUPERVISOR"
+            else ([intent] if intent != "MULTI_AGENT" else ["PLAN", "MOVE", "KNOW", "DELIVER"])
+        )
         sources: List[SourceCitation] = []
         customer_update_draft: Optional[CustomerUpdateDraft] = None
         answer = ""
@@ -686,7 +719,60 @@ class SupervisorCoordinator:
                     f"or record the relevant update in Worknotes to index this information into the KNOW Agent."
                 )
 
-        else:  # MULTI_AGENT / SUPERVISOR
+        elif intent == "SUPERVISOR":
+            handover_banner = ""
+
+            llm_response = None
+            if groq_service.is_configured() or is_live_inference_enabled():
+                supervisor_prompt = (
+                    f"You are the CalmWork Supervisor Agent, the central orchestrator for the {customer_name} delivery workspace.\n\n"
+                    f"{time_rule}\n\n"
+                    f"The user sent an off-topic, conversational, personal, or greeting message in the workspace chat:\n"
+                    f"User Message: \"{clean_query or sanitized_query}\"\n\n"
+                    f"Instructions:\n"
+                    f"1. Respond politely, warmly, and professionally.\n"
+                    f"2. If it is a personal statement like 'I love you', acknowledge it kindly with warmth and gentle boundaries (e.g., 'Thank you! That is very kind of you, but I am an AI delivery orchestrator dedicated to helping your team with {customer_name}.'). If it is a greeting, greet them warmly.\n"
+                    f"3. Clearly and concisely summarize how you and your specialist agents can help with {customer_name}:\n"
+                    f"   - **MOVE Agent**: Determine next best actions, daily focus, and clear blockers.\n"
+                    f"   - **PLAN Agent**: Milestone progress, scope changes, and Definition of Done.\n"
+                    f"   - **KNOW Agent**: Search verified technical architecture, runbooks, and meeting notes.\n"
+                    f"   - **DELIVER Agent**: Draft executive communications and customer updates.\n"
+                    f"   - **SUPPORT Agent**: Investigate production errors, logs, and screenshots.\n"
+                    f"   - **360° Operational Briefing**: Comprehensive executive status overview.\n"
+                    f"4. Invite the user to ask how they would like to proceed with the engagement.\n"
+                    f"Keep the tone calm, concise, and helpful. Use clean Markdown without HTML tags."
+                )
+                try:
+                    llm_response = groq_service.generate_chat_completion(
+                        prompt=supervisor_prompt,
+                        system_instruction="You are the CalmWork Supervisor. Respond warmly, politely, and guide the user on how you can assist with their workspace delivery.",
+                        max_tokens=600
+                    )
+                except Exception as e:
+                    logger.debug(f"SUPERVISOR LLM call fallback: {e}")
+
+            if llm_response:
+                answer = llm_response.strip()
+            else:
+                greeting_ack = "Thank you! I appreciate you reaching out."
+                if any(w in q_clean_lower for w in ["love", "like", "marry", "crush"]):
+                    greeting_ack = "Thank you! That is very kind of you, but I am an AI delivery orchestrator focused on helping your team succeed."
+                elif any(w in q_clean_lower for w in ["hi", "hello", "hey", "morning", "afternoon", "evening"]):
+                    greeting_ack = f"Hello! Welcome to the **{customer_name}** workspace."
+
+                answer = (
+                    f"{greeting_ack}\n\n"
+                    f"As the **CalmWork Supervisor**, I coordinate our specialist AI agents to keep your engineering delivery calm, aligned, and on track for **{customer_name}**:\n\n"
+                    f"- ⚡ **MOVE Agent**: Operational velocity — ask *\"What should I do next?\"* or *\"Why is production blocked?\"*\n"
+                    f"- 🎯 **PLAN Agent**: Delivery roadmap — ask *\"What changed today?\"* or *\"Show current Definition of Done\"*\n"
+                    f"- 📚 **KNOW Agent**: Grounded specs — ask about architecture, runbooks, or past meeting decisions.\n"
+                    f"- 📢 **DELIVER Agent**: Communications — ask *\"Prepare a customer update\"* to generate stakeholder memos.\n"
+                    f"- 🛠️ **SUPPORT Agent**: Issue triage — paste error logs or attach screenshots for diagnostic analysis.\n"
+                    f"- 🌐 **360° Operational Briefing**: Ask *\"Give me a 360 overview\"* for a complete status summary.\n\n"
+                    f"How can I help you move the engagement forward today?"
+                )
+
+        else:  # MULTI_AGENT
             parts = [
                 f"### 360° Operational Briefing for {customer_name}\n",
                 f"**1. Scope & Requirements (PLAN)**:",
@@ -745,6 +831,12 @@ class SupervisorCoordinator:
                 "Upload official specification document",
                 "What changed today?"
             ]
+        elif intent == "SUPERVISOR":
+            suggested_followups = [
+                "What should I do next?",
+                "Give me a 360 overview",
+                "What changed today?"
+            ]
         else:
             suggested_followups = [
                 "What changed today?",
@@ -754,6 +846,13 @@ class SupervisorCoordinator:
 
         # 7. Delegated Specialist Agent Metadata
         agent_directory = {
+            "SUPERVISOR": DelegatedAgentInfo(
+                id="SUPERVISOR",
+                name="CalmWork Supervisor",
+                role="Central Multi-Agent Orchestration",
+                badge_label="Supervisor Agent",
+                color="slate"
+            ),
             "PLAN": DelegatedAgentInfo(
                 id="PLAN",
                 name="PLAN Agent",
@@ -804,7 +903,7 @@ class SupervisorCoordinator:
                 color="slate"
             )
         }
-        delegated_agent = agent_directory.get(intent, agent_directory["MULTI_AGENT"])
+        delegated_agent = agent_directory.get(intent, agent_directory["SUPERVISOR"])
 
         return SupervisorQueryResponse(
             engagement_id=engagement_id,

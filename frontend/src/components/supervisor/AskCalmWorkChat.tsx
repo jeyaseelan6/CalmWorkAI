@@ -181,6 +181,16 @@ const AGENT_META: Record<string, {
     borderCol: "border-slate-200",
     iconCol: "text-slate-800",
     badgeBg: "bg-slate-200 text-slate-800 border-slate-300"
+  },
+  SUPERVISOR: {
+    name: "CalmWork Supervisor",
+    role: "Central Multi-Agent Orchestration",
+    badge: "Supervisor Agent",
+    icon: Sparkles,
+    headerBg: "bg-slate-100/90",
+    borderCol: "border-slate-200",
+    iconCol: "text-slate-800",
+    badgeBg: "bg-slate-200 text-slate-800 border-slate-300"
   }
 };
 
