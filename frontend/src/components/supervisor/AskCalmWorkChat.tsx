@@ -1382,7 +1382,7 @@ export default function AskCalmWorkChat({
         {loading && (
           <div className="flex items-center gap-2.5 text-slate-600 font-mono text-[11px] p-3 bg-white border border-slate-200 rounded-lg w-fit shadow-2xs animate-fadeIn">
             <RefreshCw className="h-3.5 w-3.5 text-slate-700 animate-spin" />
-            <span>CalmWork Supervisor detecting intent & handing over to specialist agent...</span>
+            <span>CalmWork AI is thinking now and will handover to specialist agent</span>
           </div>
         )}
         <div ref={messagesEndRef} />
