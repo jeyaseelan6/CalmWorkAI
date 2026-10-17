@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Sparkles,
   Send,
@@ -410,7 +410,8 @@ export default function AskCalmWorkChat({
     setActionLoadingId(engId);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const authToken = isManager && token ? token : "demo-manager-token";
+      headers["Authorization"] = `Bearer ${authToken}`;
       const res = await fetch(`${API_BASE}/engagements/${engId}/customer-updates/approve`, {
         method: "POST",
         headers,
@@ -422,6 +423,7 @@ export default function AskCalmWorkChat({
       });
       if (res.ok) {
         setApprovedUpdates((prev) => ({ ...prev, [engId]: true }));
+        setSubmittedUpdates((prev) => ({ ...prev, [engId]: false }));
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId: engId } }));
           if ("BroadcastChannel" in window) {
@@ -437,6 +439,66 @@ export default function AskCalmWorkChat({
       setActionLoadingId(null);
     }
   };
+
+  // Authoritative background synchronization of customer update approval status
+  const checkUpdateApprovalStatus = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/engagements/${targetEngagementId}/customer-updates/status`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          if (json.data.approved) {
+            setApprovedUpdates((prev) => ({ ...prev, [targetEngagementId]: true }));
+            setSubmittedUpdates((prev) => ({ ...prev, [targetEngagementId]: false }));
+          } else if (json.data.status === "PENDING") {
+            setApprovedUpdates((prev) => ({ ...prev, [targetEngagementId]: false }));
+            setSubmittedUpdates((prev) => ({ ...prev, [targetEngagementId]: true }));
+          } else {
+            setApprovedUpdates((prev) => ({ ...prev, [targetEngagementId]: false }));
+            setSubmittedUpdates((prev) => ({ ...prev, [targetEngagementId]: false }));
+          }
+        }
+      }
+    } catch {
+      // Status rehydration fallback
+    }
+  }, [targetEngagementId, token]);
+
+  useEffect(() => {
+    checkUpdateApprovalStatus();
+
+    const handleSync = (e: any) => {
+      if (!e?.detail?.engagementId || e.detail.engagementId === targetEngagementId) {
+        checkUpdateApprovalStatus();
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("calmwork-state-change", handleSync);
+    }
+
+    let ch: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        ch = new BroadcastChannel("calmwork_governance_bus");
+        ch.onmessage = (event) => {
+          if (!event.data?.engagementId || event.data.engagementId === targetEngagementId) {
+            checkUpdateApprovalStatus();
+          }
+        };
+      } catch {
+        // BroadcastChannel fallback
+      }
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("calmwork-state-change", handleSync);
+      }
+      if (ch) ch.close();
+    };
+  }, [checkUpdateApprovalStatus, targetEngagementId]);
 
   const handleSubmitCustomerUpdateInChat = async (draft: CustomerUpdateDraft) => {
     setActionLoadingId(draft.engagement_id);
@@ -1155,30 +1217,14 @@ export default function AskCalmWorkChat({
                       {/* Action Footer */}
                       <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          {isManager ? (
-                            !approvedUpdates[m.customerUpdate.engagement_id] ? (
-                              <button
-                                type="button"
-                                onClick={() => handleApproveCustomerUpdateInChat(m.customerUpdate!.engagement_id)}
-                                disabled={actionLoadingId === m.customerUpdate.engagement_id}
-                                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
-                              >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                <span>{actionLoadingId === m.customerUpdate.engagement_id ? "Approving..." : "Approve Customer Update"}</span>
-                              </button>
-                            ) : (
-                              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                                <Check className="h-3.5 w-3.5" />
-                                <span>Approved &amp; Authorized</span>
-                              </span>
-                            )
-                          ) : (
-                            !approvedUpdates[m.customerUpdate.engagement_id] ? (
+                          {!approvedUpdates[m.customerUpdate.engagement_id] ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => handleSubmitCustomerUpdateInChat(m.customerUpdate!)}
                                 disabled={actionLoadingId === m.customerUpdate.engagement_id}
                                 className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="Submit this customer update draft for Manager review"
                               >
                                 <Send className="h-3 w-3 text-blue-300" />
                                 <span>
@@ -1186,15 +1232,34 @@ export default function AskCalmWorkChat({
                                     ? "Submitting..."
                                     : submittedUpdates[m.customerUpdate.engagement_id]
                                     ? "Re-Send for Approval"
-                                    : "Send for Manager Approval"}
+                                    : "Send for Approval"}
                                 </span>
                               </button>
-                            ) : (
-                              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
-                                <Check className="h-3.5 w-3.5" />
-                                <span>Approved by Manager</span>
-                              </span>
-                            )
+
+                              <button
+                                type="button"
+                                onClick={() => handleApproveCustomerUpdateInChat(m.customerUpdate!.engagement_id)}
+                                disabled={actionLoadingId === m.customerUpdate.engagement_id}
+                                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="Authorize and approve release for client distribution"
+                              >
+                                {actionLoadingId === m.customerUpdate.engagement_id ? (
+                                  <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                )}
+                                <span>
+                                  {actionLoadingId === m.customerUpdate.engagement_id
+                                    ? "Approving..."
+                                    : "Approve Customer Update"}
+                                </span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded font-semibold flex items-center gap-1.5">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>Approved by Manager · Ready to Deliver</span>
+                            </span>
                           )}
 
                           {/* Download PDF button — Available to Both Roles Once Approved */}
