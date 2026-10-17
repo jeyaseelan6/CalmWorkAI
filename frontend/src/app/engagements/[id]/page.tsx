@@ -93,23 +93,25 @@ function EngagementDetailContent() {
                 <span>{isHealthy ? "Healthy" : "Needs Review"}</span>
               </span>
 
-              <div className="flex flex-col items-end gap-0.5">
-                <button
-                  type="button"
-                  onClick={runMorningBrief}
-                  disabled={briefLoading}
-                  title="Run Morning Brief Skill across PLAN, KNOW, and MOVE agents"
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
-                >
-                  <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
-                  <span>{briefLoading ? "Running Agents..." : "Morning Brief"}</span>
-                </button>
-                {lastRefreshed && (
-                  <span className="text-[10px] font-mono text-slate-500">
-                    Last updated: {lastRefreshed}
-                  </span>
-                )}
-              </div>
+              {activeTab === "myday" && (
+                <div className="flex flex-col items-end gap-0.5">
+                  <button
+                    type="button"
+                    onClick={runMorningBrief}
+                    disabled={briefLoading}
+                    title="Run Morning Brief Skill across PLAN, KNOW, and MOVE agents"
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-2xs disabled:opacity-50"
+                  >
+                    <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
+                    <span>{briefLoading ? "Running Agents..." : "Morning Brief"}</span>
+                  </button>
+                  {lastRefreshed && (
+                    <span className="text-[10px] font-mono text-slate-500">
+                      Last updated: {lastRefreshed}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

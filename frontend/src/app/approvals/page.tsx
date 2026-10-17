@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
 import { useEngagement } from "@/context/EngagementContext";
 import { useAuth } from "@/context/AuthContext";
@@ -10,9 +9,7 @@ import {
   CheckCircle,
   CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   XCircle,
-  Lock,
   Mail,
   Target,
   Sparkles,
@@ -261,42 +258,11 @@ export default function ApprovalsPage() {
                       </div>
                     </div>
 
-                    {/* 3. Evidence Accordion */}
-                    {item.evidence && item.evidence.length > 0 && (
-                      <details className="group">
-                        <summary className="text-[11px] font-mono font-semibold text-slate-500 hover:text-slate-900 cursor-pointer list-none flex items-center justify-between py-1 transition">
-                          <span>Verified Evidence &amp; AI Safety Audit ({item.evidence.length} items)</span>
-                          <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">
-                            ▼
-                          </span>
-                        </summary>
-                        <ul className="mt-2 space-y-1 text-slate-600 pl-4 list-disc text-xs font-mono">
-                          {item.evidence.map((ev: string, evIdx: number) => (
-                            <li key={evIdx}>{ev}</li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
                   </div>
 
-                  {/* Actions / Decision Bar */}
-                  <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[11px] font-mono text-slate-400">
-                        Target ID: <code className="text-slate-600">{item.id}</code>
-                      </span>
-                      {isCustomerUpdate && (
-                        <Link
-                          href={`/engagements/${item.engagement_id}?tab=updates`}
-                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline flex items-center gap-0.5 ml-1.5"
-                        >
-                          <span>Open Update Studio</span>
-                          <ArrowRight className="h-3 w-3" />
-                        </Link>
-                      )}
-                    </div>
-
-                    {role === "MANAGER" ? (
+                  {/* Actions / Decision Bar (Manager role) */}
+                  {role === "MANAGER" && (
+                    <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-end gap-2.5">
                       <div className="flex items-center gap-2 self-stretch sm:self-auto">
                         <button
                           type="button"
@@ -322,13 +288,8 @@ export default function ApprovalsPage() {
                           </span>
                         </button>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
-                        <Lock className="h-3 w-3 text-slate-400" />
-                        <span>Manager authority required to authorize release</span>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })

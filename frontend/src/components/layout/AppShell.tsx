@@ -178,12 +178,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     selectedItemContext,
     isSupervisorDrawerOpen,
     setIsSupervisorDrawerOpen,
-    supervisorInitialQuery
+    supervisorInitialQuery,
+    isWorknoteDrawerOpen,
+    setIsWorknoteDrawerOpen
   } = useEngagement();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const filteredCustomers = customers.filter(c => {
@@ -604,17 +605,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setShowCreateModal(false)}
         />
 
-        {/* Floating Ask CalmWork trigger in bottom-right (Desktop) */}
-        {!isSupervisorDrawerOpen && (
-          <button
-            onClick={() => setIsSupervisorDrawerOpen(true)}
-            className="hidden md:flex fixed bottom-6 right-6 z-40 bg-purple-50/90 hover:bg-purple-100 text-purple-800 border border-purple-200 hover:border-purple-300 font-medium text-xs px-3.5 py-2 rounded-lg items-center gap-2 shadow-sm hover:shadow-md transition cursor-pointer backdrop-blur-xs"
-            title="Open contextual Ask CalmWork Assistant Drawer"
-          >
-            <Sparkles className="h-4 w-4 text-purple-600" />
-            <span>Ask CalmWork</span>
-          </button>
-        )}
 
         {/* Contextual Supervisor Assistant Drawer */}
         {isSupervisorDrawerOpen && (

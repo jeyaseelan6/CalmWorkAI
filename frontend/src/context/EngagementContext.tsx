@@ -64,6 +64,8 @@ interface EngagementContextType {
   openSupervisorWithContext: (opts?: { tab?: string; selectedItem?: string; initialQuery?: string }) => void;
   supervisorInitialQuery: string | null;
   setSupervisorInitialQuery: (q: string | null) => void;
+  isWorknoteDrawerOpen: boolean;
+  setIsWorknoteDrawerOpen: (open: boolean) => void;
   brief: any;
   setBrief: React.Dispatch<React.SetStateAction<any>>;
   briefLoading: boolean;
@@ -90,6 +92,7 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
   const [selectedItemContext, setSelectedItemContext] = useState<string | null>(null);
   const [isSupervisorDrawerOpen, setIsSupervisorDrawerOpen] = useState<boolean>(false);
   const [supervisorInitialQuery, setSupervisorInitialQuery] = useState<string | null>(null);
+  const [isWorknoteDrawerOpen, setIsWorknoteDrawerOpen] = useState<boolean>(false);
   const [brief, setBrief] = useState<any>(null);
   const [briefLoading, setBriefLoading] = useState<boolean>(false);
   const [streamEvent, setStreamEvent] = useState<any>(null);
@@ -585,6 +588,8 @@ export function EngagementProvider({ children }: { children: React.ReactNode }) 
         openSupervisorWithContext,
         supervisorInitialQuery,
         setSupervisorInitialQuery,
+        isWorknoteDrawerOpen,
+        setIsWorknoteDrawerOpen,
         brief,
         setBrief,
         briefLoading,

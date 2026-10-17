@@ -40,6 +40,13 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
   const pathname = usePathname();
   const { customers, activeCustomer, switchEngagement, activeTab } = useEngagement();
   const { isManager } = useAuth();
+  const [tooltip, setTooltip] = React.useState<{
+    title: string;
+    subtitle?: string;
+    badge?: string;
+    isHealthy?: boolean;
+    top: number;
+  } | null>(null);
 
   const handleSwitch = (cust: typeof customers[0]) => {
     switchEngagement(cust);
@@ -61,14 +68,19 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
         <Link
           href="/engagements"
           title="CalmWork AI · All Workspaces"
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setTooltip({
+              title: "Portfolio Hub",
+              subtitle: "All customer engagements",
+              top: rect.top + rect.height / 2
+            });
+          }}
+          onMouseLeave={() => setTooltip(null)}
           className="relative group p-1 flex items-center justify-center focus:outline-none"
         >
           <div className="w-10 h-10 rounded-2xl bg-white text-slate-950 font-display font-black text-base flex items-center justify-center shadow-md transition-all group-hover:rounded-xl group-hover:scale-105">
             C
-          </div>
-          {/* Tooltip */}
-          <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md shadow-xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-            Portfolio Hub
           </div>
         </Link>
 
@@ -77,7 +89,10 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
       </div>
 
       {/* Customer Engagements Stack (Scrollable with hidden scrollbar) */}
-      <div className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar py-1 flex flex-col items-center gap-2.5 min-h-0">
+      <div 
+        onScroll={() => setTooltip(null)}
+        className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar py-1 flex flex-col items-center gap-2.5 min-h-0"
+      >
         {customers.map((cust, idx) => {
           const isActive = cust.id === activeCustomer?.id;
           const isHealthy = cust.status === "HEALTHY";
@@ -101,6 +116,15 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
               <button
                 type="button"
                 onClick={() => handleSwitch(cust)}
+                onMouseEnter={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setTooltip({
+                    title: cust.customerName,
+                    subtitle: cust.engagementName,
+                    top: rect.top + rect.height / 2
+                  });
+                }}
+                onMouseLeave={() => setTooltip(null)}
                 aria-label={`Switch to ${cust.customerName}`}
                 className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${gradient} text-white font-bold text-xs flex items-center justify-center shadow-sm relative transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/50 ${
                   isActive
@@ -120,25 +144,6 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
                   title={isHealthy ? "Healthy" : "Needs Review"}
                 />
               </button>
-
-              {/* Hover Flyout Tooltip */}
-              <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-900 text-white rounded-lg shadow-2xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs text-white">{cust.customerName}</span>
-                  <span
-                    className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                      isHealthy
-                        ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
-                        : "bg-amber-950 text-amber-300 border border-amber-800"
-                    }`}
-                  >
-                    {isHealthy ? "Healthy" : "Needs Review"}
-                  </span>
-                </div>
-                <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
-                  {cust.engagementName}
-                </span>
-              </div>
             </div>
           );
         })}
@@ -149,15 +154,20 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
             <button
               type="button"
               onClick={onOpenCreateModal}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setTooltip({
+                  title: "New Workspace",
+                  subtitle: "Create engagement workspace",
+                  top: rect.top + rect.height / 2
+                });
+              }}
+              onMouseLeave={() => setTooltip(null)}
               title="Create New Workspace"
               className="w-10 h-10 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-dashed border-slate-700/80 hover:border-slate-500 transition-all duration-200 cursor-pointer hover:rounded-xl focus:outline-none"
             >
               <Plus className="h-4 w-4" />
             </button>
-            {/* Tooltip */}
-            <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md shadow-xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-              New Workspace
-            </div>
           </div>
         )}
       </div>
@@ -167,14 +177,48 @@ export default function WorkspaceRail({ onOpenCreateModal }: WorkspaceRailProps)
         <Link
           href="/engagements"
           title="All Workspaces Portfolio"
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setTooltip({
+              title: "Portfolio Grid",
+              subtitle: "All active engagements",
+              top: rect.top + rect.height / 2
+            });
+          }}
+          onMouseLeave={() => setTooltip(null)}
           className="relative group p-2 text-slate-400 hover:text-white hover:bg-slate-900 rounded-xl transition-all cursor-pointer focus:outline-none"
         >
           <LayoutGrid className="h-5 w-5" />
-          <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md shadow-xl border border-slate-800 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-            Portfolio Grid
-          </div>
         </Link>
       </div>
+
+      {/* Floating Hover Tooltip (Escapes all overflow clipping) */}
+      {tooltip && (
+        <div
+          style={{ top: tooltip.top }}
+          className="fixed left-16 -translate-y-1/2 ml-2.5 px-3 py-1.5 bg-slate-900 text-white rounded-lg shadow-2xl border border-slate-800 whitespace-nowrap pointer-events-none z-50 flex flex-col gap-0.5 animate-fadeIn"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-xs text-white">{tooltip.title}</span>
+            {tooltip.badge && (
+              <span
+                className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                  tooltip.isHealthy
+                    ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                    : "bg-amber-950 text-amber-300 border border-amber-800"
+                }`}
+              >
+                {tooltip.badge}
+              </span>
+            )}
+          </div>
+          {tooltip.subtitle && (
+            <span className="text-[10px] text-slate-400 truncate max-w-[200px]">
+              {tooltip.subtitle}
+            </span>
+          )}
+        </div>
+      )}
     </nav>
   );
 }

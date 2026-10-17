@@ -879,7 +879,6 @@ export default function AskCalmWorkChat({
             <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">KNOW</span>
             <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">MOVE</span>
             <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">DELIVER</span>
-            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">SUPPORT</span>
           </div>
 
           <button
@@ -1302,17 +1301,6 @@ export default function AskCalmWorkChat({
                   )}
                 </div>
 
-                {/* Capabilities Used */}
-                {!isUser && m.capabilitiesUsed && m.capabilitiesUsed.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] pl-1">
-                    <span className="font-mono text-slate-400">Capabilities:</span>
-                    {m.capabilitiesUsed.map((cap) => (
-                      <span key={cap} className="px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded font-mono font-semibold">
-                        {cap}
-                      </span>
-                    ))}
-                  </div>
-                )}
 
                 {/* Grounded Knowledge Sources */}
                 {!isUser && m.sources && m.sources.length > 0 && (
