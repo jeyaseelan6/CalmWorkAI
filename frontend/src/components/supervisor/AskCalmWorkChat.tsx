@@ -575,12 +575,12 @@ export default function AskCalmWorkChat({
       badge_label: "Universal Orchestrator",
       color: "slate"
     },
-    capabilitiesUsed: ["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
+    capabilitiesUsed: ["PLAN", "KNOW", "MOVE", "SUPPORT"],
     suggestedFollowups: [
       "What changed today in scope & work plan?",
       "What should I do next? (Next action)",
       "What is the technical architecture & specs?",
-      "Draft an executive customer update."
+      "Give me a 360 overview."
     ],
     timestamp: getNowISTTime(true)
   };
@@ -608,8 +608,14 @@ export default function AskCalmWorkChat({
       .then((res) => res.json())
       .then((data) => {
         if (!isCancelled && data.success && Array.isArray(data.data) && data.data.length > 0) {
-          workspaceChatMemoryCache[targetEngagementId] = data.data;
-          setMessages(data.data);
+          const sanitized = data.data.map((msg: ChatMessage) => ({
+            ...msg,
+            suggestedFollowups: (msg.suggestedFollowups || []).filter(
+              (f: string) => !f.toLowerCase().includes("customer update") && !f.toLowerCase().includes("customer report") && !f.toLowerCase().includes("deliver agent")
+            )
+          }));
+          workspaceChatMemoryCache[targetEngagementId] = sanitized;
+          setMessages(sanitized);
         }
       })
       .catch((err) => {
@@ -827,7 +833,9 @@ export default function AskCalmWorkChat({
             delegatedAgent: delegated,
             capabilitiesUsed: data.data.capabilities_used,
             sources: data.data.sources,
-            suggestedFollowups: data.data.suggested_followups,
+            suggestedFollowups: (data.data.suggested_followups || []).filter(
+              (f: string) => !f.toLowerCase().includes("customer update") && !f.toLowerCase().includes("customer report") && !f.toLowerCase().includes("deliver agent")
+            ),
             customerUpdate: data.data.customer_update,
             timestamp: getNowISTTime(true)
           };
@@ -884,7 +892,6 @@ export default function AskCalmWorkChat({
             <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">PLAN</span>
             <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">KNOW</span>
             <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">MOVE</span>
-            <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">DELIVER</span>
           </div>
 
           <button
@@ -1305,7 +1312,21 @@ export default function AskCalmWorkChat({
                       </div>
                     </div>
                   ) : (
-                    <FormattedMessageBody rawText={m.text} />
+                    <>
+                      <FormattedMessageBody rawText={m.text} />
+                      {!isUser && (m.text.includes("Deliver Agent") && (m.text.includes("Customer Reports") || m.text.includes("Update Studio") || m.text.includes("Updates") || m.text.includes("stakeholder communications"))) && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-xs text-slate-600 font-medium">Ready to review or draft customer reports?</span>
+                          <a
+                            href={`/engagements/${targetEngagementId}?tab=updates`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-semibold shadow-xs transition cursor-pointer"
+                          >
+                            <span>Open Deliver Agent</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1346,25 +1367,31 @@ export default function AskCalmWorkChat({
                 )}
 
                 {/* Dynamic Suggested Follow-ups */}
-                {!isUser && m.suggestedFollowups && m.suggestedFollowups.length > 0 && (
-                  <div className="pt-1.5 pl-1 space-y-1">
-                    <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider block">
-                      Suggested Follow-Ups:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.suggestedFollowups.map((followUp, fIdx) => (
-                        <button
-                          key={fIdx}
-                          onClick={() => handleSend(followUp)}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-700 rounded-full text-[10px] transition font-medium flex items-center gap-1 shadow-2xs cursor-pointer"
-                        >
-                          <span>{followUp}</span>
-                          <ArrowRight className="h-2.5 w-2.5 text-slate-400" />
-                        </button>
-                      ))}
+                {!isUser && m.suggestedFollowups && m.suggestedFollowups.length > 0 && (() => {
+                  const visibleFollowups = m.suggestedFollowups.filter(
+                    (f) => !f.toLowerCase().includes("customer update") && !f.toLowerCase().includes("customer report") && !f.toLowerCase().includes("deliver agent")
+                  );
+                  if (visibleFollowups.length === 0) return null;
+                  return (
+                    <div className="pt-1.5 pl-1 space-y-1">
+                      <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider block">
+                        Suggested Follow-Ups:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {visibleFollowups.map((followUp, fIdx) => (
+                          <button
+                            key={fIdx}
+                            onClick={() => handleSend(followUp)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-700 rounded-full text-[10px] transition font-medium flex items-center gap-1 shadow-2xs cursor-pointer"
+                          >
+                            <span>{followUp}</span>
+                            <ArrowRight className="h-2.5 w-2.5 text-slate-400" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {isUser && (

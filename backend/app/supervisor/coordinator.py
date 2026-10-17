@@ -339,6 +339,16 @@ class SupervisorCoordinator:
         now_ist_str = get_current_ist_str()
         time_rule = f"{UNIVERSAL_AGENT_INVARIANTS}\n\nCURRENT PLATFORM TIME: {now_ist_str}"
 
+        DELIVER_TRIGGERS = [
+            "customer update", "client update", "stakeholder update", "prepare an update",
+            "prepare update", "draft update", "draft an update", "tell the customer",
+            "share with the client", "email update", "status memo", "email to the customer",
+            "email to client", "release notes", "executive brief", "executive summary",
+            "external communication", "sign-off request", "completion report", "progress memo",
+            "weekly summary", "status report", "customer report", "customer reports",
+            "client report", "executive report", "executive update", "deliver agent"
+        ]
+
         intent = None
         if groq_service.is_configured() or is_live_inference_enabled():
             classification_prompt = (
@@ -352,12 +362,12 @@ class SupervisorCoordinator:
                 f"1. MOVE: 'Tell me what action to take right now, who needs to unblock what, today's priorities, or execution velocity.'\n"
                 f"2. PLAN: 'Inquire about or modify delivery plans, project milestones, scope changes, what changed today, roadmap phasing, work breakdowns, or Definition of Done.'\n"
                 f"3. KNOW: 'Retrieve a factual, technical, or architecture answer from technical specifications, codebase, schemas, runbooks, or past notes.'\n"
-                f"4. DELIVER: 'Draft or format a communication to be sent outside to stakeholders, clients, or executives.'\n"
-                f"5. SUPPORT: Production incident diagnosis, bug triage, stack traces, crash logs, or screenshot diagnostics.\n"
-                f"6. MULTI_AGENT: 'Give me a high-level 360-degree executive snapshot of where everything stands.'\n"
-                f"7. SUPERVISOR: Unrelated conversational messages, personal remarks, romantic statements, greetings, pleasantries, off-topic chat, or out-of-scope inquiries (e.g., 'I love you', 'hello', 'who are you', 'how are you doing', 'tell me a joke', 'what's the weather').\n\n"
+                f"4. SUPPORT: Production incident diagnosis, bug triage, stack traces, crash logs, or screenshot diagnostics.\n"
+                f"5. MULTI_AGENT: 'Give me a high-level 360-degree executive snapshot of where everything stands.'\n"
+                f"6. SUPERVISOR: Customer reports, executive updates, client communication requests, conversational messages, personal remarks, greetings, pleasantries, off-topic chat, or out-of-scope inquiries.\n"
+                f"NOTE: Supervisor does NOT route directly to a Deliver agent. If the user asks about customer reports, executive updates, or external communications, classify as SUPERVISOR so the Supervisor can direct the user to the dedicated Deliver Agent.\n\n"
                 f"User Message: \"{clean_query or sanitized_query}\"\n\n"
-                f"Return ONLY the single word category name: MOVE, PLAN, KNOW, DELIVER, SUPPORT, MULTI_AGENT, or SUPERVISOR."
+                f"Return ONLY the single word category name: MOVE, PLAN, KNOW, SUPPORT, MULTI_AGENT, or SUPERVISOR."
             )
             try:
                 raw_cat = groq_service.generate_chat_completion(
@@ -617,68 +627,18 @@ class SupervisorCoordinator:
                 answer = "\n".join(parts)
 
         elif intent == "DELIVER":
-            handover_banner = "📢 **[Handed over to DELIVER Agent — Stakeholder Communications]**\n\n"
-
-            try:
-                customer_update_draft = self.deliver_agent.generate_customer_update(
-                    engagement_id=engagement_id,
-                    customer_name=customer_name,
-                    engagement_name=customer_name,
-                    outcome_statement=outcome_statement,
-                    success_criteria=crit_items,
-                    current_work_cycle=current_work_cycle
-                )
-            except Exception as e:
-                logger.warning(f"DELIVER Agent draft generation error: {e}")
-                customer_update_draft = CustomerUpdateDraft(
-                    engagement_id=engagement_id,
-                    customer_name=customer_name,
-                    format_type="EXECUTIVE_SUMMARY",
-                    subject=f"Customer Update: {customer_name}",
-                    executive_summary=f"Engineering progress update for {customer_name}. Core delivery objectives for {current_work_cycle} are on track.",
-                    key_milestones_achieved=[c.get("title", "") for c in crit_items if c.get("completed")] or ["Project delivery milestone achieved according to specifications"],
-                    next_milestone_target="Next milestone target scheduled for review.",
-                    customer_action_items=["Review milestone outcomes and provide confirmation."],
-                    status="DRAFT",
-                    generated_at=datetime.now(IST_TZ).isoformat(),
-                    privacy_scrubbed=True,
-                    approval_required=True
-                )
-
-            if not customer_update_draft.executive_summary:
-                customer_update_draft.executive_summary = (
-                    f"Engineering progress update for {customer_name}. Core delivery objectives for {current_work_cycle} are on track."
-                )
-            if not customer_update_draft.key_milestones_achieved:
-                customer_update_draft.key_milestones_achieved = (
-                    [c.get("title", "") for c in crit_items if c.get("completed")]
-                    or ["Baseline discovery and core architectural setup underway"]
-                )
-            if not customer_update_draft.next_milestone_target:
-                customer_update_draft.next_milestone_target = (
-                    [c.get("title", "") for c in crit_items if not c.get("completed")][0]
-                    if any(not c.get("completed") for c in crit_items)
-                    else "Upcoming milestone deliverables"
-                )
-            if not customer_update_draft.customer_action_items:
-                customer_update_draft.customer_action_items = [
-                    "Review progress update and confirm milestone alignment with engineering team."
-                ]
-
-            parts = [
-                f"### {customer_update_draft.subject}\n",
-                f"**Executive Summary**:\n{customer_update_draft.executive_summary}\n",
-                "**Key Milestones Achieved**:"
-            ]
-            for m in customer_update_draft.key_milestones_achieved:
-                parts.append(f"- {m}")
-            parts.append(f"\n**Next Milestone Target**: {customer_update_draft.next_milestone_target}")
-            if customer_update_draft.customer_action_items:
-                parts.append("\n**Customer Action Items**:")
-                for a in customer_update_draft.customer_action_items:
-                    parts.append(f"- {a}")
-            parts.append("\n*Note: Customer updates can be modified and submitted for Manager approval. Once approved, the report can be previewed or printed by either the Manager or FDE.*")
-            answer = "\n".join(parts)
+            handover_banner = ""
+            customer_update_draft = None
+            answer = (
+                f"📢 **Please use the Deliver Agent for Customer Reports**\n\n"
+                f"Customer reports, executive updates, and stakeholder communications are managed exclusively by the dedicated **Deliver Agent**.\n\n"
+                f"To draft, review, or submit a customer report for **{customer_name}**:\n"
+                f"1. Open the **Deliver (Updates)** tab in your workspace navigation.\n"
+                f"2. In the **Update Studio**, the **Deliver Agent** automatically compiles verified milestone achievements, upcoming targets, and customer action items with strict DLP privacy protections.\n"
+                f"3. You can review, refine, and customize the draft directly in the studio, then click **Submit for Manager Approval**.\n"
+                f"4. Once authorized by your Engineering Manager, you can export, download, or print the verified executive document.\n\n"
+                f"*CalmWork governance strictly isolates customer-facing deliverables inside the Deliver Agent to guarantee auditability and ensure manager sign-off prior to external release.*"
+            )
 
         elif intent == "KNOW":
             handover_banner = "📚 **[Handed over to KNOW Agent — Grounded Technical Documentation & Engagement Intelligence]**\n\n"
@@ -722,55 +682,69 @@ class SupervisorCoordinator:
         elif intent == "SUPERVISOR":
             handover_banner = ""
 
-            llm_response = None
-            if groq_service.is_configured() or is_live_inference_enabled():
-                supervisor_prompt = (
-                    f"You are the CalmWork Supervisor Agent, the central orchestrator for the {customer_name} delivery workspace.\n\n"
-                    f"{time_rule}\n\n"
-                    f"The user sent an off-topic, conversational, personal, or greeting message in the workspace chat:\n"
-                    f"User Message: \"{clean_query or sanitized_query}\"\n\n"
-                    f"Instructions:\n"
-                    f"1. Respond politely, warmly, and professionally.\n"
-                    f"2. If it is a personal statement like 'I love you', acknowledge it kindly with warmth and gentle boundaries (e.g., 'Thank you! That is very kind of you, but I am an AI delivery orchestrator dedicated to helping your team with {customer_name}.'). If it is a greeting, greet them warmly.\n"
-                    f"3. Clearly and concisely summarize how you and your specialist agents can help with {customer_name}:\n"
-                    f"   - **MOVE Agent**: Determine next best actions, daily focus, and clear blockers.\n"
-                    f"   - **PLAN Agent**: Milestone progress, scope changes, and Definition of Done.\n"
-                    f"   - **KNOW Agent**: Search verified technical architecture, runbooks, and meeting notes.\n"
-                    f"   - **DELIVER Agent**: Draft executive communications and customer updates.\n"
-                    f"   - **SUPPORT Agent**: Investigate production errors, logs, and screenshots.\n"
-                    f"   - **360° Operational Briefing**: Comprehensive executive status overview.\n"
-                    f"4. Invite the user to ask how they would like to proceed with the engagement.\n"
-                    f"Keep the tone calm, concise, and helpful. Use clean Markdown without HTML tags."
-                )
-                try:
-                    llm_response = groq_service.generate_chat_completion(
-                        prompt=supervisor_prompt,
-                        system_instruction="You are the CalmWork Supervisor. Respond warmly, politely, and guide the user on how you can assist with their workspace delivery.",
-                        max_tokens=600
-                    )
-                except Exception as e:
-                    logger.debug(f"SUPERVISOR LLM call fallback: {e}")
-
-            if llm_response:
-                answer = llm_response.strip()
-            else:
-                greeting_ack = "Thank you! I appreciate you reaching out."
-                if any(w in q_clean_lower for w in ["love", "like", "marry", "crush"]):
-                    greeting_ack = "Thank you! That is very kind of you, but I am an AI delivery orchestrator focused on helping your team succeed."
-                elif any(w in q_clean_lower for w in ["hi", "hello", "hey", "morning", "afternoon", "evening"]):
-                    greeting_ack = f"Hello! Welcome to the **{customer_name}** workspace."
-
+            # If user explicitly asked about customer reports or updates
+            if any(term in q_clean_lower for term in DELIVER_TRIGGERS):
                 answer = (
-                    f"{greeting_ack}\n\n"
-                    f"As the **CalmWork Supervisor**, I coordinate our specialist AI agents to keep your engineering delivery calm, aligned, and on track for **{customer_name}**:\n\n"
-                    f"- ⚡ **MOVE Agent**: Operational velocity — ask *\"What should I do next?\"* or *\"Why is production blocked?\"*\n"
-                    f"- 🎯 **PLAN Agent**: Delivery roadmap — ask *\"What changed today?\"* or *\"Show current Definition of Done\"*\n"
-                    f"- 📚 **KNOW Agent**: Grounded specs — ask about architecture, runbooks, or past meeting decisions.\n"
-                    f"- 📢 **DELIVER Agent**: Communications — ask *\"Prepare a customer update\"* to generate stakeholder memos.\n"
-                    f"- 🛠️ **SUPPORT Agent**: Issue triage — paste error logs or attach screenshots for diagnostic analysis.\n"
-                    f"- 🌐 **360° Operational Briefing**: Ask *\"Give me a 360 overview\"* for a complete status summary.\n\n"
-                    f"How can I help you move the engagement forward today?"
+                    f"📢 **Please use the Deliver Agent for Customer Reports**\n\n"
+                    f"Customer reports, executive updates, and stakeholder communications are managed exclusively by the dedicated **Deliver Agent**.\n\n"
+                    f"To draft, review, or submit a customer report for **{customer_name}**:\n"
+                    f"1. Open the **Deliver (Updates)** tab in your workspace navigation.\n"
+                    f"2. In the **Update Studio**, the **Deliver Agent** automatically compiles verified milestone achievements, upcoming targets, and customer action items with strict DLP privacy protections.\n"
+                    f"3. You can review, refine, and customize the draft directly in the studio, then click **Submit for Manager Approval**.\n"
+                    f"4. Once authorized by your Engineering Manager, you can export, download, or print the verified executive document.\n\n"
+                    f"*CalmWork governance strictly isolates customer-facing deliverables inside the Deliver Agent to guarantee auditability and ensure manager sign-off prior to external release.*"
                 )
+            else:
+                llm_response = None
+                if groq_service.is_configured() or is_live_inference_enabled():
+                    supervisor_prompt = (
+                        f"You are the CalmWork Supervisor Agent, the central orchestrator for the {customer_name} delivery workspace.\n\n"
+                        f"{time_rule}\n\n"
+                        f"The user sent a message in the workspace chat:\n"
+                        f"User Message: \"{clean_query or sanitized_query}\"\n\n"
+                        f"Instructions:\n"
+                        f"1. Respond politely, warmly, and professionally.\n"
+                        f"2. If it is a personal statement like 'I love you', acknowledge it kindly with warmth and gentle boundaries. If it is a greeting, greet them warmly.\n"
+                        f"3. If the user asks about customer reports, executive updates, or external communications, explicitly tell them to use the dedicated **Deliver Agent** in the **Deliver (Updates)** tab (Explain that the Supervisor does not draft or approve customer reports directly to preserve governance and manager sign-off).\n"
+                        f"4. Clearly and concisely summarize how you and your specialist agents can help with {customer_name}:\n"
+                        f"   - **MOVE Agent**: Determine next best actions, daily focus, and clear blockers.\n"
+                        f"   - **PLAN Agent**: Milestone progress, scope changes, and Definition of Done.\n"
+                        f"   - **KNOW Agent**: Search verified technical architecture, runbooks, and meeting notes.\n"
+                        f"   - **SUPPORT Agent**: Investigate production errors, logs, and screenshots.\n"
+                        f"   - **Deliver Agent**: Dedicated tab for preparing, editing, and submitting executive customer updates for manager approval.\n"
+                        f"   - **360° Operational Briefing**: Comprehensive executive status overview.\n"
+                        f"5. Invite the user to ask how they would like to proceed with the engagement.\n"
+                        f"Keep the tone calm, concise, and helpful. Use clean Markdown without HTML tags."
+                    )
+                    try:
+                        llm_response = groq_service.generate_chat_completion(
+                            prompt=supervisor_prompt,
+                            system_instruction="You are the CalmWork Supervisor. Respond warmly, politely, and guide the user on how you can assist with their workspace delivery.",
+                            max_tokens=600
+                        )
+                    except Exception as e:
+                        logger.debug(f"SUPERVISOR LLM call fallback: {e}")
+
+                if llm_response:
+                    answer = llm_response.strip()
+                else:
+                    greeting_ack = "Thank you! I appreciate you reaching out."
+                    if any(w in q_clean_lower for w in ["love", "like", "marry", "crush"]):
+                        greeting_ack = "Thank you! That is very kind of you, but I am an AI delivery orchestrator focused on helping your team succeed."
+                    elif any(w in q_clean_lower for w in ["hi", "hello", "hey", "morning", "afternoon", "evening"]):
+                        greeting_ack = f"Hello! Welcome to the **{customer_name}** workspace."
+
+                    answer = (
+                        f"{greeting_ack}\n\n"
+                        f"As the **CalmWork Supervisor**, I coordinate our specialist AI agents to keep your engineering delivery calm, aligned, and on track for **{customer_name}**:\n\n"
+                        f"- ⚡ **MOVE Agent**: Operational velocity — ask *\"What should I do next?\"* or *\"Why is production blocked?\"*\n"
+                        f"- 🎯 **PLAN Agent**: Delivery roadmap — ask *\"What changed today?\"* or *\"Show current Definition of Done\"*\n"
+                        f"- 📚 **KNOW Agent**: Grounded specs — ask about architecture, runbooks, or past meeting decisions.\n"
+                        f"- 🛠️ **SUPPORT Agent**: Issue triage — paste error logs or attach screenshots for diagnostic analysis.\n"
+                        f"- 📢 **Deliver Agent**: Customer reports & memos — manage, review, and submit executive updates directly in the **Deliver (Updates)** tab.\n"
+                        f"- 🌐 **360° Operational Briefing**: Ask *\"Give me a 360 overview\"* for a complete status summary.\n\n"
+                        f"How can I help you move the engagement forward today?"
+                    )
 
         else:  # MULTI_AGENT
             parts = [
@@ -817,13 +791,13 @@ class SupervisorCoordinator:
             suggested_followups = [
                 "What approvals are currently pending?",
                 "Show active tasks in work plan",
-                "Prepare a customer update"
+                "Search technical runbooks with KNOW"
             ]
         elif intent == "DELIVER":
             suggested_followups = [
-                "Submit update for Manager approval",
-                "Download executive summary PDF",
-                "What should I do next?"
+                "What should I do next?",
+                "Give me a 360 overview",
+                "What changed today in scope & work plan?"
             ]
         elif intent == "KNOW":
             suggested_followups = [
@@ -841,8 +815,14 @@ class SupervisorCoordinator:
             suggested_followups = [
                 "What changed today?",
                 "What should I do next?",
-                "Prepare a customer update"
+                "Give me a 360 overview"
             ]
+
+        # Strictly filter out any customer update or deliver agent suggestions from supervisor chat
+        suggested_followups = [
+            f for f in suggested_followups
+            if "customer update" not in f.lower() and "customer report" not in f.lower() and "deliver agent" not in f.lower()
+        ]
 
         # 7. Delegated Specialist Agent Metadata
         agent_directory = {

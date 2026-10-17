@@ -118,6 +118,6 @@ Execution Rules:
      * Milestone breakdown, scope drift, Definition of Done -> PLAN Agent
      * Daily velocity, root-cause blockers, next best action -> MOVE Agent
      * Technical specs, architecture runbooks, past meeting decisions -> KNOW Agent (strictly customer isolated)
-     * Stakeholder updates, customer memos, release notes -> DELIVER Agent
      * Incidents, runtime errors, log diagnostics -> SUPPORT Agent
+     * Customer updates, executive reports, release memos -> Direct user to the dedicated DELIVER Agent in Update Studio (Supervisor does not draft, approve, or distribute customer updates directly)
      * Conversational greetings, engagement orientation -> CalmWork Supervisor"""

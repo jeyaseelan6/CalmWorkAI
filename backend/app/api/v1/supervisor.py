@@ -69,12 +69,12 @@ def get_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db
                 "badge_label": "Universal Orchestrator",
                 "color": "slate"
             },
-            capabilities_used=["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
+            capabilities_used=["PLAN", "KNOW", "MOVE", "SUPPORT"],
             suggested_followups=[
                 "What changed today in scope & work plan?",
                 "What should I do next? (Next action)",
                 "What is the technical architecture & specs?",
-                "Draft an executive customer update."
+                "Give me a 360 overview."
             ],
             created_at=datetime.utcnow()
         )
@@ -86,6 +86,11 @@ def get_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db
     serialized = []
     for m in messages:
         user_clean_text = re.sub(r"^\[Context:[^\]]*\]\s*", "", m.text or "").strip() if m.sender == "USER" else m.text
+        raw_followups = m.suggested_followups or []
+        filtered_followups = [
+            f for f in raw_followups
+            if "customer update" not in f.lower() and "customer report" not in f.lower() and "deliver agent" not in f.lower()
+        ]
         serialized.append({
             "id": m.id,
             "sender": m.sender,
@@ -94,7 +99,7 @@ def get_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db
             "delegatedAgent": m.delegated_agent,
             "capabilitiesUsed": m.capabilities_used or [],
             "sources": m.sources or [],
-            "suggestedFollowups": m.suggested_followups or [],
+            "suggestedFollowups": filtered_followups,
             "screenshotPreview": m.screenshot_preview,
             "supportResult": m.support_result,
             "customerUpdate": m.customer_update,
@@ -132,12 +137,12 @@ def clear_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_
             "badge_label": "Universal Orchestrator",
             "color": "slate"
         },
-        capabilities_used=["PLAN", "KNOW", "MOVE", "DELIVER", "SUPPORT"],
+        capabilities_used=["PLAN", "KNOW", "MOVE", "SUPPORT"],
         suggested_followups=[
             "What changed today in scope & work plan?",
             "What should I do next? (Next action)",
             "What is the technical architecture & specs?",
-            "Draft an executive customer update."
+            "Give me a 360 overview."
         ],
         created_at=datetime.utcnow()
     )
@@ -247,28 +252,6 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
         customer_update=cu_payload,
         created_at=datetime.utcnow()
     ))
-
-    # If DELIVER agent generated a customer update draft in chat, sync to pending approval
-    if cu_payload:
-        existing_appr = db.query(Approval).filter(
-            Approval.engagement_id == engagement_id,
-            Approval.type == ApprovalType.CUSTOMER_UPDATE,
-            Approval.status == ApprovalStatus.PENDING
-        ).first()
-        if existing_appr:
-            existing_appr.decision_note = json.dumps(cu_payload)
-        else:
-            new_appr = Approval(
-                id=f"appr-cu-{uuid.uuid4().hex[:8]}",
-                engagement_id=engagement_id,
-                type=ApprovalType.CUSTOMER_UPDATE,
-                target_id=engagement_id,
-                status=ApprovalStatus.PENDING,
-                requested_by="FDE (DELIVER Agent)",
-                decision_note=json.dumps(cu_payload),
-                created_at=datetime.utcnow()
-            )
-            db.add(new_appr)
 
     db.commit()
 
@@ -508,7 +491,7 @@ def investigate_support_incident(
         suggested_followups=[
             "Explain root cause hypothesis",
             "Show recommended triage steps",
-            "Draft customer incident update"
+            "What is the recommended runbook fix?"
         ],
         created_at=datetime.utcnow()
     ))

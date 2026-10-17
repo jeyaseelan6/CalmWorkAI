@@ -261,10 +261,24 @@ def respond_to_specific_approval(
     if payload.action == "APPROVE":
         appr.status = ApprovalStatus.APPROVED
         appr.reviewed_by = manager_name
-        appr.decision_note = decision_note
         appr.reviewed_at = datetime.utcnow()
 
         if appr.type == ApprovalType.CUSTOMER_UPDATE:
+            # Preserve customer update draft JSON if present, updating status inside
+            if appr.decision_note:
+                try:
+                    d = json.loads(appr.decision_note)
+                    if isinstance(d, dict) and "subject" in d:
+                        d["status"] = "APPROVED"
+                        d["approved_by"] = manager_name
+                        appr.decision_note = json.dumps(d)
+                    else:
+                        appr.decision_note = decision_note
+                except Exception:
+                    appr.decision_note = decision_note
+            else:
+                appr.decision_note = decision_note
+
             db.add(TimelineEvent(
                 id=f"evt-{uuid.uuid4().hex[:8]}",
                 engagement_id=appr.engagement_id,
@@ -276,6 +290,7 @@ def respond_to_specific_approval(
                 created_at=datetime.utcnow()
             ))
         elif appr.type == ApprovalType.OUTCOME_CHANGE:
+            appr.decision_note = decision_note
             if eng:
                 outcome_service = OutcomeService(db)
                 current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()

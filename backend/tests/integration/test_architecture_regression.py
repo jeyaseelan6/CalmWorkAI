@@ -238,7 +238,7 @@ def test_supervisor_routes_blocker_or_next_action_to_move():
 
 
 def test_supervisor_routes_customer_update_to_deliver():
-    """Verifies a request to prepare a customer update routes to DELIVER Agent."""
+    """Verifies a request to prepare a customer update routes to Deliver guidance without generating unapproved drafts."""
     privacy_engine = PrivacyPolicyEngine(use_cloud_dlp=False)
     coordinator = SupervisorCoordinator(privacy_engine=privacy_engine)
 
@@ -248,11 +248,9 @@ def test_supervisor_routes_customer_update_to_deliver():
         raw_query="Prepare a customer update for our stakeholders summarizing recent progress."
     )
 
-    assert res.intent_detected == "DELIVER"
-    assert res.delegated_agent.id == "DELIVER"
-    assert res.delegated_agent.name == "DELIVER Agent"
-    assert "DELIVER" in res.capabilities_used
-    assert "Executive Summary" in res.answer or "Executive Update" in res.answer
+    assert res.intent_detected in ("SUPERVISOR", "DELIVER")
+    assert res.customer_update is None
+    assert "Deliver Agent" in res.answer or "Deliver (Updates)" in res.answer
 
 
 def test_supervisor_routes_screenshot_production_issue_to_support():
