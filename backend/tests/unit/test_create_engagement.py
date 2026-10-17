@@ -358,3 +358,74 @@ def test_fde_cannot_delete_engagement():
     assert cleanup_res.status_code == 200
 
 
+def test_fde_can_modify_and_submit_customer_update_for_approval():
+    """FDE can create, modify, and submit customer update report for manager approval; after approval both can download."""
+    mgr_token = create_access_token({"sub": "manager@calmwork.ai", "role": "MANAGER"})
+    fde_token = create_access_token({"sub": "fde@calmwork.ai", "role": "FDE"})
+    mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
+    fde_headers = {"Authorization": f"Bearer {fde_token}"}
+
+    # 1. Manager creates engagement
+    eng_res = client.post("/api/v1/engagements", json={
+        "customer_name": "Hooli Corp",
+        "name": "Nucleus Delivery"
+    }, headers=mgr_headers)
+    eng_id = eng_res.json()["data"]["id"]
+
+    try:
+        # 2. FDE submits a custom/modified customer update report
+        submit_res = client.post(
+            f"/api/v1/engagements/{eng_id}/customer-updates/submit",
+            headers=fde_headers,
+            json={
+                "subject": "Executive Update: Hooli Nucleus Migration",
+                "executive_summary": "FDE completed phase 1 migration. Key data pipelines migrated.",
+                "key_milestones_achieved": [
+                    "Database schema replicated with zero downtime",
+                    "Telemetry pipelines validated"
+                ],
+                "next_milestone_target": "Cutover traffic on Tuesday 18:00 IST",
+                "customer_action_items": [
+                    "Approve security cert update in client portal"
+                ]
+            }
+        )
+        assert submit_res.status_code == 200
+        assert submit_res.json()["success"] is True
+        assert submit_res.json()["data"]["status"] == "PENDING_MANAGER_APPROVAL"
+
+        # 3. Before manager approval, PDF export is not authorized (403)
+        pdf_check_before = client.get(
+            f"/api/v1/engagements/{eng_id}/customer-updates/pdf-status",
+            headers=fde_headers
+        )
+        assert pdf_check_before.status_code == 403
+
+        # 4. Manager reviews and approves the report
+        approve_res = client.post(
+            f"/api/v1/engagements/{eng_id}/customer-updates/approve",
+            headers=mgr_headers,
+            json={"action": "APPROVE", "decision_note": "Executive report approved for client"}
+        )
+        assert approve_res.status_code == 200
+        assert approve_res.json()["data"]["approved"] is True
+
+        # 5. After approval, BOTH FDE and Manager can download / view PDF status
+        fde_pdf = client.get(
+            f"/api/v1/engagements/{eng_id}/customer-updates/pdf-status",
+            headers=fde_headers
+        )
+        assert fde_pdf.status_code == 200
+        assert fde_pdf.json()["data"]["pdf_authorized"] is True
+
+        mgr_pdf = client.get(
+            f"/api/v1/engagements/{eng_id}/customer-updates/pdf-status",
+            headers=mgr_headers
+        )
+        assert mgr_pdf.status_code == 200
+        assert mgr_pdf.json()["data"]["pdf_authorized"] is True
+    finally:
+        # Cleanup
+        client.delete(f"/api/v1/engagements/{eng_id}", headers=mgr_headers)
+
+

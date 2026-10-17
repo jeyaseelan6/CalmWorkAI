@@ -23,5 +23,6 @@ class WorkspaceChatMessage(Base):
     suggested_followups = Column(JSON, nullable=True)  # ["What changed today?", ...]
     screenshot_preview = Column(Text, nullable=True)  # Optional data URL or storage ref
     support_result = Column(JSON, nullable=True)  # Structured diagnostic payload
+    customer_update = Column(JSON, nullable=True)  # Structured executive customer update payload
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

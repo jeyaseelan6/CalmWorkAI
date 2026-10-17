@@ -21,6 +21,7 @@ from app.api.deps import plan_agent, move_agent, deliver_agent, understand_agent
 from app.api.schemas import (
     ChangeAnalysisRequest,
     GenerateCustomerUpdateRequest,
+    SubmitCustomerUpdateRequest,
     ApprovalResponseRequest
 )
 
@@ -188,7 +189,87 @@ def generate_customer_update(
     return {
         "success": True,
         "data": draft.model_dump(),
-        "message": "DELIVER Agent customer update draft generated successfully. Pending Manager Approval."
+        "message": "DELIVER Agent customer update draft generated successfully. Ready for review or submission."
+    }
+
+
+@router.post("/engagements/{engagement_id}/customer-updates/submit", tags=["Delivery"])
+def submit_customer_update(
+    engagement_id: str,
+    payload: SubmitCustomerUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(require_role(["MANAGER", "FDE"]))
+):
+    """FDE or Manager submits or re-submits a modified customer update report for Manager approval."""
+    eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+    if not eng:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    user_role = current_user.get("role", "FDE")
+    actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
+
+    # Invalidate any previously approved record so modified report must be approved anew
+    old_approved = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE,
+        Approval.status == ApprovalStatus.APPROVED
+    ).all()
+    for o in old_approved:
+        o.status = ApprovalStatus.SUPERSEDED
+
+    # Ensure a pending approval exists for this engagement
+    existing_pending = db.query(Approval).filter(
+        Approval.engagement_id == engagement_id,
+        Approval.type == ApprovalType.CUSTOMER_UPDATE,
+        Approval.status == ApprovalStatus.PENDING
+    ).first()
+
+    if existing_pending:
+        existing_pending.requested_by = f"{user_role} ({actor_name})"
+        existing_pending.created_at = datetime.utcnow()
+        approval_id = existing_pending.id
+    else:
+        approval_id = f"appr-cu-{uuid.uuid4().hex[:8]}"
+        new_appr = Approval(
+            id=approval_id,
+            engagement_id=engagement_id,
+            type=ApprovalType.CUSTOMER_UPDATE,
+            target_id=engagement_id,
+            status=ApprovalStatus.PENDING,
+            requested_by=f"{user_role} ({actor_name})",
+            created_at=datetime.utcnow()
+        )
+        db.add(new_appr)
+
+    db.add(TimelineEvent(
+        id=f"evt-{uuid.uuid4().hex[:8]}",
+        engagement_id=engagement_id,
+        event_type="CUSTOMER_UPDATE_SUBMITTED",
+        title="Executive Customer Report Submitted for Approval",
+        description=f"{user_role} ({actor_name}) submitted report '{payload.subject}' for Manager approval.",
+        actor_type=user_role,
+        actor_id=current_user.get("id", "usr-fde-001"),
+        created_at=datetime.utcnow()
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "engagement_id": engagement_id,
+            "approval_id": approval_id,
+            "status": "PENDING_MANAGER_APPROVAL",
+            "subject": payload.subject,
+            "executive_summary": payload.executive_summary,
+            "key_milestones_achieved": payload.key_milestones_achieved,
+            "next_milestone_target": payload.next_milestone_target,
+            "customer_action_items": payload.customer_action_items,
+            "format_type": payload.format_type,
+            "privacy_scrubbed": payload.privacy_scrubbed,
+            "submitted_by": f"{user_role} ({actor_name})",
+            "submitted_at": datetime.utcnow().isoformat()
+        },
+        "message": "Customer update report submitted for Manager approval successfully."
     }
 
 

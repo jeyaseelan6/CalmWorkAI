@@ -17,11 +17,30 @@ import {
   CheckCircle2,
   Lock,
   Radio,
-  Trash2
+  Trash2,
+  Download,
+  FileText,
+  Check,
+  Clock,
+  UserCheck
 } from "lucide-react";
 import { useEngagement } from "@/context/EngagementContext";
+import { useAuth } from "@/context/AuthContext";
+import { downloadCustomerUpdatePdf } from "@/utils/pdfGenerator";
 import { getNowISTTime } from "@/utils/date";
 import { API_BASE } from "@/utils/api";
+
+export interface CustomerUpdateDraft {
+  engagement_id: string;
+  customer_name: string;
+  subject: string;
+  executive_summary: string;
+  key_milestones_achieved: string[];
+  next_milestone_target: string;
+  customer_action_items: string[];
+  status: string;
+  privacy_scrubbed: boolean;
+}
 
 // Fast in-memory cache keyed by workspace (engagementId) to ensure zero-latency switching
 const workspaceChatMemoryCache: Record<string, ChatMessage[]> = {};
@@ -62,6 +81,7 @@ interface ChatMessage {
   suggestedFollowups?: string[];
   screenshotPreview?: string;
   supportResult?: IncidentInvestigationResult;
+  customerUpdate?: CustomerUpdateDraft;
   timestamp: string;
 }
 
@@ -376,12 +396,97 @@ export default function AskCalmWorkChat({
   const targetCustomerName = customerName || activeCustomer.customerName;
   const currentTab = propActiveTab || contextActiveTab || "myday";
   const currentSelectedItem = propSelectedItemContext !== undefined ? propSelectedItemContext : contextSelectedItem;
-
+  const { isManager, isFDE, user, token } = useAuth();
   const [query, setQuery] = useState(initialQuery || "");
   const [loading, setLoading] = useState(false);
   const [attachedScreenshot, setAttachedScreenshot] = useState<AttachedScreenshot | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [simulatedEscalations, setSimulatedEscalations] = useState<Record<string, boolean>>({});
+  const [approvedUpdates, setApprovedUpdates] = useState<Record<string, boolean>>({});
+  const [submittedUpdates, setSubmittedUpdates] = useState<Record<string, boolean>>({});
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  const handleApproveCustomerUpdateInChat = async (engId: string) => {
+    setActionLoadingId(engId);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/engagements/${engId}/customer-updates/approve`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "APPROVE",
+          actor_id: user?.id || "usr-mgr-002",
+          decision_note: "Manager authorized customer update via CalmWork Chat."
+        })
+      });
+      if (res.ok) {
+        setApprovedUpdates((prev) => ({ ...prev, [engId]: true }));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId: engId } }));
+          if ("BroadcastChannel" in window) {
+            const ch = new BroadcastChannel("calmwork_governance_bus");
+            ch.postMessage({ engagementId: engId, type: "CUSTOMER_UPDATE_APPROVED" });
+            ch.close();
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to approve update in chat:", err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleSubmitCustomerUpdateInChat = async (draft: CustomerUpdateDraft) => {
+    setActionLoadingId(draft.engagement_id);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/engagements/${draft.engagement_id}/customer-updates/submit`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          subject: draft.subject,
+          executive_summary: draft.executive_summary,
+          key_milestones_achieved: draft.key_milestones_achieved,
+          next_milestone_target: draft.next_milestone_target,
+          customer_action_items: draft.customer_action_items,
+          privacy_scrubbed: draft.privacy_scrubbed
+        })
+      });
+      if (res.ok) {
+        setSubmittedUpdates((prev) => ({ ...prev, [draft.engagement_id]: true }));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("calmwork-state-change", { detail: { engagementId: draft.engagement_id } }));
+          if ("BroadcastChannel" in window) {
+            const ch = new BroadcastChannel("calmwork_governance_bus");
+            ch.postMessage({ engagementId: draft.engagement_id, type: "CUSTOMER_UPDATE_SUBMITTED" });
+            ch.close();
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to submit update in chat:", err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDownloadPdfInChat = (draft: CustomerUpdateDraft) => {
+    downloadCustomerUpdatePdf({
+      customerName: draft.customer_name || targetCustomerName,
+      engagementName: targetCustomerName,
+      subject: draft.subject,
+      executiveSummary: draft.executive_summary,
+      keyMilestonesAchieved: draft.key_milestones_achieved,
+      nextMilestoneTarget: draft.next_milestone_target,
+      customerActionItems: draft.customer_action_items,
+      status: "APPROVED",
+      isApproved: true,
+      privacyScrubbed: draft.privacy_scrubbed
+    });
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -655,6 +760,7 @@ export default function AskCalmWorkChat({
             capabilitiesUsed: data.data.capabilities_used,
             sources: data.data.sources,
             suggestedFollowups: data.data.suggested_followups,
+            customerUpdate: data.data.customer_update,
             timestamp: getNowISTTime(true)
           };
           appendMessage(supMsg);
@@ -969,6 +1075,152 @@ export default function AskCalmWorkChat({
                             <span>Simulate SRE Escalation</span>
                           </button>
                         )}
+                      </div>
+                    </div>
+                  ) : m.customerUpdate ? (
+                    /* Structured DELIVER Executive Customer Update */
+                    <div className="space-y-3">
+                      {/* Header & Status Badge */}
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {approvedUpdates[m.customerUpdate.engagement_id] ? (
+                            <span className="font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              <span>APPROVED BY MANAGER · READY TO DELIVER</span>
+                            </span>
+                          ) : submittedUpdates[m.customerUpdate.engagement_id] ? (
+                            <span className="font-mono font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-blue-600" />
+                              <span>SUBMITTED FOR APPROVAL · PENDING MANAGER REVIEW</span>
+                            </span>
+                          ) : (
+                            <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                              <FileText className="h-3 w-3 text-slate-500" />
+                              <span>EXECUTIVE UPDATE DRAFT · EDITABLE</span>
+                            </span>
+                          )}
+                        </div>
+                        {m.customerUpdate.privacy_scrubbed && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-mono">
+                            <ShieldCheck className="h-2.5 w-2.5 text-slate-500" />
+                            <span>Privacy Scrubbed</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Subject */}
+                      <div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-0.5">Subject:</span>
+                        <h4 className="font-bold text-slate-900 text-xs">{m.customerUpdate.subject}</h4>
+                      </div>
+
+                      {/* Executive Summary */}
+                      <div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-0.5">Executive Summary:</span>
+                        <p className="text-slate-700 leading-relaxed text-xs whitespace-pre-wrap">{m.customerUpdate.executive_summary}</p>
+                      </div>
+
+                      {/* Key Milestones Achieved */}
+                      {m.customerUpdate.key_milestones_achieved && m.customerUpdate.key_milestones_achieved.length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-0.5">Key Milestones Achieved:</span>
+                          <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                            {m.customerUpdate.key_milestones_achieved.map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Next Milestone Target */}
+                      {m.customerUpdate.next_milestone_target && (
+                        <div>
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-0.5">Next Milestone Target:</span>
+                          <p className="text-slate-700 text-xs">{m.customerUpdate.next_milestone_target}</p>
+                        </div>
+                      )}
+
+                      {/* Customer Action Items */}
+                      {m.customerUpdate.customer_action_items && m.customerUpdate.customer_action_items.length > 0 && (
+                        <div className="p-2 bg-amber-50/70 border border-amber-200 rounded">
+                          <span className="text-[10px] font-mono text-amber-800 font-bold uppercase tracking-wider block mb-0.5">Required Customer Action:</span>
+                          <ul className="list-disc list-inside space-y-0.5 text-amber-950 font-medium text-xs">
+                            {m.customerUpdate.customer_action_items.map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Action Footer */}
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {isManager ? (
+                            !approvedUpdates[m.customerUpdate.engagement_id] ? (
+                              <button
+                                type="button"
+                                onClick={() => handleApproveCustomerUpdateInChat(m.customerUpdate!.engagement_id)}
+                                disabled={actionLoadingId === m.customerUpdate.engagement_id}
+                                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span>{actionLoadingId === m.customerUpdate.engagement_id ? "Approving..." : "Approve Customer Update"}</span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                                <Check className="h-3.5 w-3.5" />
+                                <span>Approved &amp; Authorized</span>
+                              </span>
+                            )
+                          ) : (
+                            !approvedUpdates[m.customerUpdate.engagement_id] ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSubmitCustomerUpdateInChat(m.customerUpdate!)}
+                                disabled={actionLoadingId === m.customerUpdate.engagement_id}
+                                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                              >
+                                <Send className="h-3 w-3 text-blue-300" />
+                                <span>
+                                  {actionLoadingId === m.customerUpdate.engagement_id
+                                    ? "Submitting..."
+                                    : submittedUpdates[m.customerUpdate.engagement_id]
+                                    ? "Re-Send for Approval"
+                                    : "Send for Manager Approval"}
+                                </span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                                <Check className="h-3.5 w-3.5" />
+                                <span>Approved by Manager</span>
+                              </span>
+                            )
+                          )}
+
+                          {/* Download PDF button — Available to Both Roles Once Approved */}
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadPdfInChat(m.customerUpdate!)}
+                            disabled={!approvedUpdates[m.customerUpdate.engagement_id]}
+                            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs ${
+                              approvedUpdates[m.customerUpdate.engagement_id]
+                                ? "bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 cursor-pointer"
+                                : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
+                            }`}
+                            title={approvedUpdates[m.customerUpdate.engagement_id] ? "Download Executive PDF" : "Available after Engineering Manager approval"}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Download PDF</span>
+                          </button>
+                        </div>
+
+                        <a
+                          href={`/engagements/${m.customerUpdate.engagement_id}?tab=updates`}
+                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline flex items-center gap-1"
+                        >
+                          <span>Open Update Studio</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </a>
                       </div>
                     </div>
                   ) : (

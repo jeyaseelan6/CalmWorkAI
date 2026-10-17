@@ -83,6 +83,7 @@ class SupervisorQueryResponse(BaseModel):
     sufficient_evidence: bool = True
     suggested_followups: List[str]
     delegated_agent: Optional[DelegatedAgentInfo] = None
+    customer_update: Optional[CustomerUpdateDraft] = None
     timestamp: str
 
 
@@ -439,6 +440,7 @@ class SupervisorCoordinator:
 
         capabilities_used = [intent] if intent != "MULTI_AGENT" else ["PLAN", "MOVE", "KNOW", "DELIVER", "SUPPORT"]
         sources: List[SourceCitation] = []
+        customer_update_draft: Optional[CustomerUpdateDraft] = None
         answer = ""
 
         # 4. Handover to Relevant Specialist Agent & Context-Aware Execution
@@ -584,39 +586,8 @@ class SupervisorCoordinator:
         elif intent == "DELIVER":
             handover_banner = "📢 **[Handed over to DELIVER Agent — Stakeholder Communications]**\n\n"
 
-            llm_response = None
-            if groq_service.is_configured() or is_live_inference_enabled():
-                deliver_prompt = (
-                    f"You are the DELIVER Agent in CalmWork AI. You translate engineering progress into calm, high-trust executive stakeholder communication.\n\n"
-                    f"{time_rule}\n\n"
-                    f"Engagement Context:\n"
-                    f"- Customer: {customer_name}\n"
-                    f"- Current Stage: {current_work_cycle}\n"
-                    f"- Outcome Objective: \"{outcome_statement}\"\n"
-                    f"- Progress: {engagement_progress}%\n"
-                    f"- Completed Criteria:\n{crit_formatted}\n\n"
-                    f"Recent Engineering Worknotes (in IST):\n{timeline_formatted}\n\n"
-                    f"User Query: \"{sanitized_query}\"\n\n"
-                    f"Draft a clean, professional stakeholder update containing:\n"
-                    f"1. Executive Summary\n"
-                    f"2. Key Milestones Achieved (with dates in IST 24h notation)\n"
-                    f"3. Next Milestones & Commitments (with target deadlines in IST 24h notation)\n"
-                    f"4. Customer Action Items (if any)\n"
-                    f"Note: Remind the user that manager approval is required before external distribution. Format cleanly in Markdown without raw HTML tags like <br>."
-                )
-                try:
-                    llm_response = groq_service.generate_chat_completion(
-                        prompt=deliver_prompt,
-                        system_instruction="You are the CalmWork DELIVER Agent. Write clear, executive-grade customer communications in clean Markdown without raw HTML tags. Keep all dates and times strictly in IST 24-hour clock notation.",
-                        max_tokens=1200
-                    )
-                except Exception as e:
-                    logger.debug(f"DELIVER LLM call fallback: {e}")
-
-            if llm_response:
-                answer = llm_response.strip()
-            else:
-                draft = self.deliver_agent.generate_customer_update(
+            try:
+                customer_update_draft = self.deliver_agent.generate_customer_update(
                     engagement_id=engagement_id,
                     customer_name=customer_name,
                     engagement_name=customer_name,
@@ -624,20 +595,37 @@ class SupervisorCoordinator:
                     success_criteria=crit_items,
                     current_work_cycle=current_work_cycle
                 )
-                parts = [
-                    f"### {draft.subject}\n",
-                    f"**Executive Summary**:\n{draft.executive_summary}\n",
-                    "**Key Milestones Achieved**:"
-                ]
-                for m in draft.key_milestones_achieved:
-                    parts.append(f"- {m}")
-                parts.append(f"\n**Next Milestone Target**: {draft.next_milestone_target}")
-                if draft.customer_action_items:
-                    parts.append("\n**Customer Action Items**:")
-                    for a in draft.customer_action_items:
-                        parts.append(f"- {a}")
-                parts.append("\n*Note: Customer updates require Manager authorization in the Approvals queue prior to client distribution.*")
-                answer = "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"DELIVER Agent draft generation error: {e}")
+                customer_update_draft = CustomerUpdateDraft(
+                    engagement_id=engagement_id,
+                    customer_name=customer_name,
+                    format_type="EXECUTIVE_SUMMARY",
+                    subject=f"Customer Update: {customer_name}",
+                    executive_summary=f"Engineering progress update for {customer_name}. Core delivery objectives for {current_work_cycle} are on track.",
+                    key_milestones_achieved=[c.get("title", "") for c in crit_items if c.get("completed")] or ["Project delivery milestone achieved according to specifications"],
+                    next_milestone_target="Next milestone target scheduled for review.",
+                    customer_action_items=["Review milestone outcomes and provide confirmation."],
+                    status="DRAFT",
+                    generated_at=datetime.now(IST_TZ).isoformat(),
+                    privacy_scrubbed=True,
+                    approval_required=True
+                )
+
+            parts = [
+                f"### {customer_update_draft.subject}\n",
+                f"**Executive Summary**:\n{customer_update_draft.executive_summary}\n",
+                "**Key Milestones Achieved**:"
+            ]
+            for m in customer_update_draft.key_milestones_achieved:
+                parts.append(f"- {m}")
+            parts.append(f"\n**Next Milestone Target**: {customer_update_draft.next_milestone_target}")
+            if customer_update_draft.customer_action_items:
+                parts.append("\n**Customer Action Items**:")
+                for a in customer_update_draft.customer_action_items:
+                    parts.append(f"- {a}")
+            parts.append("\n*Note: Customer updates can be modified and submitted for Manager approval. Once approved, the report can be downloaded by either the Manager or FDE.*")
+            answer = "\n".join(parts)
 
         elif intent == "KNOW":
             handover_banner = "📚 **[Handed over to KNOW Agent — Grounded Technical Documentation & Engagement Intelligence]**\n\n"
@@ -808,6 +796,7 @@ class SupervisorCoordinator:
             sufficient_evidence=True,
             suggested_followups=suggested_followups,
             delegated_agent=delegated_agent,
+            customer_update=customer_update_draft,
             timestamp=datetime.now(IST_TZ).isoformat()
         )
 

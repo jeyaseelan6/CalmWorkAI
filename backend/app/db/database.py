@@ -61,6 +61,16 @@ def init_db():
             except Exception:
                 pass
 
+            try:
+                conn.execute(text("ALTER TABLE workspace_chat_messages ADD COLUMN IF NOT EXISTS customer_update JSONB"))
+                conn.commit()
+            except Exception:
+                try:
+                    conn.execute(text("ALTER TABLE workspace_chat_messages ADD COLUMN customer_update JSON"))
+                    conn.commit()
+                except Exception:
+                    pass
+
             # Add foreign key and status query indexes idempotently
             indexes_to_create = [
                 ("ix_outcomes_engagement_id", "outcomes", "engagement_id"),

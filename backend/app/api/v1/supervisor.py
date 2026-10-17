@@ -95,6 +95,7 @@ def get_workspace_chat_messages(engagement_id: str, db: Session = Depends(get_db
             "suggestedFollowups": m.suggested_followups or [],
             "screenshotPreview": m.screenshot_preview,
             "supportResult": m.support_result,
+            "customerUpdate": m.customer_update,
             "timestamp": format_ist_time(m.created_at)
         })
 
@@ -229,6 +230,7 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
     sources_list = [s.model_dump() for s in response.sources] if response.sources else []
 
     sup_msg_id = f"msg-sup-{uuid.uuid4().hex[:8]}"
+    cu_payload = response.customer_update.model_dump() if response.customer_update else None
     db.add(WorkspaceChatMessage(
         id=sup_msg_id,
         engagement_id=engagement_id,
@@ -239,6 +241,7 @@ def query_universal_supervisor(engagement_id: str, payload: UniversalSupervisorQ
         capabilities_used=response.capabilities_used,
         sources=sources_list,
         suggested_followups=response.suggested_followups,
+        customer_update=cu_payload,
         created_at=datetime.utcnow()
     ))
     db.commit()
