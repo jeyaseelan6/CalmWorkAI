@@ -341,12 +341,12 @@ class SupervisorCoordinator:
             classification_prompt = (
                 f"You are the intent router for CalmWork AI multi-agent platform.\n"
                 f"Classify the user message into EXACTLY ONE category:\n"
-                f"- PLAN: Questions about delivery plans, milestones, tasks, scope changes, requirement drift, what changed today/recently, contract drift, definition of done, outcomes, or planning next steps.\n"
-                f"- MOVE: Questions about immediate next actions, what to do next, priorities, blockers, overdue tasks, or why production/progress is blocked.\n"
-                f"- DELIVER: Requests to prepare or draft a customer update, stakeholder communication, email, progress report, or status memo.\n"
-                f"- KNOW: Questions about technical architecture, specs, database schemas, cutover windows, runbooks, documentation, or how systems work.\n"
+                f"- PLAN: Questions about delivery plans, milestones, tasks, scope changes, requirement drift, what changed today/recently, contract drift, definition of done (DoD), outcome goals, roadmaps, re-planning, or delivery phasing.\n"
+                f"- MOVE: Questions about immediate next actions, what to do next, priorities, blockers, unblocking pipelines/production, stalled items, overdue tasks, daily focus, or why progress is blocked.\n"
+                f"- DELIVER: Requests to prepare or draft a customer update, stakeholder communication, client email, progress report, status memo, release notes, or formal milestone sign-off.\n"
+                f"- KNOW: Questions about technical architecture, system specs, database schemas, cutover windows, rollback procedures, runbooks, security policies, documentation, transcripts, or how systems work.\n"
                 f"- SUPPORT: Questions about production incidents, system outages, errors, bugs, crashes, screenshot diagnostics, stack traces, or troubleshooting.\n"
-                f"- MULTI_AGENT: Inquiries spanning multiple areas or asking for a general project status overview.\n\n"
+                f"- MULTI_AGENT: Inquiries spanning multiple areas (e.g. 360 overview, operational briefing, or general project status summary).\n\n"
                 f"User Message: \"{sanitized_query}\"\n\n"
                 f"Return ONLY the single word category name: PLAN, MOVE, DELIVER, KNOW, SUPPORT, or MULTI_AGENT."
             )
@@ -365,45 +365,69 @@ class SupervisorCoordinator:
             except Exception as ex:
                 logger.debug(f"LLM intent classification fallback to rule matching: {ex}")
 
-        # Semantic pattern matching fallback
+        # Semantic pattern matching fallback with comprehensive domain trigger dictionaries
         if not intent:
-            if any(term in q_lower for term in [
+            MULTI_AGENT_TRIGGERS = [
                 "360", "operational briefing", "full operational update", "multi-agent",
-                "full overview", "project status overview", "complete status"
-            ]) or len([w for w in ["changed", "blocking", "customer", "next", "spec", "update", "plan", "support"] if w in q_lower]) >= 3:
-                intent = "MULTI_AGENT"
-            elif any(term in q_lower for term in [
+                "full overview", "project status overview", "complete status", "comprehensive update",
+                "general status", "everything"
+            ]
+
+            SUPPORT_TRIGGERS = [
                 "incident", "outage", "bug", "crash", "error log", "screenshot",
-                "diagnostic", "stack trace", "production issue", "triage", "support", "broken"
-            ]):
-                intent = "SUPPORT"
-            elif any(term in q_lower for term in [
+                "diagnostic", "stack trace", "production issue", "triage", "support", "broken",
+                "exception", "crashed", "exit code", "unhandled"
+            ]
+
+            DELIVER_TRIGGERS = [
+                "customer update", "client update", "stakeholder update", "prepare an update",
+                "prepare update", "draft update", "draft an update", "tell the customer",
+                "share with the client", "email update", "status memo", "email to the customer",
+                "email to client", "release notes", "executive brief", "executive summary",
+                "external communication", "sign-off request", "completion report", "progress memo",
+                "weekly summary", "status report"
+            ]
+
+            MOVE_TRIGGERS = [
                 "what should i do", "what to do next", "do next", "what next", "next action",
                 "next step", "what's next", "why is production blocked", "why is it blocked",
-                "blocked", "blocking", "blocker", "priority", "priorities", "focus on",
-                "tasks today", "what task", "task to work on"
-            ]):
-                intent = "MOVE"
-            elif any(term in q_lower for term in [
+                "blocked", "blocking", "blocker", "unblock", "priority", "priorities", "focus on",
+                "tasks today", "what task", "task to work on", "overdue", "stalled", "impediment",
+                "highest leverage", "daily focus", "eod", "urgent tasks", "work sequence"
+            ]
+
+            PLAN_TRIGGERS = [
                 "what changed", "what's changed", "changed today", "recent change", "scope change",
                 "scope drift", "new requirement", "requirement shift", "contract drift", "added",
                 "mandate", "in scope", "out of scope", "changed", "requirements", "plan",
-                "milestone", "planning", "delivery plan", "work plan", "reassess"
-            ]):
-                intent = "PLAN"
-            elif any(term in q_lower for term in [
-                "customer update", "client update", "stakeholder update", "prepare an update",
-                "prepare update", "draft update", "draft an update", "tell the customer",
-                "share with the client", "email update", "status memo", "email to the customer"
-            ]):
+                "milestone", "planning", "delivery plan", "work plan", "re-plan", "replan",
+                "reassess", "definition of done", "dod", "success criteria", "target outcome",
+                "outcome goals", "signoff criteria", "roadmap", "phasing", "break down"
+            ]
+
+            KNOW_TRIGGERS = [
+                "cutover", "cutover window", "spec", "specification", "architecture", "encryption",
+                "database", "schema", "erd", "runbook", "rollback", "debezium", "cdc", "kafka",
+                "how does", "what is the", "policy", "security standard", "documentation",
+                "technical", "search docs", "in the transcript", "meeting notes", "uploaded doc",
+                "prerequisites", "specs"
+            ]
+
+            multi_word_hits = len([w for w in ["changed", "blocking", "customer", "next", "spec", "update", "plan", "support"] if w in q_lower])
+
+            if any(term in q_lower for term in MULTI_AGENT_TRIGGERS) or multi_word_hits >= 3:
+                intent = "MULTI_AGENT"
+            elif any(term in q_lower for term in SUPPORT_TRIGGERS):
+                intent = "SUPPORT"
+            elif any(term in q_lower for term in DELIVER_TRIGGERS):
                 intent = "DELIVER"
-            elif any(term in q_lower for term in [
-                "cutover", "window", "spec", "architecture", "encryption", "database",
-                "runbook", "schema", "debezium", "cdc", "how does", "what is the", "policy",
-                "documentation", "technical"
-            ]):
+            elif any(term in q_lower for term in MOVE_TRIGGERS):
+                intent = "MOVE"
+            elif any(term in q_lower for term in PLAN_TRIGGERS):
+                intent = "PLAN"
+            elif any(term in q_lower for term in KNOW_TRIGGERS):
                 intent = "KNOW"
-            elif len([w for w in ["changed", "blocking", "customer", "next", "spec", "update", "plan", "support"] if w in q_lower]) >= 2:
+            elif multi_word_hits >= 2:
                 intent = "MULTI_AGENT"
             else:
                 intent = "KNOW"
