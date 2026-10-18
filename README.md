@@ -1,4 +1,4 @@
-# CalmWork AI — Outcome-Driven Multi-Agent Work Intelligence Layer
+# CalmWork AI — Clarity-Driven Multi-Agent Work Intelligence
 
 [![Live Demo](https://img.shields.io/badge/Live_Production_App-camwork.cloud.run-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://camwork.cloud.run)
 
@@ -21,7 +21,7 @@
 
 ## Executive Summary
 
-**CalmWork AI** is an outcome-driven work-intelligence and multi-agent coordination layer built natively on **Google Cloud Platform (GCP)** and the **Google Agent Development Kit (ADK)**. 
+**CalmWork AI** is a clarity-driven multi-agent work intelligence and technical governance layer built natively on **Google Cloud Platform (GCP)** and the **Google Agent Development Kit (ADK)**. 
 
 Modern enterprise software delivery suffers from an unsustainable **"coordination tax"**: technical teams spend 40% to 50% of their working hours context-switching, searching across fragmented documentation, manually deciphering ambiguous bug reports, drafting repetitive executive status memos, and defending against unapproved scope creep.
 
