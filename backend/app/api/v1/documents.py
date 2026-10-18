@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 
 from app.db.database import get_db
-from app.models import Engagement, TimelineEvent, DocumentModel, DocumentCategory, DocumentStatus
+from app.models import Engagement, TimelineEvent, DocumentModel, DocumentCategory, DocumentStatus, Outcome
 from app.services import extract_text_from_file, text_to_pdf_bytes
 from app.api.deps import know_agent, storage_service
 from app.api.schemas import IngestDocumentRequest, KnowledgeQueryRequest
@@ -241,13 +241,33 @@ async def upload_document_file(
 
 
 @router.post("/engagements/{engagement_id}/knowledge/query")
-def query_knowledge(engagement_id: str, payload: KnowledgeQueryRequest):
-    """Answers user question strictly grounded on engagement documentation using Google ADK."""
+def query_knowledge(
+    engagement_id: str,
+    payload: KnowledgeQueryRequest,
+    db: Session = Depends(get_db)
+):
+    """Answers user question strictly grounded on engagement documentation and operational context."""
     try:
+        eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
+        timeline = db.query(TimelineEvent).filter(TimelineEvent.engagement_id == engagement_id).order_by(TimelineEvent.created_at.desc()).limit(50).all()
+        current_outcome = None
+        if eng and eng.current_outcome_id:
+            current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+
+        engagement_context = {
+            "customer_name": eng.customer_name if eng else "",
+            "timeline_events": timeline,
+            "outcome_statement": current_outcome.statement if current_outcome else "",
+            "success_criteria": current_outcome.success_criteria if current_outcome else [],
+            "outcome_version": current_outcome.version if current_outcome else 1,
+            "approved_work_plan": current_outcome.work_plan if current_outcome else {}
+        }
+
         grounded_answer = know_agent.answer_question(
             engagement_id=engagement_id,
             raw_question=payload.question,
-            top_k=payload.top_k
+            top_k=payload.top_k,
+            engagement_context=engagement_context
         )
         return {
             "success": True,
