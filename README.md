@@ -1,6 +1,9 @@
 # CalmWork AI — Outcome-Driven Multi-Agent Work Intelligence Layer
 
+[![Live Demo](https://img.shields.io/badge/Live_Production_App-camwork.cloud.run-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://camwork.cloud.run)
+
 [![Google Cloud Platform](https://img.shields.io/badge/Google_Cloud-Cloud_SQL_%7C_Cloud_Run_%7C_GCS_%7C_Vertex_AI-4285F4?logo=google-cloud&logoColor=white)](https://cloud.google.com)
+[![Google Antigravity](https://img.shields.io/badge/Google_Antigravity-Agentic_Development-EA4335?logo=google&logoColor=white)](https://antigravity.google)
 [![Google ADK](https://img.shields.io/badge/Google_ADK-Multi--Agent_Runtime-34A853?logo=google&logoColor=white)](https://github.com/google/adk)
 [![Google Gemini](https://img.shields.io/badge/Google_Gemini-3.8_Flash_%7C_Multimodal_Vision-8E75C2?logo=google-gemini&logoColor=white)](https://ai.google.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -9,6 +12,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Tests](https://img.shields.io/badge/Test_Suite-92_Passed-success)](https://pytest.org)
 
+> 🌐 **Live Demo URL**: [https://camwork.cloud.run](https://camwork.cloud.run)  
 > **Theme**: Future of Work & Enterprise Productivity  
 > **Platform Category**: Enterprise Multi-Agent Coordination & Technical Governance Layer  
 > **Target Personas**: Forward-Deployed Engineers (FDEs) and Engineering Managers / Delivery Leads only  
@@ -49,7 +53,62 @@ CalmWork AI is **not another task-tracker or Jira clone**. Execution continues i
 
 ---
 
-## 2. The Solution: Multi-Agent Architecture (Google ADK)
+## 2. Introducing the Solution: The Why, How, and What Approach
+
+CalmWork AI introduces a new operating paradigm for enterprise software delivery structured around three foundational pillars:
+
+### 💡 The WHY: Why CalmWork AI Exists
+Modern enterprise software delivery is constrained by an unsustainable cognitive coordination tax:
+* **The Flaw of Traditional Issue Trackers**: Conventional tools like Jira or Linear measure *ticket velocity* (tickets closed), not *contractual truth* or *scope validity*. They cannot detect when an ad-hoc verbal client request quietly breaks system invariants or inflates delivery costs.
+* **The High Cost of Context Switching**: Forward-Deployed Engineers lose hours each day switching between writing executive summaries, hunting for architecture decision records across Slack and Notion, and deciphering ambiguous bug screenshots.
+* **The Mission**: To eliminate the coordination tax and restore engineering flow by providing an autonomous, calm work-intelligence layer that aligns technical execution with contractual business outcomes.
+
+### ⚙️ The HOW: Our Architectural Approach & Principles
+CalmWork AI achieves this through a multi-agent system built natively on Google Cloud Platform:
+1. **Autonomous Multi-Agent Specialization**: Rather than a fragile monolithic prompt, we deploy 6 specialized autonomous agents coordinated by a centralized Supervisor built on the **Google Agent Development Kit (ADK)**.
+2. **Unified State on Google Cloud SQL**: All agents share a single source of truth in PostgreSQL—maintaining active outcomes, versioned Definitions of Done (DoD), and timeline event ledgers.
+3. **Consequential Human-in-the-Loop Governance**: AI proposes; delivery leadership authorizes. Consequential actions (scope additions, task commitments, customer-facing memos) strictly require Engineering Manager sign-off before persistence or transit.
+4. **Zero-Hallucination Grounding**: The KNOW Agent operates with an evidence circuit breaker—if verified docs don't contain the answer, it halts instead of guessing.
+5. **Zero-Retention Pre-LLM Privacy Boundary**: Cryptographic regex and Cloud DLP tokenization scrub client secrets and PII before model transit.
+6. **Multimodal Visual Intelligence**: Direct ingestion of screenshot buffers via **Google Gemini 3.8 Flash Vision** to triage client errors in seconds.
+
+### 📦 The WHAT: The Concrete Solution & Capabilities
+* **The 6 Specialized ADK Agents**: SUPERVISOR, PLAN, KNOW, MOVE, DELIVER, and SUPPORT.
+* **The Morning Brief Agentic Skill**: A 1-click on-demand operational briefing that synchronizes milestones, blockers, and the single next best action in IST.
+* **A Dual-Persona Workspace**: Tailored specifically for **Forward-Deployed Engineers** (high-velocity execution & visual triage) and **Engineering Managers** (governance & scope gating).
+
+---
+
+### A Day in the Life of an FDE with CalmWork AI
+
+```text
+09:00 IST — ☕ Morning Alignment (My Day)
+    └── Engineer runs the Morning Brief Skill. In seconds, PLAN, KNOW, and MOVE synthesize:
+        • Active milestone health and burn-up progress.
+        • Unresolved blocker: Missing SAML 2.0 certs from the client security team.
+        • Next Best Action: Finalize database schema migration script for 15-min cutover window.
+
+11:30 IST — 🛡️ Client Scope Renegotiation (Ask CalmWork)
+    └── Client asks: "Can you also build automated email alert triggers into this sprint?"
+    └── Engineer queries Ask CalmWork. PLAN Agent evaluates request against Contract DoD:
+        • Flags: OUT-OF-SCOPE feature delta.
+        • Sets status: NEEDS_REASSESSMENT.
+        • Action: Prepares an approval card for the Engineering Manager before any code is written.
+
+14:15 IST — 🛠️ Production Incident Triage (SUPPORT Agent)
+    └── Client sends a cropped screenshot of a 500 error on the approvals view.
+    └── Engineer pastes the screenshot directly into Ask CalmWork:
+        • Gemini 3.8 Flash Multimodal Vision OCRs: HTTP 500 on api/v1/approvals and HTTP 502 Bad Gateway.
+        • SUPPORT Agent matches error against KNOW runbooks and provides exact 3-step pod restart remediation.
+
+17:00 IST — 🚀 Stakeholder Briefing (DELIVER Agent)
+    └── DELIVER Agent translates the day's pull requests into an executive-ready customer update memo.
+    └── Memo enters PENDING queue. Engineering Manager reviews and signs off with 1 click.
+```
+
+---
+
+## 3. Multi-Agent Architecture (Google ADK)
 
 CalmWork AI models technical delivery as **a synchronized network of specialized autonomous agents** orchestrated by a central supervisor over a unified **Google Cloud SQL** state.
 
@@ -122,35 +181,45 @@ flowchart LR
 
 ---
 
-## 3. Google Cloud Platform (GCP) Enterprise Architecture
+## 4. Google Cloud Platform (GCP) & Google AI Stack
 
-CalmWork AI is built **Google Cloud-native**, leveraging the GCP ecosystem for enterprise-grade security, scalability, and performance:
+CalmWork AI is built **Google Cloud-native**, leveraging the complete Google Cloud enterprise ecosystem:
 
-### 1. Google Cloud SQL (PostgreSQL)
-* **Authoritative State & Ledger**: Managed relational PostgreSQL instance housing all engagements, versioned outcomes, timeline audit trails, role-based permissions, and conversation persistence.
-* **Zero Lost Updates**: ACID transaction guarantees with connection pooling (`pool_pre_ping=True`, `pool_recycle=300`).
+### 1. Google Cloud Run (Live Production Host)
+* **Serverless Container Compute**: Hosts the live production application at **[camwork.cloud.run](https://camwork.cloud.run)**.
+* **Auto-Scaling & Zero Idle Cost**: Containerized FastAPI backend and React frontend services scale dynamically from 0 to 1,000+ instances with automated HTTPS routing.
 
-### 2. Google Agent Development Kit (ADK)
-* **Agent Framework**: Implements native Google ADK interfaces (`google.adk.agents.Agent`, `Runner`, `BaseSessionService`, `LlmRequest`).
+### 2. Google Cloud SQL (PostgreSQL)
+* **Authoritative State & Governance Ledger**: Managed relational PostgreSQL instance housing all engagements, versioned outcomes, timeline audit trails, role-based permissions, and conversation persistence.
+* **ACID Guarantees**: Connection pooling (`pool_pre_ping=True`, `pool_recycle=300`) ensuring zero lost updates across concurrent agent transactions.
+
+### 3. Google Agent Development Kit (ADK)
+* **Multi-Agent Runtime**: Implements native Google ADK interfaces (`google.adk.agents.Agent`, `Runner`, `BaseSessionService`, `LlmRequest`).
 * **Session Persistence**: Centralized session management with extensible database session persistence.
 * **Pre-LLM Privacy Interceptors**: Enforces `before_model_callback` defense-in-depth security before any data leaves the runtime.
 
-### 3. Google Gemini 3.8 Flash & Multimodal Vision
-* **Deep Contextual Reasoning**: High-speed, low-latency reasoning across complex contractual scopes and worknotes.
-* **Multimodal Visual Intelligence**: Direct ingestion of image binary buffers (`types.Part.from_bytes`) to parse browser console errors (e.g., HTTP 500, HTTP 502 Bad Gateway) and UI exceptions directly from user screenshots.
+### 4. Google Gemini 3.8 Flash & Multimodal Vision
+* **Deep Contextual Reasoning**: High-speed, low-latency reasoning across complex contractual scopes, Definition of Done criteria, and worknotes.
+* **Multimodal Visual Diagnostics**: Ingestion of image binary buffers (`types.Part.from_bytes`) to parse browser console errors (HTTP 500, HTTP 502 Bad Gateway) and UI stack traces directly from engineer screenshots.
 
-### 4. Google Cloud Storage (GCS)
-* **Multi-Tenant Document & Telemetry Store**: Secure GCP bucket storage for customer runbooks, architecture diagrams, and visual screenshot diagnostic artifacts with signed HTTPS access.
+### 5. Google Antigravity (AGY)
+* **Agentic Software Engineering**: Google's next-generation agentic development platform utilized for architecture modeling, autonomous code generation, multi-agent pipeline verification, and automated regression testing.
 
-### 5. Google Cloud Run
-* **Serverless Container Compute**: Production deployment target for the FastAPI backend and React frontend containers, providing automated horizontal autoscaling and zero idle cost.
+### 6. Google Cloud Storage (GCS)
+* **Multi-Tenant Document & Telemetry Store**: Secure, encrypted GCP bucket storage for customer architecture diagrams, runbooks, and chat screenshot diagnostic artifacts with signed HTTPS access.
 
-### 6. Google Cloud DLP (Data Loss Prevention) Ready
+### 7. Google Vertex AI
+* **Enterprise Dual-Mode Architecture**: Supports enterprise mode (`USE_VERTEX_AI=true`) leveraging Google Cloud Application Default Credentials (ADC), enterprise quotas, and regional data residency (`asia-south1`).
+
+### 8. Google Cloud DLP (Data Loss Prevention) Ready
 * **Enterprise Privacy Boundary**: Regex and Cloud DLP-compatible scrubbing engine that strips personal identifiable information (PII), email addresses, API tokens, and customer secrets before LLM inference, caching them in a reversible cryptographic token vault.
+
+### 9. Google Cloud Trace & Cloud Logging
+* **Auditable Decision Lineage**: Supports distributed ADK tracing (`ENABLE_ADK_TRACING=true`) and structured cloud logging, providing an immutable audit trail for all consequential scope approvals.
 
 ---
 
-## 4. Key Differentiators & Platform Invariants
+## 5. Key Differentiators & Platform Invariants
 
 1. **Human-in-the-Loop Governance (Anti-Rogue AI)**:
    * AI never unilaterally changes contractual commitments or emails customers.
@@ -164,7 +233,7 @@ CalmWork AI is built **Google Cloud-native**, leveraging the GCP ecosystem for e
 
 ---
 
-## 5. Repository Directory Structure
+## 6. Repository Directory Structure
 
 ```text
 CalmWork AI/
@@ -207,7 +276,21 @@ CalmWork AI/
 
 ---
 
-## 6. Quickstart & Local Setup Guide
+## 7. Core API Surface & Key Endpoints
+
+| Endpoint | Method | Agent / Module | Primary Responsibility |
+| :--- | :---: | :--- | :--- |
+| `/api/v1/engagements/{id}/supervisor/query` | `POST` | **SUPERVISOR** | Universal natural language interface with semantic intent routing across PLAN, KNOW, MOVE, and DELIVER. |
+| `/api/v1/engagements/{id}/support/investigate` | `POST` | **SUPPORT** | Gemini Multimodal Vision diagnostic on uploaded error screenshots & console logs. |
+| `/api/v1/skills/morning-brief/execute` | `POST` | **Skill** | On-demand execution of the Morning Brief procedural multi-agent workflow. |
+| `/api/v1/engagements/{id}/planning/plan` | `POST` | **PLAN** | Propose outcome revisions, evaluate scope impact, and identify contractual DoD drift. |
+| `/api/v1/engagements/{id}/customer-updates/submit` | `POST` | **DELIVER** | Draft executive client report and queue for mandatory Delivery Manager sign-off. |
+| `/api/v1/approvals` | `GET` / `POST` | **Governance** | Delivery Leadership approval interface for authorizing scope changes and customer memos. |
+| `/api/v1/documents/upload` | `POST` | **KNOW** | Ingest architecture decision records (ADRs), specs, and runbooks into the engagement knowledge base. |
+
+---
+
+## 8. Quickstart & Local Setup Guide
 
 ### Prerequisites
 * **Python**: 3.11 or higher
@@ -269,7 +352,7 @@ CalmWork AI/
 
 ---
 
-## 7. Verification & Test Suite
+## 9. Verification & Test Suite
 
 CalmWork AI maintains a rigorous test suite covering multi-agent orchestration, human-in-the-loop approval workflows, privacy guardrail redactions, and regression invariants.
 
@@ -287,7 +370,7 @@ cd backend
 
 ---
 
-## 8. Enterprise Security & Compliance
+## 10. Enterprise Security & Compliance
 
 * **Zero Data Retention in Models**: Customer data is protected by the CalmWork Privacy Boundary. No model training occurs on customer engagement data.
 * **Role-Based Access Control (RBAC)**: Clear privilege separation between Engineers (`FDE`) and Delivery Leadership (`MANAGER`).
