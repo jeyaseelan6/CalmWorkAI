@@ -463,17 +463,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Right Side Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* "+ New Workspace" on desktop (Manager only) */}
-            {isManager && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="hidden lg:flex border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs px-2.5 py-1.5 rounded-md items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                title="Create a new workspace (Manager role required)"
-              >
-                <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                <span>+ New Workspace</span>
-              </button>
-            )}
 
             {/* Record Note button */}
             <button

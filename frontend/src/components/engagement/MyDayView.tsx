@@ -586,6 +586,14 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                 <p className="text-sm text-slate-500">
                   {activeCustomer.customerName} &middot; {activeCustomer.engagementName}
                 </p>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border ${
+                  outcomeStatus === "HEALTHY"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${outcomeStatus === "HEALTHY" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                  <span>{outcomeStatus === "HEALTHY" ? "Healthy" : "Reassessment"} &middot; v{outcomeVersion}</span>
+                </span>
                 {lastRefreshed ? (
                   <span className="text-[11px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-medium">
                     Last updated: {lastRefreshed}
@@ -599,14 +607,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className={`text-xs font-mono font-medium px-2.5 py-1 rounded-md border ${
-                outcomeStatus === "HEALTHY"
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                  : "bg-amber-50 text-amber-800 border-amber-200"
-              }`}>
-                {outcomeStatus === "HEALTHY" ? "Healthy" : "Reassessment"} &middot; v{outcomeVersion}
-              </span>
-
               <button
                 type="button"
                 onClick={runMorningBrief}
@@ -616,16 +616,6 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
               >
                 <Sun className={`h-4 w-4 text-slate-950 ${briefLoading ? "animate-spin" : ""}`} />
                 <span>{briefLoading ? "Running Agents..." : "Morning Brief"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowCreateEngagementModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-2xs"
-                title="Create a new workspace (Manager & FDE)"
-              >
-                <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                <span>+ New Workspace</span>
               </button>
 
               <Link

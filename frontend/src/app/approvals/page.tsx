@@ -187,7 +187,7 @@ export default function ApprovalsPage() {
         {/* Approvals List */}
         <div className="space-y-4">
           {filteredApprovals.length > 0 ? (
-            filteredApprovals.map((item) => {
+            filteredApprovals.map((item, index) => {
               const isCustomerUpdate = item.type === "CUSTOMER_UPDATE";
               const isTaskCreation = item.type === "TASK_CREATION";
               const isSubmitting = submittingId === item.id;
@@ -200,6 +200,16 @@ export default function ApprovalsPage() {
                   {/* Card Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
                     <div className="flex items-center gap-2.5 flex-wrap">
+                      {/* Stunning Geometric Index Badge */}
+                      <div 
+                        title={`Approval Queue Item ${index + 1}`}
+                        className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-700/80 shadow-xs shrink-0"
+                      >
+                        <span className="font-mono text-xs font-black text-amber-400 tracking-tight">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                      </div>
+
                       <span className="text-sm font-bold font-display text-slate-900">
                         {item.customer_name}
                       </span>

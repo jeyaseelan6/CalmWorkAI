@@ -77,6 +77,14 @@ function EngagementDetailContent() {
                 <span className="text-xs sm:text-sm text-slate-600 font-medium truncate">
                   {activeCustomer.engagementName}
                 </span>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border ${
+                  isHealthy
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isHealthy ? "bg-emerald-500" : "bg-amber-500"}`} />
+                  <span>{isHealthy ? "Healthy" : "Needs Review"}</span>
+                </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">
                 {activeEngagementData?.engagement?.current_work_cycle || "Step 1: Understand the Business Reality"}
@@ -84,15 +92,6 @@ function EngagementDetailContent() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border ${
-                isHealthy
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-amber-50 text-amber-700 border-amber-200"
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${isHealthy ? "bg-emerald-500" : "bg-amber-500"}`} />
-                <span>{isHealthy ? "Healthy" : "Needs Review"}</span>
-              </span>
-
               {activeTab === "myday" && (
                 <div className="flex flex-col items-end gap-0.5">
                   <button
