@@ -12,8 +12,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CalmWork AI — Outcome Intelligence SaaS",
-  description: "Outcome-Driven Work-Intelligence SaaS Platform for Forward-Deployed Engineers & Managers",
+  title: "CalmWork AI — Clarity Driven Work Intelligence",
+  description: "Clarity-Driven Work-Intelligence SaaS Platform for Forward-Deployed Engineers & Managers",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

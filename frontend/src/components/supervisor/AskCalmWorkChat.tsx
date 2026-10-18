@@ -904,7 +904,7 @@ export default function AskCalmWorkChat({
               <h2 className="font-display font-bold text-sm text-slate-900 truncate">Ask CalmWork</h2>
             </div>
             <p className="text-[11px] text-slate-500 font-mono truncate">
-              {targetCustomerName} · Supervisor Multi-Agent Router & SUPPORT Diagnostics
+              Support
             </p>
           </div>
         </div>
@@ -914,6 +914,7 @@ export default function AskCalmWorkChat({
             <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">PLAN</span>
             <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">KNOW</span>
             <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">MOVE</span>
+            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">SUPPORT</span>
           </div>
 
           <button
@@ -1028,97 +1029,119 @@ export default function AskCalmWorkChat({
                       </div>
                     </div>
                   ) : m.supportResult ? (
-                    /* Structured SUPPORT Diagnostic Result */
-                    <div className="space-y-3">
-                      {/* Severity & Incident Badge */}
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                    /* Structured SUPPORT Diagnostic Result — Enhanced & Consistent Design */
+                    <div className="space-y-4">
+                      {/* 1. Incident Status Bar */}
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase border shadow-2xs ${
                             m.supportResult.severity === "CRITICAL"
-                              ? "bg-rose-100 text-rose-800 border-rose-300"
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
                               : m.supportResult.severity === "HIGH"
-                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
                               : m.supportResult.severity === "MEDIUM"
-                              ? "bg-yellow-100 text-yellow-800 border-yellow-300"
-                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              ? "bg-yellow-50 text-yellow-800 border-yellow-200"
+                              : "bg-emerald-50 text-emerald-800 border-emerald-200"
                           }`}>
-                            {m.supportResult.severity} Incident
+                            <span className={`h-1.5 w-1.5 rounded-full ${
+                              m.supportResult.severity === "CRITICAL" ? "bg-rose-500 animate-pulse" : "bg-amber-500"
+                            }`} />
+                            <span>{m.supportResult.severity} Incident</span>
                           </span>
-                          <span className="font-mono text-[10px] text-slate-400">
+
+                          <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-mono text-[10px] font-semibold">
                             ID: {m.supportResult.incident_id}
                           </span>
                         </div>
-                        {m.supportResult.privacy_scrubbed && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono">
-                            <Lock className="h-2.5 w-2.5" />
-                            <span>Privacy Scrubbed</span>
-                          </span>
-                        )}
+
+                        <div className="flex items-center gap-2">
+                          {m.supportResult.privacy_scrubbed && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-mono font-medium">
+                              <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                              <span>Privacy Scrubbed</span>
+                            </span>
+                          )}
+
+                          {m.supportResult.image_url && (
+                            <a
+                              href={m.supportResult.image_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md font-mono inline-flex items-center gap-1 cursor-pointer transition"
+                            >
+                              <span>
+                                {m.supportResult.image_url.includes("storage.googleapis.com")
+                                  ? "GCS Telemetry"
+                                  : "Telemetry Artifact"}
+                              </span>
+                              <ArrowRight className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Summary */}
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-xs mb-1">Diagnostic Summary</h4>
-                        <p className="text-slate-700 leading-relaxed">{m.supportResult.summary}</p>
-                      </div>
-
-                      {/* Visual Findings if present */}
-                      {m.supportResult.visual_diagnostic_findings && (
-                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-1">
-                          <div className="font-semibold text-slate-800 flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <ImageIcon className="h-3 w-3 text-slate-600" />
-                              <span>Visual Telemetry Findings</span>
-                            </div>
-                            {m.supportResult.image_url && (
-                              <a
-                                href={m.supportResult.image_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-teal-700 hover:text-teal-900 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
-                              >
-                                <span>
-                                  {m.supportResult.image_url.includes("storage.googleapis.com")
-                                    ? "Google Cloud Storage (GCS)"
-                                    : m.supportResult.image_url.includes("cloudinary")
-                                    ? "Cloudinary CDN"
-                                    : "GCP Storage"}
-                                </span>
-                                <ArrowRight className="h-2.5 w-2.5" />
-                              </a>
-                            )}
-                          </div>
-                          <p className="text-slate-600 font-mono text-[10px] leading-relaxed">
-                            {m.supportResult.visual_diagnostic_findings}
+                      {/* 2. Diagnostic Summary */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block">
+                          Diagnostic Summary
+                        </span>
+                        <div className="p-3 bg-slate-50/70 border border-slate-200/80 rounded-lg">
+                          <p className="text-slate-800 text-xs leading-relaxed font-medium">
+                            {m.supportResult.summary}
                           </p>
+                        </div>
+                      </div>
+
+                      {/* 3. Visual Telemetry Findings Terminal Window */}
+                      {m.supportResult.visual_diagnostic_findings && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block">
+                            Visual Telemetry &amp; Console Inspection
+                          </span>
+                          <div className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 shadow-xs">
+                            {/* Terminal Window Chrome */}
+                            <div className="px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-2 w-2 rounded-full bg-rose-500/80" />
+                                <span className="h-2 w-2 rounded-full bg-amber-500/80" />
+                                <span className="h-2 w-2 rounded-full bg-emerald-500/80" />
+                                <span className="ml-2 font-semibold text-slate-300">console-telemetry.log</span>
+                              </div>
+                              <span className="text-[9px] text-slate-500">Gemini 3.8 Flash OCR</span>
+                            </div>
+                            {/* Terminal Output */}
+                            <div className="p-3 font-mono text-[11px] leading-relaxed text-slate-200 whitespace-pre-wrap select-text max-h-48 overflow-y-auto">
+                              {m.supportResult.visual_diagnostic_findings}
+                            </div>
+                          </div>
                         </div>
                       )}
 
-                      {/* Root Cause Hypothesis (Clearly labeled with uncertainty) */}
-                      <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded text-[11px] space-y-1">
-                        <div className="font-semibold text-amber-900 flex items-center justify-between">
+                      {/* 4. Root Cause Hypothesis */}
+                      <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg space-y-1">
+                        <div className="flex items-center justify-between font-semibold text-amber-950 text-xs">
                           <div className="flex items-center gap-1.5">
                             <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
                             <span>Root Cause Hypothesis</span>
                           </div>
-                          <span className="text-[9px] font-mono font-medium text-amber-700 uppercase">
-                            Hypothesis Grounded
+                          <span className="text-[9px] font-mono font-bold uppercase text-amber-700 bg-amber-100/60 px-1.5 py-0.5 rounded border border-amber-200">
+                            Evidence Grounded
                           </span>
                         </div>
-                        <p className="text-amber-950 leading-relaxed font-sans">
+                        <p className="text-amber-950/90 text-xs leading-relaxed pt-0.5">
                           {m.supportResult.root_cause_hypothesis}
                         </p>
                       </div>
 
-                      {/* Affected Components */}
+                      {/* 5. Affected Components */}
                       {m.supportResult.affected_components && m.supportResult.affected_components.length > 0 && (
-                        <div>
-                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                            Affected Components:
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block">
+                            Affected Components
                           </span>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             {m.supportResult.affected_components.map((comp, idx) => (
-                              <span key={idx} className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono text-[10px] text-slate-800">
+                              <span key={idx} className="px-2.5 py-1 bg-slate-100 border border-slate-200/90 rounded-md font-mono text-[11px] font-medium text-slate-800 shadow-2xs">
                                 {comp}
                               </span>
                             ))}
@@ -1126,45 +1149,49 @@ export default function AskCalmWorkChat({
                         </div>
                       )}
 
-                      {/* Suggested Workaround */}
+                      {/* 6. Suggested Workaround */}
                       {m.supportResult.suggested_workaround && (
-                        <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded text-[11px] space-y-1">
-                          <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                        <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg space-y-1">
+                          <div className="flex items-center gap-1.5 font-semibold text-emerald-950 text-xs">
                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                             <span>Suggested Immediate Workaround</span>
                           </div>
-                          <p className="text-emerald-950 leading-relaxed">
+                          <p className="text-emerald-950/90 text-xs leading-relaxed">
                             {m.supportResult.suggested_workaround}
                           </p>
                         </div>
                       )}
 
-                      {/* Runbook Recommendations */}
+                      {/* 7. Runbook Remediation Steps */}
                       {m.supportResult.runbook_recommendations && m.supportResult.runbook_recommendations.length > 0 && (
-                        <div className="space-y-1.5 pt-1">
-                          <h5 className="font-semibold text-slate-900 text-[11px] flex items-center gap-1.5">
+                        <div className="space-y-2 pt-1">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                             <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-                            <span>Runbook Remediation Steps:</span>
-                          </h5>
-                          <ul className="space-y-1 pl-1">
+                            <span>Runbook Remediation Playbook ({m.supportResult.runbook_recommendations.length} Steps)</span>
+                          </span>
+                          <div className="space-y-1.5">
                             {m.supportResult.runbook_recommendations.map((step, sIdx) => (
-                              <li key={sIdx} className="flex items-start gap-1.5 text-slate-700 text-[11px]">
-                                <span className="font-mono text-blue-600 font-bold text-[10px] mt-0.5">{sIdx + 1}.</span>
-                                <span>{step}</span>
-                              </li>
+                              <div key={sIdx} className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-start gap-2.5 shadow-2xs hover:border-slate-300 transition">
+                                <span className="flex items-center justify-center h-5 w-5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 font-mono text-xs font-bold shrink-0 mt-0.5">
+                                  {sIdx + 1}
+                                </span>
+                                <span className="text-slate-800 text-xs leading-relaxed font-normal flex-1">
+                                  {step}
+                                </span>
+                              </div>
                             ))}
-                          </ul>
+                          </div>
                         </div>
                       )}
 
-                      {/* Simulated Human Handoff (Constraint: Honest, explicit simulation) */}
+                      {/* 8. Escalation Action Footer */}
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
                         {simulatedEscalations[m.supportResult.incident_id] ? (
-                          <div className="p-2 bg-slate-100 border border-slate-200 rounded text-[10px] text-slate-600 w-full flex items-start gap-1.5">
+                          <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-700 w-full flex items-start gap-2">
                             <Radio className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
                             <div>
-                              <span className="font-bold text-slate-800">Simulated Incident Alert: </span>
-                              <span>
+                              <span className="font-bold text-slate-900">Incident Telemetry Escalated: </span>
+                              <span className="text-slate-600">
                                 Incident diagnosis recorded to CalmWork internal timeline. Note: No external paging or ticketing service was dispatched per sandbox environment policy.
                               </span>
                             </div>
@@ -1173,9 +1200,9 @@ export default function AskCalmWorkChat({
                           <button
                             type="button"
                             onClick={() => handleSimulateEscalation(m.supportResult!.incident_id)}
-                            className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-700 rounded text-[11px] font-medium transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                            className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-md text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
                           >
-                            <Radio className="h-3 w-3 text-slate-500" />
+                            <Radio className="h-3.5 w-3.5 text-slate-500" />
                             <span>Simulate SRE Escalation</span>
                           </button>
                         )}
@@ -1261,22 +1288,24 @@ export default function AskCalmWorkChat({
                         <div className="flex items-center gap-2">
                           {!approvedUpdates[m.customerUpdate.engagement_id] ? (
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => handleSubmitCustomerUpdateInChat(m.customerUpdate!)}
-                                disabled={actionLoadingId === m.customerUpdate.engagement_id}
-                                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
-                                title="Submit this customer update draft for Manager review"
-                              >
-                                <Send className="h-3 w-3 text-blue-300" />
-                                <span>
-                                  {actionLoadingId === m.customerUpdate.engagement_id
-                                    ? "Submitting..."
-                                    : submittedUpdates[m.customerUpdate.engagement_id]
-                                    ? "Re-Send for Approval"
-                                    : "Send for Approval"}
-                                </span>
-                              </button>
+                              {!isManager && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSubmitCustomerUpdateInChat(m.customerUpdate!)}
+                                  disabled={actionLoadingId === m.customerUpdate.engagement_id}
+                                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                                  title="Submit this customer update draft for Manager review"
+                                >
+                                  <Send className="h-3 w-3 text-blue-300" />
+                                  <span>
+                                    {actionLoadingId === m.customerUpdate.engagement_id
+                                      ? "Submitting..."
+                                      : submittedUpdates[m.customerUpdate.engagement_id]
+                                      ? "Re-Send for Approval"
+                                      : "Send for Approval"}
+                                  </span>
+                                </button>
+                              )}
 
                               {isManager && (
                                 <button

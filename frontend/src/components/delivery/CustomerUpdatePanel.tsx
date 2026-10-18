@@ -188,7 +188,11 @@ export default function CustomerUpdatePanel({
           setApprovedBy(null);
           setIsSubmitted(false);
           setIsEditingDraft(false);
-          setSuccessMsg("DELIVER Agent generated customer update draft. Review and edit before sending for approval.");
+          setSuccessMsg(
+            isManager
+              ? "DELIVER Agent generated customer update draft. Review and edit before authorizing release."
+              : "DELIVER Agent generated customer update draft. Review and edit before sending for approval."
+          );
         } else {
           setError(json.message || "Failed to generate AI customer update.");
           setDraft(null);
@@ -524,7 +528,7 @@ export default function CustomerUpdatePanel({
               ) : wasEdited ? (
                 <span className="font-mono font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded flex items-center gap-1.5">
                   <Edit3 className="h-3.5 w-3.5 text-amber-600" />
-                  <span>DRAFT MODIFIED · READY TO SEND FOR APPROVAL</span>
+                  <span>{isManager ? "DRAFT MODIFIED · READY FOR MANAGER AUTHORIZATION" : "DRAFT MODIFIED · READY TO SEND FOR APPROVAL"}</span>
                 </span>
               ) : (
                 <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded flex items-center gap-1.5">
@@ -587,10 +591,24 @@ export default function CustomerUpdatePanel({
               <FileText className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
               <div className="space-y-0.5">
                 <div className="font-semibold text-slate-900">
-                  {wasEdited ? "Draft Modified — Send for Manager Approval" : "Draft Report — Review & Edit"}
+                  {isManager
+                    ? wasEdited
+                      ? "Draft Modified — Review & Authorize Release"
+                      : "Draft Report — Review & Edit"
+                    : wasEdited
+                    ? "Draft Modified — Send for Manager Approval"
+                    : "Draft Report — Review & Edit"}
                 </div>
                 <p className="text-slate-600 text-[11px] leading-relaxed">
-                  FDE can modify any section below. When satisfied, click <strong>"Send for Manager Approval"</strong>. After approval, the report can be downloaded by either the Manager or FDE.
+                  {isManager ? (
+                    <>
+                      Manager can modify any section below. When satisfied, click <strong>"Manager Authorize &amp; Approve Release"</strong>. After approval, the report can be downloaded or printed by either the Manager or FDE.
+                    </>
+                  ) : (
+                    <>
+                      FDE can modify any section below. When satisfied, click <strong>"Send for Manager Approval"</strong>. After approval, the report can be downloaded by either the Manager or FDE.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -781,21 +799,23 @@ export default function CustomerUpdatePanel({
             {/* 1. Approval / Submission Actions */}
             {!approved ? (
               <div className="flex items-center gap-2 flex-1 flex-wrap">
-                <button
-                  onClick={handleSubmitForApproval}
-                  disabled={submittingForApproval}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3.5 py-2 rounded-md text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer disabled:opacity-50"
-                  title="Submit this customer update report for Manager sign-off"
-                >
-                  {submittingForApproval ? (
-                    <Sparkles className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Send className="h-3.5 w-3.5 text-blue-300" />
-                      <span>{isSubmitted && !wasEdited ? "Re-Send for Manager Approval" : "Send for Manager Approval"}</span>
-                    </>
-                  )}
-                </button>
+                {!isManager && (
+                  <button
+                    onClick={handleSubmitForApproval}
+                    disabled={submittingForApproval}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-3.5 py-2 rounded-md text-xs flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer disabled:opacity-50"
+                    title="Submit this customer update report for Manager sign-off"
+                  >
+                    {submittingForApproval ? (
+                      <Sparkles className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="h-3.5 w-3.5 text-blue-300" />
+                        <span>{isSubmitted && !wasEdited ? "Re-Send for Manager Approval" : "Send for Manager Approval"}</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {isManager && (
                   <button

@@ -392,7 +392,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 Calm Work AI
               </h2>
               <p className="text-[10px] text-slate-400 font-mono font-medium mt-0.5">
-                Work Intelligence
+                Clarity Driven Work Intelligence
               </p>
             </Link>
           </div>
