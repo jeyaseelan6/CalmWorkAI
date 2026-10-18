@@ -17,6 +17,7 @@ from datetime import datetime, timezone, timedelta
 import json
 import logging
 import uuid
+import base64
 
 IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
@@ -174,13 +175,31 @@ class SupportAgent:
         has_credentials = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or settings.GROQ_API_KEY or _MOCK_ADK_RESPONSES)
         if has_credentials:
             try:
+                raw_image_bytes = None
+                img_mime = "image/png"
+                if screenshot_base64:
+                    try:
+                        if "," in screenshot_base64:
+                            header, encoded = screenshot_base64.split(",", 1)
+                            if "image/jpeg" in header:
+                                img_mime = "image/jpeg"
+                            elif "image/webp" in header:
+                                img_mime = "image/webp"
+                            raw_image_bytes = base64.b64decode(encoded)
+                        else:
+                            raw_image_bytes = base64.b64decode(screenshot_base64)
+                    except Exception as b64_err:
+                        logger.warning(f"Could not decode screenshot_base64 for multimodal vision: {b64_err}")
+
                 adk_resp = execute_adk_runner(
                     runner=self.runner,
                     user_id="support_fde",
                     session_id=sid,
                     message_text=full_prompt,
                     system_instruction=SUPPORT_INSTRUCTION,
-                    json_mode=True
+                    json_mode=True,
+                    image_bytes=raw_image_bytes,
+                    mime_type=img_mime
                 )
                 if adk_resp:
                     cleaned = adk_resp.strip()
@@ -235,6 +254,25 @@ class SupportAgent:
         rc_clean = self.privacy_engine.sanitize_output(parsed.get("root_cause_hypothesis", ""), mapping)
         workaround_clean = self.privacy_engine.sanitize_output(parsed.get("suggested_workaround", ""), mapping)
 
+        raw_findings = parsed.get("visual_diagnostic_findings")
+        findings_str = None
+        if isinstance(raw_findings, list):
+            findings_str = "\n".join(str(f) for f in raw_findings)
+        elif raw_findings:
+            findings_str = str(raw_findings)
+
+        aff_comps = parsed.get("affected_components", [])
+        if isinstance(aff_comps, str):
+            aff_comps = [aff_comps]
+
+        rec_actions = parsed.get("runbook_recommendations", [])
+        if isinstance(rec_actions, str):
+            rec_actions = [rec_actions]
+
+        ev_cits = parsed.get("evidence_citations", [])
+        if isinstance(ev_cits, str):
+            ev_cits = [ev_cits]
+
         return IncidentInvestigationResult(
             incident_id=incident_id,
             engagement_id=engagement_id,
@@ -242,12 +280,12 @@ class SupportAgent:
             severity=parsed.get("severity", "MEDIUM"),
             summary=summary_clean,
             root_cause_hypothesis=rc_clean,
-            affected_components=parsed.get("affected_components", []),
+            affected_components=aff_comps,
             suggested_workaround=workaround_clean or None,
-            runbook_recommendations=parsed.get("runbook_recommendations", []),
-            visual_diagnostic_findings=parsed.get("visual_diagnostic_findings"),
+            runbook_recommendations=rec_actions,
+            visual_diagnostic_findings=findings_str,
             image_url=image_url,
-            evidence_citations=parsed.get("evidence_citations", []),
+            evidence_citations=ev_cits,
             privacy_scrubbed=len(mapping.reference_to_original) > 0,
             investigated_at=now_ist
         )

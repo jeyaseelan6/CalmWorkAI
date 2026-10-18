@@ -187,13 +187,15 @@ def execute_adk_runner(
     session_id: str,
     message_text: str,
     system_instruction: Optional[str] = None,
-    json_mode: bool = False
+    json_mode: bool = False,
+    image_bytes: Optional[bytes] = None,
+    mime_type: Optional[str] = "image/png"
 ) -> Optional[str]:
     """
     Executes an ADK Runner with input message and extracts the final text response.
     Catches errors safely without leaking sensitive information.
     Dual-mode orchestration:
-    - Primary (Competition): Google Gemini / Vertex AI via native Google ADK Runner.
+    - Primary (Competition): Google Gemini / Vertex AI via native Google ADK Runner (with Multimodal Vision).
     - Fallback / Fast Prototyping (Testing): Groq API via GroqService.
     Supports deterministic test mocking.
     """
@@ -212,9 +214,11 @@ def execute_adk_runner(
     gemini_active = bool(settings.GEMINI_API_KEY or settings.USE_VERTEX_AI or os.getenv("GOOGLE_API_KEY"))
     if gemini_active:
         try:
-            content = types.Content(
-                parts=[types.Part.from_text(text=message_text)]
-            )
+            parts = [types.Part.from_text(text=message_text)]
+            if image_bytes:
+                parts.insert(0, types.Part.from_bytes(data=image_bytes, mime_type=mime_type or "image/png"))
+
+            content = types.Content(parts=parts)
 
             final_text = None
             for event in runner.run(

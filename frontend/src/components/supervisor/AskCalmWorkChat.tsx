@@ -771,6 +771,17 @@ export default function AskCalmWorkChat({
           })
         });
 
+        if (!res.ok) {
+          const rawText = await res.text();
+          let parsedError = rawText;
+          try {
+            const errObj = JSON.parse(rawText);
+            parsedError = errObj.detail || errObj.message || rawText;
+          } catch {
+            // Keep rawText
+          }
+          throw new Error(`Server returned status ${res.status}: ${parsedError.slice(0, 160)}`);
+        }
         const data = await res.json();
         if (data.success && data.data) {
           const inv: IncidentInvestigationResult = data.data;
@@ -811,6 +822,17 @@ export default function AskCalmWorkChat({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: userText })
         });
+        if (!res.ok) {
+          const rawText = await res.text();
+          let parsedError = rawText;
+          try {
+            const errObj = JSON.parse(rawText);
+            parsedError = errObj.detail || errObj.message || rawText;
+          } catch {
+            // Keep rawText
+          }
+          throw new Error(`Server returned status ${res.status}: ${parsedError.slice(0, 160)}`);
+        }
         const data = await res.json();
 
         if (data.success) {
@@ -1055,7 +1077,13 @@ export default function AskCalmWorkChat({
                                 rel="noopener noreferrer"
                                 className="text-[10px] text-teal-700 hover:text-teal-900 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
                               >
-                                <span>Cloudinary CDN</span>
+                                <span>
+                                  {m.supportResult.image_url.includes("storage.googleapis.com")
+                                    ? "Google Cloud Storage (GCS)"
+                                    : m.supportResult.image_url.includes("cloudinary")
+                                    ? "Cloudinary CDN"
+                                    : "GCP Storage"}
+                                </span>
                                 <ArrowRight className="h-2.5 w-2.5" />
                               </a>
                             )}
