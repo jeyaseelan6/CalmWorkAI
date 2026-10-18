@@ -127,6 +127,8 @@ class BlockerItem(BaseModel):
     dependency_type: str  # "CUSTOMER" | "TECHNICAL" | "APPROVAL" | "DECISION"
     evidence_snippet: str
     impact_description: str
+    owner: Optional[str] = "Delivery Owner"
+    severity: Optional[str] = "HIGH"
 
 
 class EvidenceAndConfidenceItem(BaseModel):
@@ -931,6 +933,28 @@ class SupervisorCoordinator:
                 "step": 1,
                 "total_steps": 5
             })
+        # Normalize work cycle to human-readable format, preventing raw enum string leaks
+        if hasattr(current_work_cycle, "value"):
+            current_work_cycle = str(current_work_cycle.value)
+        else:
+            c_str = str(current_work_cycle) if current_work_cycle else "Step 1: Understand the Business Reality"
+            if "STEP_1" in c_str or "UNDERSTAND" in c_str:
+                current_work_cycle = "Step 1: Understand the Business Reality"
+            elif "STEP_2" in c_str or "DEFINE" in c_str:
+                current_work_cycle = "Step 2: Define the Right Problem"
+            elif "STEP_3" in c_str or "DESIGN" in c_str:
+                current_work_cycle = "Step 3: Design the AI Approach"
+            elif "STEP_4" in c_str or "BUILD" in c_str:
+                current_work_cycle = "Step 4: Build Within Real Constraints"
+            elif "STEP_5" in c_str or "DEPLOY" in c_str:
+                current_work_cycle = "Step 5: Deploy Into Production"
+            elif "STEP_6" in c_str or "OWN" in c_str or "IMPROVE" in c_str:
+                current_work_cycle = "Step 6: Own Outcomes and Improve"
+            elif "WorkCycleStep." in c_str:
+                current_work_cycle = c_str.replace("WorkCycleStep.", "").replace("_", " ").title()
+            else:
+                current_work_cycle = c_str
+
         now_str = datetime.now(IST_TZ).strftime("%d %b %Y, %H:%M IST")
         now_iso = datetime.now(IST_TZ).isoformat()
         warnings: List[str] = []
@@ -1109,25 +1133,32 @@ class SupervisorCoordinator:
         blockers: List[BlockerItem] = []
         if move_findings and move_findings.gating_blocker:
             blk = move_findings.gating_blocker
+            blk_owner = blk.owner or ("Engineering Manager" if pending_approvals > 0 else "Delivery Owner")
             blockers.append(BlockerItem(
                 title=blk.title,
-                dependency_type="EXTERNAL" if "Customer" in blk.owner else "INTERNAL",
+                dependency_type="EXTERNAL" if "Customer" in blk_owner else "INTERNAL",
                 evidence_snippet=blk.description,
-                impact_description=move_findings.impact or f"Impacts progression in {current_work_cycle}."
+                impact_description=f"Impacts progression in {current_work_cycle}.",
+                owner=blk_owner,
+                severity="HIGH"
             ))
         elif status == "NEEDS_REASSESSMENT":
             blockers.append(BlockerItem(
                 title=f"Pending Scope Reassessment for {customer_name}",
                 dependency_type="GOVERNANCE",
                 evidence_snippet="Requirement drift or gating dependency requires Manager approval before proceeding.",
-                impact_description=f"Gates advancement in {current_work_cycle}."
+                impact_description=f"Gates advancement in {current_work_cycle}.",
+                owner="Engineering Manager",
+                severity="HIGH"
             ))
         elif status == "BLOCKED":
             blockers.append(BlockerItem(
                 title="Unresolved Gating Dependency",
                 dependency_type="PROCESS",
                 evidence_snippet=f"Engagement status is marked BLOCKED for {customer_name}.",
-                impact_description="Prevents advancement to subsequent work cycle phase."
+                impact_description=f"Prevents advancement to subsequent work cycle phase in {current_work_cycle}.",
+                owner="Delivery Owner",
+                severity="HIGH"
             ))
 
         # Dynamic Work Items with IST Due Dates & Outcome Goal Linkage

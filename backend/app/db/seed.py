@@ -16,6 +16,8 @@ def seed_demo_data():
         init_db()
 
         # Clear existing demo data cleanly
+        from app.models import Document
+        db.query(Document).filter(Document.engagement_id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)
         db.query(TimelineEvent).filter(TimelineEvent.engagement_id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)
         db.query(Outcome).filter(Outcome.engagement_id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)
         db.query(Engagement).filter(Engagement.id.in_(["eng-acme-001", "eng-globex-002"])).delete(synchronize_session=False)

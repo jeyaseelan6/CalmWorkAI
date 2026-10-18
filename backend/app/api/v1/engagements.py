@@ -521,22 +521,50 @@ def create_routine_task(
     eng = db.query(Engagement).filter(Engagement.id == engagement_id).first()
     if not eng:
         raise HTTPException(status_code=404, detail="Engagement not found")
-    current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
-    if not current_outcome:
-        raise HTTPException(status_code=404, detail="Active outcome not found")
 
-    from sqlalchemy.orm.attributes import flag_modified
-    wp = dict(current_outcome.work_plan or {})
-    if "milestones" not in wp or not wp["milestones"]:
-        wp["milestones"] = [{"id": "m-1", "title": "Milestone 1", "sequence_order": 1}]
-    if "tasks" not in wp or not isinstance(wp["tasks"], list):
-        wp["tasks"] = []
-
-    tasks = list(wp["tasks"])
     user_role = current_user.get("role", "FDE")
     actor_name = current_user.get("name", "Sarah Chen" if user_role == "FDE" else "David Miller")
     actor_id = current_user.get("id", "usr-fde-001" if user_role == "FDE" else "usr-mgr-002")
     task_appr_status = "APPROVED" if user_role == "MANAGER" else "PENDING_APPROVAL"
+
+    current_outcome = None
+    if eng.current_outcome_id:
+        current_outcome = db.query(Outcome).filter(Outcome.id == eng.current_outcome_id).first()
+    if not current_outcome:
+        current_outcome = db.query(Outcome).filter(Outcome.engagement_id == engagement_id).order_by(Outcome.version.desc()).first()
+        if current_outcome:
+            eng.current_outcome_id = current_outcome.id
+            db.commit()
+
+    if not current_outcome:
+        outcome_id = f"out-{uuid.uuid4().hex[:8]}"
+        current_outcome = Outcome(
+            id=outcome_id,
+            engagement_id=engagement_id,
+            version=1,
+            statement=f"Deliver core outcomes for {eng.customer_name}.",
+            success_criteria=[
+                {"id": "sc-1", "title": "Discovery and requirements baseline", "completed": True},
+                {"id": "sc-2", "title": "Execution of work plan tasks", "completed": False}
+            ],
+            status=OutcomeStatus.APPROVED,
+            work_plan={"milestones": [{"id": "m-1", "title": "Phase 1: Discovery & Core Setup", "sequence_order": 1}], "tasks": []},
+            created_by=actor_name,
+            created_at=datetime.utcnow()
+        )
+        db.add(current_outcome)
+        eng.current_outcome_id = outcome_id
+        db.commit()
+        db.refresh(current_outcome)
+
+    from sqlalchemy.orm.attributes import flag_modified
+    wp = dict(current_outcome.work_plan or {})
+    if "milestones" not in wp or not wp["milestones"]:
+        wp["milestones"] = [{"id": "m-1", "title": "Phase 1: Discovery & Core Setup", "sequence_order": 1}]
+    if "tasks" not in wp or not isinstance(wp["tasks"], list):
+        wp["tasks"] = []
+
+    tasks = list(wp["tasks"])
 
     # Check for batch tasks (e.g. from Plan Agent)
     batch_tasks = payload.get("tasks")

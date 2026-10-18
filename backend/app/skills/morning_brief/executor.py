@@ -63,7 +63,7 @@ class MorningBriefSkill:
             outcome_statement=statement,
             version=version,
             pending_approvals=len(approvals),
-            current_work_cycle=eng.current_work_cycle,
+            current_work_cycle=eng.current_work_cycle.value if hasattr(eng.current_work_cycle, "value") else str(eng.current_work_cycle),
             timeline_events=timeline,
             success_criteria=criteria,
             approved_work_plan=current_outcome.work_plan if current_outcome else None,

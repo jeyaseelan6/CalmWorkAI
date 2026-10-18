@@ -285,7 +285,7 @@ class MoveAgent:
             confidence=confidence,
             approval_required=approval_required,
             priority_level=priority,
-            target_work_cycle=str(current_work_cycle),
+            target_work_cycle=cycle_clean,
             gating_blocker=gating_blocker,
             affected_role=role,
             privacy_scrubbed=len(mapping.reference_to_original) > 0

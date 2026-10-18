@@ -43,22 +43,30 @@ function formatRoleName(role?: string): string {
   return clean.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 }
 
+function cleanDisplayString(str?: string): string {
+  if (!str) return "";
+  return str
+    .replace(/WorkCycleStep\.STEP_1_UNDERSTAND_BUSINESS_REALITY/g, "Step 1: Understand the Business Reality")
+    .replace(/WorkCycleStep\.STEP_2_DEFINE_RIGHT_PROBLEM/g, "Step 2: Define the Right Problem")
+    .replace(/WorkCycleStep\.STEP_3_DESIGN_AI_APPROACH/g, "Step 3: Design the AI Approach")
+    .replace(/WorkCycleStep\.STEP_4_BUILD_WITHIN_CONSTRAINTS/g, "Step 4: Build Within Real Constraints")
+    .replace(/WorkCycleStep\.STEP_5_DEPLOY_INTO_PRODUCTION/g, "Step 5: Deploy Into Production")
+    .replace(/WorkCycleStep\.STEP_6_OWN_OUTCOMES_AND_IMPROVE/g, "Step 6: Own Outcomes and Improve")
+    .replace(/EngagementStatus\.HEALTHY/g, "Healthy")
+    .replace(/EngagementStatus\.NEEDS_REASSESSMENT/g, "Needs Reassessment")
+    .replace(/EngagementStatus\.BLOCKED/g, "Blocked")
+    .replace(/EngagementStatus\.AT_RISK/g, "At Risk")
+    .replace(/EngagementStatus\.AWAITING_APPROVAL/g, "Awaiting Approval")
+    .replace(/WorkCycleStep\.([A-Z0-9_]+)/g, (_, name) =>
+      name.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ")
+    )
+    .replace(/EngagementStatus\.([A-Z0-9_]+)/g, (_, name) =>
+      name.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ")
+    );
+}
+
 function formatEvidenceItem(ev: string): string {
-  if (!ev) return "";
-  return ev
-    .replace("EngagementStatus.HEALTHY", "Healthy")
-    .replace("EngagementStatus.NEEDS_REASSESSMENT", "Needs Reassessment")
-    .replace("EngagementStatus.BLOCKED", "Blocked")
-    .replace("EngagementStatus.AT_RISK", "At Risk")
-    .replace("EngagementStatus.AWAITING_APPROVAL", "Awaiting Approval")
-    .replace("WorkCycleStep.STEP_1_UNDERSTAND_BUSINESS_REALITY", "Step 1: Understand the Business Reality")
-    .replace("WorkCycleStep.STEP_2_DEFINE_RIGHT_PROBLEM", "Step 2: Define the Right Problem")
-    .replace("WorkCycleStep.STEP_3_DESIGN_AI_APPROACH", "Step 3: Design the AI Approach")
-    .replace("WorkCycleStep.STEP_4_BUILD_WITHIN_CONSTRAINTS", "Step 4: Build Within Real Constraints")
-    .replace("WorkCycleStep.STEP_5_DEPLOY_INTO_PRODUCTION", "Step 5: Deploy Into Production")
-    .replace("WorkCycleStep.STEP_6_OWN_OUTCOMES_AND_IMPROVE", "Step 6: Own Outcomes and Improve")
-    .replace(/EngagementStatus\.(\w+)/g, "$1")
-    .replace(/WorkCycleStep\.(\w+)/g, "$1");
+  return cleanDisplayString(ev);
 }
 
 function computePresetDue(offsetDays: number, hour: number, minute: number = 0): string {
@@ -525,12 +533,20 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
     }
   };
 
-  // Active blockers from Morning Brief
-  const briefBlockers = brief?.what_is_blocking_progress || [];
+  // Active blockers from Morning Brief or Next Action Gating Dependency
+  const briefBlockers = (brief?.what_is_blocking_progress && brief.what_is_blocking_progress.length > 0)
+    ? brief.what_is_blocking_progress
+    : nextActionData?.gating_blocker
+    ? [{
+        title: nextActionData.gating_blocker.title || "Gating Blocker",
+        impact_description: nextActionData.impact || `Impacts progression in ${cleanDisplayString(nextActionData.target_work_cycle || "active work cycle")}.`,
+        owner: nextActionData.gating_blocker.owner || "Engineering Manager",
+        severity: "HIGH",
+        dependency_type: "INTERNAL"
+      }]
+    : [];
   const fallbackBlockers = (activeEngagementData?.outcome?.work_plan?.risks && activeEngagementData.outcome.work_plan.risks.length > 0)
     ? activeEngagementData.outcome.work_plan.risks
-    : nextActionData?.gating_blocker
-    ? [String(nextActionData.gating_blocker.title || nextActionData.gating_blocker)]
     : isAcme && !approvedAcme
     ? ["SSO Configuration — Waiting on Customer Security Team"]
     : [];
@@ -1039,35 +1055,70 @@ export default function MyDayView({ embedded = false }: MyDayViewProps) {
                       Active Delivery Blockers
                     </span>
                     {briefBlockers.length > 0 ? (
-                      <div className="space-y-2">
-                        {briefBlockers.map((b, bIdx) => (
-                          <div
-                            key={bIdx}
-                            className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-rose-950">{b.blocker || b.title}</span>
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-200/70 text-rose-800">
-                                {b.severity || "HIGH"}
-                              </span>
+                      <div className="space-y-2.5">
+                        {briefBlockers.map((b: any, bIdx: number) => {
+                          const blockerTitle = b.blocker || b.title || "Active Blocker";
+                          const rawImpact = b.unblock_path || b.impact_description || b.evidence_snippet || "Action required to proceed.";
+                          const impactText = cleanDisplayString(rawImpact);
+                          const ownerName =
+                            b.owner ||
+                            b.owner_role ||
+                            (blockerTitle.toLowerCase().includes("manager") || blockerTitle.toLowerCase().includes("scope")
+                              ? "Engineering Manager"
+                              : "Delivery Owner");
+                          const severityBadge = (b.severity || "HIGH").toUpperCase();
+                          const depType = b.dependency_type || (b.is_gating ? "GATING" : null);
+
+                          return (
+                            <div
+                              key={bIdx}
+                              className="p-3.5 rounded-xl bg-rose-50/90 border border-rose-200/90 text-xs text-rose-950 space-y-2.5 shadow-2xs hover:border-rose-300 transition"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0 mt-0.5" />
+                                  <span className="font-bold text-rose-950 leading-snug">
+                                    {blockerTitle}
+                                  </span>
+                                </div>
+                                <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-200/80 text-rose-800 shrink-0 uppercase tracking-wide">
+                                  {severityBadge}
+                                </span>
+                              </div>
+
+                              <p className="text-[11.5px] text-rose-900/90 leading-relaxed font-normal pl-5">
+                                {impactText}
+                              </p>
+
+                              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-rose-200/60 text-slate-600 pl-5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-slate-400 font-normal">Owner:</span>
+                                  <span className="font-semibold text-slate-800">{ownerName}</span>
+                                </div>
+                                {depType && (
+                                  <span className="font-mono text-[9.5px] uppercase font-semibold text-rose-700 bg-white/80 px-2 py-0.5 rounded border border-rose-200/70">
+                                    {depType}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-slate-600 text-[11px] flex items-center justify-between pt-1 border-t border-rose-200/50">
-                              <span>Owner: {b.owner_role || "Delivery Owner"}</span>
-                              <span className="font-medium text-rose-800">{b.unblock_path || b.impact_description || "Action required"}</span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : fallbackBlockers.length > 0 ? (
-                      <div className="space-y-1.5">
-                        {fallbackBlockers.map((b: any, bIdx: number) => (
-                          <div
-                            key={bIdx}
-                            className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900"
-                          >
-                            <span className="font-semibold block">{typeof b === "string" ? b : (b.title || b.description || JSON.stringify(b))}</span>
-                          </div>
-                        ))}
+                      <div className="space-y-2">
+                        {fallbackBlockers.map((b: any, bIdx: number) => {
+                          const text = typeof b === "string" ? b : (b.title || b.description || JSON.stringify(b));
+                          return (
+                            <div
+                              key={bIdx}
+                              className="p-3 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-950 flex items-start gap-2"
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                              <span className="font-medium leading-relaxed">{cleanDisplayString(text)}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">

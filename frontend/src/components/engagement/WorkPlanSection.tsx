@@ -467,17 +467,20 @@ export default function WorkPlanSection({
       });
 
       if (res.ok) {
-        setTasks((prev) => [...prev, ...generatedTasks]);
+        const json = await res.json();
+        const serverTasks = (json.data && json.data.length > 0) ? json.data : generatedTasks;
+        setTasks((prev) => [...prev, ...serverTasks]);
         setShowGenerateModal(false);
         setPlanPrompt("");
         setGeneratedTasks([]);
-        notify(`Ingested ${generatedTasks.length} tasks into active work plan!`, "success");
+        notify(json.message || `Ingested ${generatedTasks.length} tasks into active work plan!`, "success");
         if (onPlanApproved) onPlanApproved();
       } else {
-        throw new Error("Failed to save tasks");
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || errJson.message || `Failed to save tasks (${res.status})`);
       }
-    } catch {
-      notify("Failed to save generated tasks to plan.", "error");
+    } catch (err: any) {
+      notify(err?.message || "Failed to save generated tasks to plan.", "error");
     }
   };
 
