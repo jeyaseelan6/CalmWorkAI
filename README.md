@@ -2,7 +2,7 @@
 
 [![Live Demo](https://img.shields.io/badge/Live_Production_App-camwork.cloud.run-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://camwork.cloud.run)
 
-[![Google Cloud Platform](https://img.shields.io/badge/Google_Cloud-Cloud_SQL_%7C_Cloud_Run_%7C_GCS_%7C_Vertex_AI-4285F4?logo=google-cloud&logoColor=white)](https://cloud.google.com)
+[![Google Cloud Platform](https://img.shields.io/badge/Google_Cloud-Cloud_Run_%7C_Cloud_SQL_%7C_Secret_Manager_%7C_Vertex_AI-4285F4?logo=google-cloud&logoColor=white)](https://cloud.google.com)
 [![Google Antigravity](https://img.shields.io/badge/Google_Antigravity-Agentic_Development-EA4335?logo=google&logoColor=white)](https://antigravity.google)
 [![Google ADK](https://img.shields.io/badge/Google_ADK-Multi--Agent_Runtime-34A853?logo=google&logoColor=white)](https://github.com/google/adk)
 [![Google Gemini](https://img.shields.io/badge/Google_Gemini-3.8_Flash_%7C_Multimodal_Vision-8E75C2?logo=google-gemini&logoColor=white)](https://ai.google.dev)
@@ -216,6 +216,9 @@ CalmWork AI is built **Google Cloud-native**, leveraging the complete Google Clo
 
 ### 9. Google Cloud Trace & Cloud Logging
 * **Auditable Decision Lineage**: Supports distributed ADK tracing (`ENABLE_ADK_TRACING=true`) and structured cloud logging, providing an immutable audit trail for all consequential scope approvals.
+
+### 10. Google Cloud Secret Manager
+* **Zero-Exposure Credential Security**: Secures production JWT authentication secrets and API credentials with strict IAM access (`roles/secretmanager.secretAccessor`), injecting sensitive keys directly into Cloud Run container runtimes via `--set-secrets` with zero plaintext exposure in code or environment variables.
 
 ---
 
