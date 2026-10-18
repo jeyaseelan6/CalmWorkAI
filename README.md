@@ -77,7 +77,7 @@ flowchart TD
         PlanAgent & KnowAgent & MoveAgent & DeliverAgent --> Gemini
         
         API -->|CRUD & Timeline Ledger| CloudSQL[("🗄️ Google Cloud SQL<br/>(PostgreSQL Authoritative State)")]
-        API -->|Documents & Chat Images| GCS["☁️ Google Cloud Storage (GCS)<br/>(gs://calmwork-documents-...)"]
+        API -->|Documents & Chat Images| GCS["☁️ Google Cloud Storage (GCS)<br/>(Encrypted Object Storage)"]
     end
 
     subgraph Governance["Human-in-the-Loop Governance"]
@@ -127,7 +127,7 @@ flowchart LR
 CalmWork AI is built **Google Cloud-native**, leveraging the GCP ecosystem for enterprise-grade security, scalability, and performance:
 
 ### 1. Google Cloud SQL (PostgreSQL)
-* **Authoritative State & Ledger**: Managed relational PostgreSQL instance (`calmwork_db`) housing all engagements, versioned outcomes, timeline audit trails, role-based permissions, and conversation persistence.
+* **Authoritative State & Ledger**: Managed relational PostgreSQL instance housing all engagements, versioned outcomes, timeline audit trails, role-based permissions, and conversation persistence.
 * **Zero Lost Updates**: ACID transaction guarantees with connection pooling (`pool_pre_ping=True`, `pool_recycle=300`).
 
 ### 2. Google Agent Development Kit (ADK)
@@ -140,7 +140,7 @@ CalmWork AI is built **Google Cloud-native**, leveraging the GCP ecosystem for e
 * **Multimodal Visual Intelligence**: Direct ingestion of image binary buffers (`types.Part.from_bytes`) to parse browser console errors (e.g., HTTP 500, HTTP 502 Bad Gateway) and UI exceptions directly from user screenshots.
 
 ### 4. Google Cloud Storage (GCS)
-* **Multi-Tenant Document & Telemetry Store**: Secure GCP bucket storage (`gs://calmwork-documents-63094329383`) storing customer runbooks, architecture diagrams, and visual screenshot diagnostic artifacts with signed HTTPS access.
+* **Multi-Tenant Document & Telemetry Store**: Secure GCP bucket storage for customer runbooks, architecture diagrams, and visual screenshot diagnostic artifacts with signed HTTPS access.
 
 ### 5. Google Cloud Run
 * **Serverless Container Compute**: Production deployment target for the FastAPI backend and React frontend containers, providing automated horizontal autoscaling and zero idle cost.
@@ -240,31 +240,7 @@ CalmWork AI/
    pip install -r requirements.txt
    ```
 
-4. **Configure Environment Variables (`.env`)**:
-   Create or verify `backend/.env`:
-   ```ini
-   # 1. Google Gemini AI API Configuration
-   GEMINI_API_KEY="your-gemini-api-key-here"
-   GEMINI_MODEL="gemini-3.8-flash"
-
-   # 2. Google Cloud Platform (GCP) Configuration
-   GCP_PROJECT_ID="calmwork-ai"
-   GCP_LOCATION="asia-south1"
-   USE_VERTEX_AI=false
-   GCS_BUCKET_NAME="calmwork-documents-63094329383"
-
-   # 3. Google Cloud SQL (PostgreSQL) Database
-   # Connects to managed Cloud SQL (or falls back to sqlite:///./calmwork_dev.db locally)
-   DATABASE_URL="postgresql://calmwork_admin:YourPassword@8.231.117.244:5432/calmwork_db"
-
-   # 4. Security & Privacy
-   PROJECT_NAME="CalmWork AI"
-   SECRET_KEY="your-secure-secret-key"
-   PRIVACY_GUARDRAIL_ENABLED=true
-   LOG_LEVEL="INFO"
-   ```
-
-5. **Start the Backend Server**:
+4. **Start the Backend Server**:
    ```bash
    python -m uvicorn app.main:app --reload --port 8000
    ```
