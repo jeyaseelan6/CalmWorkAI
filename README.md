@@ -1,6 +1,6 @@
 # CalmWork AI — Clarity-Driven Multi-Agent Work Intelligence
 
-[![Live Demo](https://img.shields.io/badge/Live_Production_App-camwork.cloud.run-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://camwork.cloud.run)
+[![Live Demo](https://img.shields.io/badge/Live_Production_App-camwork.cloud.run-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://calmwork.cloud.run)
 
 [![Google Cloud Platform](https://img.shields.io/badge/Google_Cloud-Cloud_Run_%7C_Cloud_SQL_%7C_Secret_Manager_%7C_Vertex_AI-4285F4?logo=google-cloud&logoColor=white)](https://cloud.google.com)
 [![Google Antigravity](https://img.shields.io/badge/Google_Antigravity-Agentic_Development-EA4335?logo=google&logoColor=white)](https://antigravity.google)
@@ -186,7 +186,7 @@ flowchart LR
 CalmWork AI is built **Google Cloud-native**, leveraging the complete Google Cloud enterprise ecosystem:
 
 ### 1. Google Cloud Run (Live Production Host)
-* **Serverless Container Compute**: Hosts the live production application at **[camwork.cloud.run](https://camwork.cloud.run)**.
+* **Serverless Container Compute**: Hosts the live production application at **[calmwork.cloud.run](https://calmwork.cloud.run)**.
 * **Auto-Scaling & Zero Idle Cost**: Containerized FastAPI backend and React frontend services scale dynamically from 0 to 1,000+ instances with automated HTTPS routing.
 
 ### 2. Google Cloud SQL (PostgreSQL)
