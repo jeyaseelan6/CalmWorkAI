@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Tests](https://img.shields.io/badge/Test_Suite-92_Passed-success)](https://pytest.org)
 
-> 🌐 **Live Demo URL**: [https://camwork.cloud.run](https://camwork.cloud.run)  
+> 🌐 **Live Demo URL**: [https://calmwork.cloud.run](https://calmwork.cloud.run)  
 > **Theme**: Future of Work & Enterprise Productivity  
 > **Platform Category**: Enterprise Multi-Agent Coordination & Technical Governance Layer  
 > **Target Personas**: Forward-Deployed Engineers (FDEs) and Engineering Managers / Delivery Leads only  
